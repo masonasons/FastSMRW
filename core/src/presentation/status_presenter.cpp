@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "fastsm/util/html_stripper.hpp"
 #include "fastsm/util/relative_date.hpp"
 
 namespace fastsm::present {
@@ -185,6 +186,25 @@ std::string post_info(const Status& s, std::int64_t now) {
     out += "\n" + std::to_string(s.replies_count) + " replies, " +
            std::to_string(s.boosts_count) + " boosts, " + std::to_string(s.favourites_count) +
            " favorites";
+    return out;
+}
+
+std::string user_profile(const User& u) {
+    std::string out;
+    out += u.best_name() + "\n@" + u.acct + "\n";
+    std::vector<std::string> flags;
+    if (u.bot)
+        flags.push_back("Bot");
+    if (u.locked)
+        flags.push_back("Locked account");
+    if (!flags.empty())
+        out += join(flags, " \xC2\xB7 ") + "\n"; // " · " (middle dot)
+    const std::string bio = util::strip_html(u.note);
+    if (!bio.empty())
+        out += "\n" + bio + "\n";
+    out += "\n" + std::to_string(u.followers_count) + " followers, " +
+           std::to_string(u.following_count) + " following, " +
+           std::to_string(u.statuses_count) + " posts";
     return out;
 }
 

@@ -16,11 +16,12 @@ struct TimelineSource {
         Federated,
         Bookmarks,
         Favorites,
-        Thread, // a post's conversation (param = focused status id)
+        Thread,    // a post's conversation (param = focused status id)
+        UserPosts, // an author's posts (param = account id)
     };
 
     Kind kind = Kind::Home;
-    std::string param;      // parameter for parameterized kinds (Thread: status id)
+    std::string param;      // parameter for parameterized kinds (Thread/UserPosts: id)
     std::string title_text; // display title for parameterized kinds (e.g. "Thread: @x")
 
     std::string title() const {
@@ -41,6 +42,8 @@ struct TimelineSource {
             return "Favorites";
         case Kind::Thread:
             return title_text.empty() ? "Thread" : title_text;
+        case Kind::UserPosts:
+            return title_text.empty() ? "User" : title_text;
         }
         return "Timeline";
     }
@@ -64,13 +67,15 @@ struct TimelineSource {
             return "favourites";
         case Kind::Thread:
             return "thread:" + param;
+        case Kind::UserPosts:
+            return "userPosts:" + param;
         }
         return "timeline";
     }
 
-    // Threads are fetched whole and not re-sorted; everything else caches and
-    // stays newest-first.
-    bool is_cacheable() const { return kind != Kind::Thread; }
+    // Threads are fetched whole and not re-sorted. Spawned/ephemeral feeds
+    // (threads, author timelines) aren't cached for startup.
+    bool is_cacheable() const { return kind != Kind::Thread && kind != Kind::UserPosts; }
     bool is_time_ordered() const { return kind != Kind::Thread; }
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
@@ -97,6 +102,7 @@ struct TimelineSource {
         case Kind::Bookmarks:
         case Kind::Favorites:
         case Kind::Thread:
+        case Kind::UserPosts:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -112,6 +118,9 @@ struct TimelineSource {
     static TimelineSource favorites() { return {Kind::Favorites}; }
     static TimelineSource thread(std::string status_id, std::string title = {}) {
         return {Kind::Thread, std::move(status_id), std::move(title)};
+    }
+    static TimelineSource user_posts(std::string account_id, std::string title = {}) {
+        return {Kind::UserPosts, std::move(account_id), std::move(title)};
     }
 };
 

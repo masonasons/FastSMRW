@@ -126,6 +126,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_spawn_timeline(cmd);
     else if (c == "open_thread")
         cmd_open_thread(cmd);
+    else if (c == "open_user_timeline")
+        cmd_open_user_timeline(cmd);
+    else if (c == "open_user_profile")
+        cmd_open_user_profile(cmd);
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -355,6 +359,50 @@ void CoreSession::cmd_open_thread(const json& cmd) {
                 title = "Thread: " + name;
         }
     spawn_source(TimelineSource::thread(status_id, title));
+}
+
+void CoreSession::cmd_open_user_timeline(const json& cmd) {
+    if (!accounts_.selected())
+        return;
+    // From the profile dialog: the account id + handle are already known.
+    if (cmd.contains("account_id")) {
+        const std::string aid = cmd.value("account_id", std::string{});
+        if (!aid.empty())
+            spawn_source(TimelineSource::user_posts(aid, "@" + cmd.value("acct", std::string{})));
+        return;
+    }
+    // From a post row: resolve the author (for a boost, the original author).
+    TimelineController* tc = current();
+    const std::string row_id = cmd.value("id", std::string{});
+    if (!tc || row_id.empty())
+        return;
+    const TimelineItem* item = find_item(tc, row_id);
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s || s->account.id.empty())
+        return;
+    const std::string& handle = s->account.acct.empty() ? s->account.username : s->account.acct;
+    spawn_source(TimelineSource::user_posts(s->account.id, "@" + handle));
+}
+
+void CoreSession::cmd_open_user_profile(const json& cmd) {
+    TimelineController* tc = current();
+    const std::string row_id = cmd.value("id", std::string{});
+    if (!accounts_.selected() || !tc || row_id.empty())
+        return;
+    const TimelineItem* item = find_item(tc, row_id);
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s || s->account.id.empty())
+        return;
+    const User& a = s->account;
+    emit({{"event", "user_profile"},
+          {"text", present::user_profile(a)},
+          {"account_id", a.id},
+          {"acct", a.acct.empty() ? a.username : a.acct},
+          {"url", a.url}});
 }
 
 void CoreSession::cmd_close_timeline() {

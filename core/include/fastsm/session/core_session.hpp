@@ -71,6 +71,8 @@ private:
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
     void cmd_open_thread(const nlohmann::json& cmd);
+    void cmd_open_user_timeline(const nlohmann::json& cmd);
+    void cmd_open_user_profile(const nlohmann::json& cmd);
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_add_account(const nlohmann::json& cmd);

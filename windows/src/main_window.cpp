@@ -8,6 +8,7 @@
 #include "app_messages.hpp"
 #include "new_timeline_dialog.hpp"
 #include "post_info_dialog.hpp"
+#include "user_profile_dialog.hpp"
 #include "settings_dialog.hpp"
 #include "utf.hpp"
 
@@ -140,8 +141,8 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
     AppendMenuW(status, MF_STRING, ID_VIEW_THREAD, L"View &Thread");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_TIMELINE, L"Open &User Timeline");
-    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
+    AppendMenuW(status, MF_STRING, ID_USER_TIMELINE, L"Open &User Timeline");
+    AppendMenuW(status, MF_STRING, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_OPEN_BROWSER, L"Open in Browser");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(status), L"&Status");
@@ -214,6 +215,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
+        {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
         {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
         {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_DOWN}, // jump down by movement unit
         {FVIRTKEY | FCONTROL, VK_LEFT, ID_CYCLE_PREV},  // pick previous movement unit
@@ -490,6 +492,18 @@ void MainWindow::on_view_keydown(int vk) {
     case 'E':
         compose("edit");
         break;
+    case VK_SPACE: { // open the post's thread (Mac parity)
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
+        break;
+    }
+    case 'U': { // open the author's posts (Ctrl+U is the accelerator for profile)
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+        break;
+    }
     case VK_RETURN:
         do_post_info();
         break;
@@ -566,6 +580,30 @@ void MainWindow::ev_post_info(const json& e) {
         break;
     case PostInfoAction::ViewThread:
         dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
+        break;
+    case PostInfoAction::ViewAuthor:
+        dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+        break;
+    }
+}
+
+void MainWindow::ev_user_profile(const json& e) {
+    const std::wstring text = to_wide(e.value("text", std::string{}));
+    const std::string account_id = e.value("account_id", std::string{});
+    const std::string acct = e.value("acct", std::string{});
+    const std::string url = e.value("url", std::string{});
+    const std::string keep_id = selected_id();
+    auto action = show_user_profile_dialog(hwnd_, inst_, text);
+    restore_selection(keep_id);
+    if (!action)
+        return;
+    switch (*action) {
+    case UserProfileAction::ViewPosts:
+        dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
+        break;
+    case UserProfileAction::OpenBrowser:
+        if (!url.empty())
+            ShellExecuteW(nullptr, L"open", to_wide(url).c_str(), nullptr, nullptr, SW_SHOW);
         break;
     }
 }
@@ -653,6 +691,18 @@ void MainWindow::handle_command(int id) {
             dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
         break;
     }
+    case ID_USER_TIMELINE: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+        break;
+    }
+    case ID_USER_PROFILE: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_user_profile"}, {"id", id}});
+        break;
+    }
     case ID_NEW_TIMELINE:
         do_new_timeline();
         break;
@@ -718,6 +768,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_spawnable(e);
     else if (ev == "post_info")
         ev_post_info(e);
+    else if (ev == "user_profile")
+        ev_user_profile(e);
     else if (ev == "select_row")
         restore_selection(e.value("id", std::string{}));
     else if (ev == "open_url")

@@ -146,6 +146,9 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Favorites:
         path = "/api/v1/favourites";
         break;
+    case TimelineSource::Kind::UserPosts:
+        path = "/api/v1/accounts/" + source.param + "/statuses";
+        break;
     case TimelineSource::Kind::Thread:
         break; // handled above (early return)
     }

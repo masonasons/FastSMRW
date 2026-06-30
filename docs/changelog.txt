@@ -3,3 +3,10 @@ FastSMRW changelog
 
 0.0.2 (in development)
 ----------------------
+
+- Open a post author's posts as a timeline: press U on a post, use the Status
+  menu's Open User Timeline, or the View Author button in Post info.
+- Open a user's profile with Ctrl+U (or the Status menu): their name, handle,
+  bio, and follower / following / post counts, with buttons to view their posts
+  or open their profile in your browser.
+- Press Space on a post to open its thread (same as View Thread).

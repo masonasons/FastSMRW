@@ -33,4 +33,8 @@ std::string accessibility_label(const TimelineItem& item, std::int64_t now);
 // parity): author/@handle, spoken time, content warning, text, media, stats.
 std::string post_info(const Status& s, std::int64_t now);
 
+// Multi-line profile for the Open User Profile dialog: name, @handle, flags
+// (bot / locked), bio, then follower/following/post counts. Mirrors the Mac.
+std::string user_profile(const User& u);
+
 } // namespace fastsm::present
