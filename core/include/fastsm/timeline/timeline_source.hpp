@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace fastsm {
@@ -53,6 +54,23 @@ struct TimelineSource {
     bool is_cacheable() const { return true; }
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
+    }
+
+    // Soundpack base name chimed when this timeline receives new posts on
+    // refresh (matches the Mac TimelineSource.newItemsSoundName). nullopt = no
+    // chime.
+    std::optional<std::string> new_items_sound_name() const {
+        switch (kind) {
+        case Kind::Home:
+        case Kind::Local:
+        case Kind::Federated:
+            return "home";
+        case Kind::Notifications:
+            return "notification";
+        case Kind::Mentions:
+            return "mentions";
+        }
+        return std::nullopt;
     }
     // Rows are time-ordered (re-sort on merge) for feeds, not for notifications.
     bool is_time_ordered() const { return !is_notification_timeline(); }

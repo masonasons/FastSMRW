@@ -354,6 +354,18 @@ void MainWindow::cycle_focus() {
 
 void MainWindow::on_view_keydown(int vk) {
     switch (vk) {
+    case VK_UP:
+    case VK_DOWN: {
+        // Boundary earcon when trying to move past the top/bottom (the native
+        // list won't move; the screen reader stays silent otherwise).
+        TimelineController* tc = app_ ? app_->current() : nullptr;
+        const int count = tc ? static_cast<int>(tc->items().size()) : 0;
+        const int row = selected_row();
+        const bool at_edge = (vk == VK_UP && row <= 0) || (vk == VK_DOWN && row >= count - 1);
+        if (at_edge && count > 0 && app_ && app_->sound())
+            app_->sound()->play(sound::Earcon::Boundary);
+        break;
+    }
     case VK_LEFT:
         if (app_)
             app_->previous_timeline();
@@ -416,7 +428,7 @@ void MainWindow::do_reply() {
         draft.reply_to_id = s->id;
         tc->post(draft, [this](bool ok) {
             if (app_ && app_->sound())
-                app_->sound()->play(ok ? sound::Earcon::Reply : sound::Earcon::Error);
+                app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
         });
     }
 }

@@ -25,8 +25,6 @@ const char* earcon_file(Earcon e) {
         return "boundary";
     case Earcon::PostSent:
         return "send_post";
-    case Earcon::Reply:
-        return "send_reply";
     case Earcon::Boost:
         return "send_repost";
     case Earcon::Favorite:
@@ -41,8 +39,6 @@ const char* earcon_file(Earcon e) {
         return "ready";
     case Earcon::Error:
         return "error";
-    case Earcon::New:
-        return "new";
     }
     return "";
 }

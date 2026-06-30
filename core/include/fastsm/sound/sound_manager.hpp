@@ -10,19 +10,19 @@ namespace fastsm::sound {
 // soundpack (falling back to the default pack). `Navigate` is intentionally
 // SILENT — like the Mac app, row movement is conveyed by the screen reader, not
 // an earcon.
+// Mirrors the Mac Earcon enum exactly. Per-timeline "new items" chimes are NOT
+// here — they use SoundManager::play_named(source.new_items_sound_name()).
 enum class Earcon {
-    Navigate, // silent
-    Boundary,
-    PostSent,
-    Reply,
-    Boost,
+    Navigate, // silent — row movement is conveyed by the screen reader
+    Boundary, // hit the top/bottom of a list
+    PostSent, // a post or reply was sent
+    Boost,    // a boost (repost) succeeded; not played on un-boost
     Favorite,
     Unfavorite,
-    Close,
-    Delete,
-    Refresh,
+    Close,   // a timeline was closed/dismissed
+    Delete,  // a timeline was cleared / content deleted
+    Refresh, // a timeline finished loading ("ready")
     Error,
-    New,
 };
 
 // Returns the soundpack base filename for an earcon, or "" if silent.

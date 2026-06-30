@@ -126,9 +126,10 @@ void AppController::rebuild_timelines() {
                 if (sound_)
                     sound_->play(sound::Earcon::Error);
             };
-            tc->on_received_new = [this](int n) {
+            tc->on_received_new = [this, p](int n) {
                 if (sound_ && n > 0)
-                    sound_->play(sound::Earcon::New);
+                    if (auto name = p->source().new_items_sound_name())
+                        sound_->play_named(*name);
             };
             timelines_.push_back(std::move(tc));
         }
