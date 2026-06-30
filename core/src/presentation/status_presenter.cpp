@@ -84,39 +84,64 @@ std::string compact_line(const Status& s, std::int64_t now) {
     return prefix + d.account.best_name() + " (" + time + "): " + body;
 }
 
-std::string accessibility_label(const Status& s, std::int64_t now) {
+std::optional<std::string> status_field_string(StatusSpeechField field, const Status& s,
+                                               std::int64_t now) {
     const Status& d = s.display_status();
+    switch (field) {
+    case StatusSpeechField::BoostedBy:
+        return s.is_boost() ? std::optional(s.account.best_name() + " boosted") : std::nullopt;
+    case StatusSpeechField::Author:
+        return d.account.best_name();
+    case StatusSpeechField::Handle:
+        return d.account.acct.empty() ? std::nullopt : std::optional("@" + d.account.acct);
+    case StatusSpeechField::ContentWarning:
+        return d.has_content_warning() ? std::optional("Content warning: " + *d.spoiler_text)
+                                       : std::nullopt;
+    case StatusSpeechField::Text:
+        return d.text.empty() ? std::nullopt : std::optional(one_line(d.text));
+    case StatusSpeechField::Quote:
+        return d.quote ? std::optional("Quoting " + d.quote->account.best_name() + ": " +
+                                       one_line(d.quote->text))
+                       : std::nullopt;
+    case StatusSpeechField::Media:
+        return d.media_attachments.empty() ? std::nullopt
+                                           : std::optional(media_summary(d.media_attachments));
+    case StatusSpeechField::Poll:
+        return d.poll ? std::optional("Poll with " + std::to_string(d.poll->options.size()) +
+                                      " options")
+                      : std::nullopt;
+    case StatusSpeechField::Time:
+        return util::relative_spoken(d.created_at, now);
+    case StatusSpeechField::Stats:
+        return stats(d);
+    case StatusSpeechField::Favorited:
+        return d.favourited ? std::optional<std::string>("Favorited") : std::nullopt;
+    case StatusSpeechField::Boosted:
+        return d.boosted ? std::optional<std::string>("Boosted") : std::nullopt;
+    case StatusSpeechField::Visibility:
+        return d.visibility ? std::optional(visibility_name(*d.visibility)) : std::nullopt;
+    case StatusSpeechField::ReplyIndicator:
+        return d.in_reply_to_id ? std::optional<std::string>("Reply") : std::nullopt;
+    case StatusSpeechField::Source:
+        return d.application_name ? std::optional("via " + *d.application_name) : std::nullopt;
+    }
+    return std::nullopt;
+}
+
+std::string accessibility_label(const Status& s, std::int64_t now,
+                                const std::vector<SpeechItem<StatusSpeechField>>& fields) {
     std::vector<std::string> parts;
-
-    // Field order mirrors the Mac StatusPresenter (configurable in M3).
-    if (s.is_boost())
-        add(parts, s.account.best_name() + " boosted");          // boostedBy
-    add(parts, d.account.best_name());                            // author
-    if (!d.account.acct.empty())
-        add(parts, "@" + d.account.acct);                        // handle
-    if (d.has_content_warning())
-        add(parts, "Content warning: " + *d.spoiler_text);       // contentWarning
-    add(parts, one_line(d.text));                                // text
-    if (d.quote)                                                 // quote
-        add(parts, "Quoting " + d.quote->account.best_name() + ": " + one_line(d.quote->text));
-    if (!d.media_attachments.empty())                            // media
-        add(parts, media_summary(d.media_attachments));
-    if (d.poll)                                                 // poll
-        add(parts, "Poll with " + std::to_string(d.poll->options.size()) + " options");
-    add(parts, util::relative_spoken(d.created_at, now));        // time
-    add(parts, stats(d));                                        // stats
-    if (d.favourited)
-        add(parts, "Favorited");                                 // favorited
-    if (d.boosted)
-        add(parts, "Boosted");                                   // boosted
-    if (d.visibility)
-        add(parts, visibility_name(*d.visibility));              // visibility
-    if (d.in_reply_to_id)
-        add(parts, "Reply");                                     // replyIndicator
-    if (d.application_name)
-        add(parts, "via " + *d.application_name);                // source
-
+    for (const auto& item : fields) {
+        if (!item.enabled)
+            continue;
+        if (auto str = status_field_string(item.field, s, now); str && !str->empty())
+            parts.push_back(std::move(*str));
+    }
     return join(parts, ", ");
+}
+
+std::string accessibility_label(const Status& s, std::int64_t now) {
+    return accessibility_label(s, now, SpeechConfig::current().status);
 }
 
 std::string compact_line(const TimelineItem& item, std::int64_t now) {

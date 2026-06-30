@@ -36,8 +36,7 @@ void test_presenter_boost_compact() {
     CHECK(contains(line, "original"));
 }
 
-void test_presenter_accessibility() {
-    const std::int64_t now = 1000;
+static Status sample_status(std::int64_t now) {
     Status s;
     s.account.display_name = "Alice";
     s.account.acct = "alice@x.social";
@@ -49,8 +48,19 @@ void test_presenter_accessibility() {
     s.favourited = true;
     s.spoiler_text = "cw";
     s.application_name = "FastSMRW";
+    return s;
+}
 
-    const std::string label = present::accessibility_label(s, now);
+void test_presenter_accessibility_all_fields() {
+    const std::int64_t now = 1000;
+    const Status s = sample_status(now);
+
+    // Enable every field so all render paths are exercised.
+    auto fields = present::SpeechSettings::defaults().status;
+    for (auto& f : fields)
+        f.enabled = true;
+
+    const std::string label = present::accessibility_label(s, now, fields);
     CHECK(contains(label, "Alice"));
     CHECK(contains(label, "@alice@x.social"));
     CHECK(contains(label, "Content warning: cw"));
@@ -60,4 +70,15 @@ void test_presenter_accessibility() {
     CHECK(contains(label, "2 favorites"));
     CHECK(contains(label, "Favorited"));
     CHECK(contains(label, "via FastSMRW"));
+}
+
+void test_presenter_accessibility_default_config() {
+    const std::int64_t now = 1000;
+    const Status s = sample_status(now);
+    // Default config: handle, source, visibility, replyIndicator are OFF.
+    const std::string label = present::accessibility_label(s, now);
+    CHECK(contains(label, "Alice"));       // author on
+    CHECK(contains(label, "hello world")); // text on
+    CHECK(!contains(label, "@alice"));     // handle off by default
+    CHECK(!contains(label, "via "));       // source off by default
 }

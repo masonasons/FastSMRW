@@ -37,7 +37,13 @@ void test_timeline_cache();
 // From test_presentation.cpp
 void test_presenter_compact();
 void test_presenter_boost_compact();
-void test_presenter_accessibility();
+void test_presenter_accessibility_all_fields();
+void test_presenter_accessibility_default_config();
+
+// From test_speech.cpp
+void test_speech_defaults();
+void test_speech_normalized();
+void test_settings_roundtrip();
 
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
@@ -75,7 +81,11 @@ int main() {
     test_timeline_cache();
     test_presenter_compact();
     test_presenter_boost_compact();
-    test_presenter_accessibility();
+    test_presenter_accessibility_all_fields();
+    test_presenter_accessibility_default_config();
+    test_speech_defaults();
+    test_speech_normalized();
+    test_settings_roundtrip();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

@@ -13,7 +13,9 @@
 #include "main_window.hpp"
 #include "win_executor.hpp"
 
+#include "fastsm/presentation/speech_settings.hpp"
 #include "fastsm/sound/sound_manager.hpp"
+#include "fastsm/store/app_settings.hpp"
 #include "fastsm/store/paths.hpp"
 
 #pragma comment(lib, "comctl32.lib")
@@ -33,12 +35,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     InitCommonControlsEx(&icc);
 
     WinExecutor executor;
+
+    // Load preferences; the core's presenters read SpeechConfig for field order.
+    const fastsm::store::AppSettings settings = fastsm::store::SettingsStore::default_store().load();
+    fastsm::present::SpeechConfig::set_current(settings.speech);
+
     fastsm::sound::SoundManager sound;
     // Bundled packs ship next to the exe (dist/soundpacks); user packs live in
-    // %APPDATA%\FastSMRW\soundpacks. Default pack selected until settings exist.
+    // %APPDATA%\FastSMRW\soundpacks.
     sound.set_bundled_packs_dir(exe_dir() / "soundpacks");
     sound.set_user_packs_dir(fastsm::store::config_dir() / "soundpacks");
-    sound.set_soundpack("default");
+    sound.set_enabled(settings.sounds_enabled);
+    sound.set_soundpack(settings.soundpack);
 
     MainWindow window(hInstance, &executor);
     if (!window.create())
