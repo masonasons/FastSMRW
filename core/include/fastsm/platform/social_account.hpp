@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "fastsm/models/models.hpp"
+#include "fastsm/net/http_client.hpp"
 #include "fastsm/timeline/timeline_source.hpp"
 
 // SocialAccount unifies Mastodon and Bluesky behind one interface. M1 covers the
@@ -67,6 +68,19 @@ struct PostSource {
     std::string spoiler_text;
 };
 
+// A long-lived request to open for real-time streaming (e.g. Mastodon SSE).
+struct StreamRequest {
+    std::string url;
+    net::Headers headers;
+};
+
+// One parsed streaming event: a timeline item and which open timeline it belongs
+// to (a status update -> Home, a notification -> Notifications).
+struct StreamItem {
+    TimelineItem item;
+    TimelineSource::Kind target = TimelineSource::Kind::Home;
+};
+
 class SocialAccount {
 public:
     virtual ~SocialAccount() = default;
@@ -99,6 +113,20 @@ public:
     virtual bool unboost(const Status& status) = 0;
     virtual bool favorite(const Status& status) = 0;
     virtual bool unfavorite(const Status& status) = 0;
+
+    // --- Real-time streaming (optional; Mastodon SSE user stream) ---
+
+    // The long-lived request to open for the user's real-time stream, or nullopt
+    // if this platform/account doesn't stream.
+    virtual std::optional<StreamRequest> user_stream_request() const { return std::nullopt; }
+    // Parse one streaming event into a timeline item and its target timeline, or
+    // nullopt for events we ignore (delete, keep-alives, filters, ...).
+    virtual std::optional<StreamItem> parse_stream_event(const std::string& event,
+                                                         const std::string& data) const {
+        (void)event;
+        (void)data;
+        return std::nullopt;
+    }
 };
 
 } // namespace fastsm

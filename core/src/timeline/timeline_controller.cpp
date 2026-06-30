@@ -185,6 +185,16 @@ void TimelineController::load_older() {
     });
 }
 
+void TimelineController::ingest_realtime(TimelineItem item) {
+    // Reuse the refresh merge path: dedupe by id, prepend, re-sort newest-first,
+    // chime the new-posts sound, and persist. The cursor is unchanged.
+    std::vector<TimelineItem> one;
+    one.push_back(std::move(item));
+    merge_fresh(std::move(one), scrollback_cursor_);
+    if (on_change)
+        on_change();
+}
+
 void TimelineController::clear() {
     raw_.clear();
     visible_.clear();

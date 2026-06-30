@@ -34,6 +34,10 @@ public:
     bool favorite(const Status& status) override;
     bool unfavorite(const Status& status) override;
 
+    std::optional<StreamRequest> user_stream_request() const override;
+    std::optional<StreamItem> parse_stream_event(const std::string& event,
+                                                 const std::string& data) const override;
+
     const MastodonCredentials& credentials() const { return credentials_; }
 
 private:

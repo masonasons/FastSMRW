@@ -54,6 +54,9 @@ public:
         (void)should_continue;
         (void)on_chunk;
     }
+
+    // Aborts any in-progress send_stream() reads so they return promptly.
+    virtual void cancel_streams() {}
 };
 
 } // namespace fastsm::net

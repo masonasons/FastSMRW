@@ -82,6 +82,9 @@ BEGIN
     COMBOBOX   IDC_SET_AUTOREFRESH, 68, 64, 114, 80, CBS_DROPDOWNLIST | WS_TABSTOP
     LTEXT      "Check timelines for new posts on this interval; new posts play that timeline's sound.",
                -1, 10, 82, 224, 18
+    AUTOCHECKBOX "&Stream in real time (Mastodon)", IDC_SET_STREAMING, 10, 104, 224, 12
+    LTEXT      "Receive new posts and notifications live over a streaming connection.",
+               -1, 10, 118, 224, 18
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 160

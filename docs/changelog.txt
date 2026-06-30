@@ -58,6 +58,8 @@ Settings
 - Auto-refresh: optionally check your timelines for new posts every 30 seconds,
   minute, 2 minutes, or 5 minutes (Timelines tab). New posts play that
   timeline's sound, even for timelines you're not currently viewing.
+- Real-time streaming (Mastodon): turn on "Stream in real time" (Timelines tab)
+  to receive new home posts and notifications live as they happen.
 - Settings are saved and applied immediately.
 - Your accounts and preferences are now kept together in a single settings file
   (instead of two), and existing preferences carry over automatically.

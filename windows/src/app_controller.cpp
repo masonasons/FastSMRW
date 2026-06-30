@@ -21,7 +21,8 @@ using namespace fastsm;
 namespace fastsmui {
 
 AppController::AppController(runtime::IMainExecutor* main, SoundManager* sound)
-    : cache_(store::cache_dir()), accounts_(&http_), main_(main), sound_(sound) {
+    : cache_(store::cache_dir()), accounts_(&http_), main_(main), sound_(sound),
+      stream_(&http_, main) {
     // Settings live in the same config.json as accounts (loaded fully in
     // bootstrap); here we just need the preferences to apply at startup.
     settings_ = store::AppConfigStore::default_store().load().settings;
@@ -37,6 +38,24 @@ void AppController::apply_settings() {
     cache_.set_max_entries(settings_.cache_limit);
     for (auto& tc : timelines_)
         tc->set_max_refresh_pages(settings_.fetch_pages);
+    update_streaming();
+}
+
+void AppController::update_streaming() {
+    SocialAccount* account = accounts_.selected();
+    if (!settings_.streaming_enabled || !account) {
+        stream_.stop();
+        return;
+    }
+    stream_.start(account, [this](StreamItem item) {
+        // Route the streamed item to the matching open timeline (main thread).
+        for (auto& tc : timelines_) {
+            if (tc->source().kind == item.target) {
+                tc->ingest_realtime(std::move(item.item));
+                break;
+            }
+        }
+    });
 }
 
 void AppController::update_settings(const store::AppSettings& settings) {
@@ -181,6 +200,7 @@ void AppController::rebuild_timelines() {
             sound_->play(sound::Earcon::Refresh);
         first = false;
     }
+    update_streaming(); // (re)attach the stream to the current account's timelines
 }
 
 std::vector<TimelineSource> AppController::spawnable_timelines() const {

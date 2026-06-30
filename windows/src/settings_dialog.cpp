@@ -96,6 +96,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             ++i;
         }
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
+        checked(dlg, IDC_SET_STREAMING, ctx->settings.streaming_enabled);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -109,6 +110,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             const int n = static_cast<int>(std::size(AppSettings::kAutoRefreshOptions));
             if (sel >= 0 && sel < n)
                 ctx->settings.auto_refresh_seconds = AppSettings::kAutoRefreshOptions[sel];
+            ctx->settings.streaming_enabled = is_checked(dlg, IDC_SET_STREAMING);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

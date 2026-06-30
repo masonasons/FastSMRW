@@ -12,6 +12,7 @@
 #include "fastsm/sound/sound_manager.hpp"
 #include "fastsm/store/app_settings.hpp"
 #include "fastsm/store/timeline_cache.hpp"
+#include "fastsm/timeline/streaming_client.hpp"
 #include "fastsm/timeline/timeline_controller.hpp"
 
 namespace fastsmui {
@@ -72,6 +73,7 @@ public:
 
 private:
     void apply_settings();
+    void update_streaming(); // start/stop real-time streaming per settings + account
     void rebuild_timelines();
     std::unique_ptr<fastsm::TimelineController> make_controller(const fastsm::TimelineSource& src);
     void save_config();
@@ -90,6 +92,9 @@ private:
 
     fastsm::runtime::IMainExecutor* main_;
     SoundManager* sound_;
+    // Declared after http_/accounts_ so its connection thread is joined before
+    // those members are destroyed.
+    fastsm::StreamingClient stream_;
     AppView* view_ = nullptr;
     int current_ = 0;
 };

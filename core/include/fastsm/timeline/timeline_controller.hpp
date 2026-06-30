@@ -47,6 +47,9 @@ public:
     void load_older();
     void clear(); // empties the timeline and removes its cache
 
+    // Merge one real-time (streamed) item: prepend if new, re-sort, chime, cache.
+    void ingest_realtime(TimelineItem item);
+
     // Max pages fetched per refresh (gap fill), from the fetch-pages setting.
     void set_max_refresh_pages(int n) { max_refresh_pages_ = n < 1 ? 1 : n; }
 

@@ -207,4 +207,29 @@ bool MastodonAccount::unfavorite(const Status& status) {
     return status_action(status.display_status().id, "unfavourite");
 }
 
+std::optional<StreamRequest> MastodonAccount::user_stream_request() const {
+    // The user stream delivers home-timeline updates + notifications over SSE.
+    StreamRequest r;
+    r.url = credentials_.instance_url + "/api/v1/streaming/user";
+    r.headers = {{"Authorization", "Bearer " + credentials_.access_token}};
+    return r;
+}
+
+std::optional<StreamItem> MastodonAccount::parse_stream_event(const std::string& event,
+                                                              const std::string& data) const {
+    try {
+        if (event == "update") {
+            return StreamItem{TimelineItem{mastodon::map_status(json::parse(data))},
+                              TimelineSource::Kind::Home};
+        }
+        if (event == "notification") {
+            return StreamItem{TimelineItem{mastodon::map_notification(json::parse(data))},
+                              TimelineSource::Kind::Notifications};
+        }
+    } catch (...) {
+        // Malformed payload — ignore this event.
+    }
+    return std::nullopt; // delete / filters_changed / keep-alives are ignored
+}
+
 } // namespace fastsm
