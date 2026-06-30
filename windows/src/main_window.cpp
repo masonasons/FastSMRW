@@ -307,6 +307,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 if ((nm->uChanged & LVIF_STATE) && (nm->uNewState & LVIS_SELECTED) &&
                     !(nm->uOldState & LVIS_SELECTED))
                     dispatch_cmd({{"cmd", "select_timeline"}, {"index", nm->iItem}});
+            } else if (hdr->code == LVN_KEYDOWN) {
+                // Delete on the timelines list closes the selected (current) timeline.
+                if (reinterpret_cast<NMLVKEYDOWN*>(lp)->wVKey == VK_DELETE)
+                    dispatch_cmd({{"cmd", "close_timeline"}});
             }
         }
         return 0;
@@ -488,9 +492,6 @@ void MainWindow::on_view_keydown(int vk) {
         break;
     case VK_RETURN:
         do_post_info();
-        break;
-    case VK_DELETE:
-        dispatch_cmd({{"cmd", "close_timeline"}});
         break;
     default:
         break;

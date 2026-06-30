@@ -16,8 +16,8 @@ Timelines
   newest page.
 - Left/Right arrows move between timelines.
 - Open more timelines with the New Timeline dialog (Ctrl+T): Local, Federated,
-  Mentions, Bookmarks, and Favorites (Mastodon). Close an opened timeline with
-  Delete. Go straight to a timeline with Ctrl+1-9.
+  Mentions, Bookmarks, and Favorites (Mastodon). Close an opened timeline by
+  pressing Delete in the timelines list. Go straight to a timeline with Ctrl+1-9.
 - Each timeline remembers where you were: switching timelines or receiving new
   posts keeps you on the post you were reading instead of jumping to the top.
 - Movement keys: Ctrl+Left/Right pick a movement unit (Same User, Thread, or a
