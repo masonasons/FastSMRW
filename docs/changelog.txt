@@ -14,3 +14,5 @@ FastSMRW changelog
   to open.
 - Press Space on a post to open its thread (same as View Thread).
 - Close the current timeline with Backspace, from anywhere in the window.
+- Closing an opened timeline returns you to the timeline you opened it from,
+  instead of whatever was next in the list.

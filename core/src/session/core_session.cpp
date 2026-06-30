@@ -319,9 +319,13 @@ void CoreSession::cmd_get_spawnable() {
 }
 
 void CoreSession::spawn_source(const TimelineSource& src) {
+    // Remember where we came from, so closing this timeline returns there.
+    std::string origin;
+    if (current_ >= 0 && current_ < static_cast<int>(timelines_.size()))
+        origin = timelines_[static_cast<size_t>(current_)]->source().cache_key();
     for (size_t i = 0; i < timelines_.size(); ++i) {
         if (timelines_[i]->source().cache_key() == src.cache_key()) {
-            current_ = static_cast<int>(i); // already open -> focus it
+            current_ = static_cast<int>(i); // already open -> focus it (keep its origin)
             emit_timelines();
             return;
         }
@@ -329,6 +333,7 @@ void CoreSession::spawn_source(const TimelineSource& src) {
     timelines_.push_back(make_controller(src));
     current_ = static_cast<int>(timelines_.size()) - 1;
     TimelineController* p = timelines_.back().get();
+    p->set_origin_key(origin);
     emit_timelines();
     p->load_cached();
     p->refresh();
@@ -483,16 +488,31 @@ void CoreSession::cmd_close_timeline() {
     TimelineController* tc = current();
     if (!tc || !tc->source().is_dismissable())
         return;
+    const std::string origin = tc->origin_key();
+    const int closed_index = current_;
     tc->on_change = nullptr;
     tc->on_error = nullptr;
     tc->on_received_new = nullptr;
     tc->clear();
-    retired_.push_back(std::move(timelines_[static_cast<size_t>(current_)]));
-    timelines_.erase(timelines_.begin() + current_);
-    if (current_ >= static_cast<int>(timelines_.size()))
-        current_ = static_cast<int>(timelines_.size()) - 1;
-    if (current_ < 0)
-        current_ = 0;
+    retired_.push_back(std::move(timelines_[static_cast<size_t>(closed_index)]));
+    timelines_.erase(timelines_.begin() + closed_index);
+
+    // Return to the timeline we came from, if it's still open; else a neighbor.
+    int next = -1;
+    if (!origin.empty())
+        for (size_t i = 0; i < timelines_.size(); ++i)
+            if (timelines_[i]->source().cache_key() == origin) {
+                next = static_cast<int>(i);
+                break;
+            }
+    if (next < 0) {
+        next = closed_index; // the item now at the closed index, clamped
+        if (next >= static_cast<int>(timelines_.size()))
+            next = static_cast<int>(timelines_.size()) - 1;
+        if (next < 0)
+            next = 0;
+    }
+    current_ = next;
     sound_.play(sound::Earcon::Close);
     emit_timelines();
     emit_all_timelines();

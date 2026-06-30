@@ -68,6 +68,12 @@ public:
     const std::string& selected_id() const { return selected_id_; }
     int visible_index_of(const std::string& id) const;
 
+    // Cache key of the timeline that was current when this one was spawned, so
+    // closing it returns there instead of a neighbor (Mac parity). Empty for the
+    // standing feeds.
+    void set_origin_key(std::string key) { origin_key_ = std::move(key); }
+    const std::string& origin_key() const { return origin_key_; }
+
     // Go Back (Ctrl+Z): pop the nav history to the most recent still-present row,
     // make it the position, and return its id (empty if nothing to undo). This
     // restore itself is not recorded.
@@ -87,6 +93,7 @@ private:
     int fetch_limit_;
 
     std::string selected_id_;           // remembered selected row (by id)
+    std::string origin_key_;            // where we came from (for close-returns)
     std::vector<std::string> nav_history_; // prior positions, for Go Back (jumps)
     std::vector<TimelineItem> raw_;     // everything fetched/cached
     std::vector<TimelineItem> visible_; // filtered view the UI reads
