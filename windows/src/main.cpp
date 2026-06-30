@@ -12,6 +12,7 @@
 #include "app_messages.hpp"
 #include "main_window.hpp"
 #include "win_executor.hpp"
+#include "win_speech.hpp"
 
 #include "fastsm/presentation/speech_settings.hpp"
 #include "fastsm/sound/sound_manager.hpp"
@@ -48,9 +49,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     sound.set_enabled(settings.sounds_enabled);
     sound.set_soundpack(settings.soundpack);
 
+    WinSpeaker speaker; // UniversalSpeech-backed when the dep is present, else no-op
+
     MainWindow window(hInstance, &executor);
     if (!window.create())
         return 1;
+    window.set_speaker(&speaker);
     executor.bind(window.hwnd(), WM_APP_DISPATCH);
 
     AppController app(&executor, &sound);

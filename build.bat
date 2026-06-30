@@ -32,6 +32,13 @@ if not exist "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" (
 )
 call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 
+REM ---- ensure dependencies are present (not committed; fetched into deps\) ----
+if not exist deps\nlohmann\json.hpp (
+    echo Dependencies missing - running download-deps.bat...
+    call download-deps.bat
+    if errorlevel 1 exit /b 1
+)
+
 REM ---- parse arguments ----
 set "CONFIG=release"
 set "RUN_TESTS=0"
@@ -59,9 +66,9 @@ if not exist "%OBJ%\app"  mkdir "%OBJ%\app"
 if not exist "%OBJ%\test" mkdir "%OBJ%\test"
 
 REM ---- compiler flags ----
-REM /external:W0 silences warnings from vendored single-header libs while we keep
-REM /W4 on our own code; third_party is also the search root for those includes.
-set "COMMON=/nologo /std:c++20 /W4 /EHsc /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /external:W0 /external:I third_party"
+REM /external:W0 silences warnings from fetched single-header libs while we keep
+REM /W4 on our own code; deps\ is also the search root for those includes.
+set "COMMON=/nologo /std:c++20 /W4 /EHsc /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /external:W0 /external:I deps"
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%COMMON% /Od /Zi /MTd /D_DEBUG"
     set "RUNTIME=/MTd"
@@ -90,18 +97,31 @@ echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
 if errorlevel 1 goto error
 REM stb_vorbis is C and warns heavily; compile it separately, warnings off.
-cl /nologo /c /w /O2 %RUNTIME% /D_CRT_SECURE_NO_WARNINGS third_party\stb_vorbis\stb_vorbis.c /Fo"%OBJ%\core\stb_vorbis.obj"
+cl /nologo /c /w /O2 %RUNTIME% /D_CRT_SECURE_NO_WARNINGS deps\stb_vorbis\stb_vorbis.c /Fo"%OBJ%\core\stb_vorbis.obj"
 if errorlevel 1 goto error
 lib /nologo /OUT:"%BUILD%\fastsm_core.lib" "%OBJ%\core\*.obj"
 if errorlevel 1 goto error
+
+REM ---- optional: UniversalSpeech static speech (run download-deps.bat first) ----
+REM Links a prebuilt static lib if present. Build it once from the cloned repo
+REM (deps\UniversalSpeechMSVCStatic, its makefile/SConstruct) to UniversalSpeech.lib.
+set "USPEECH_INC="
+set "USPEECH_DEF="
+set "USPEECH_LIB="
+if exist "deps\UniversalSpeechMSVCStatic\UniversalSpeech.lib" (
+    echo UniversalSpeech static lib found - enabling speech output.
+    set "USPEECH_INC=/I deps\UniversalSpeechMSVCStatic\include"
+    set "USPEECH_DEF=/DHAVE_UNIVERSALSPEECH /DUSE_UNIVERSAL_SPEECH /DUNIVERSAL_SPEECH_STATIC"
+    set "USPEECH_LIB=deps\UniversalSpeechMSVCStatic\UniversalSpeech.lib oleaut32.lib version.lib psapi.lib"
+)
 
 REM ---- 2) Win32 app -> FastSMRW.exe ----
 echo Compiling resources...
 rc /nologo /I windows\resources /fo "%BUILD%\app.res" windows\resources\app.rc
 if errorlevel 1 goto error
 echo Compiling and linking FastSMRW.exe...
-set "APP_SRC=windows\src\main.cpp windows\src\app_controller.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp"
-cl %CFLAGS% %COREINC% /I windows\src %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib winmm.lib
+set "APP_SRC=windows\src\main.cpp windows\src\app_controller.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\win_speech.cpp"
+cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib winmm.lib %USPEECH_LIB%
 if errorlevel 1 goto error
 
 REM ---- 2b) assemble the dist run folder (exe + bundled assets) ----
@@ -109,6 +129,8 @@ echo Assembling dist...
 if not exist dist mkdir dist
 xcopy /e /i /y assets\* dist\ >nul
 copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
+REM UniversalSpeech runtime bridge DLLs (NVDA/SAPI/ZDSR), if present.
+if exist "deps\UniversalSpeechMSVCStatic\bin-x64\*.dll" copy /y deps\UniversalSpeechMSVCStatic\bin-x64\*.dll dist\ >nul
 
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (

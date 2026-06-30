@@ -4,6 +4,9 @@
 /out/
 .vs/
 
+# Fetched dependencies (see download-deps.bat)
+/deps/
+
 # CMake user-local
 CMakeUserPresets.json
 

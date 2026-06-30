@@ -549,6 +549,8 @@ void MainWindow::announce(const std::string& message) {
     if (!message.empty())
         title += L" \x2014 " + to_wide(message);
     SetWindowTextW(hwnd_, title.c_str());
+    if (speaker_ && !message.empty())
+        speaker_->speak(message, true); // spoken when a speech backend is present
 }
 
 } // namespace fastsmui

@@ -58,10 +58,19 @@ Native + vendored only — **no package manager**:
 Requires the **MSVC "Desktop development with C++"** toolset (Visual Studio 2022
 or Build Tools). No CMake — the build is a direct `cl`/`lib` batch script in the
 same style as FastPlay; it locates Visual Studio via `vswhere` and sets up the
-x64 environment with `vcvars64.bat` itself, so you can run it from any prompt:
+x64 environment with `vcvars64.bat` itself, so you can run it from any prompt.
+
+Dependencies are **not committed** — fetch them first (the build also auto-runs
+this if the headers are missing):
 
 ```bat
-build.bat            :: Release build  -> build\release\
+download-deps.bat    :: fetch vendored single-headers + clone UniversalSpeech
+```
+
+Then build:
+
+```bat
+build.bat            :: Release build  -> build\release\  (+ dist\ run folder)
 build.bat debug      :: Debug build (/MTd, symbols)
 build.bat test       :: Build + run the unit tests
 build.bat clean      :: Remove the build\ tree

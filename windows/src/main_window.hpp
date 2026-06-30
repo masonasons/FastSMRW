@@ -4,6 +4,8 @@
 
 #include <windows.h>
 
+#include "fastsm/speech/speaker.hpp"
+
 #include "app_controller.hpp"
 #include "win_executor.hpp"
 
@@ -19,6 +21,7 @@ public:
     HWND hwnd() const { return hwnd_; }
     HACCEL accel() const { return accel_; }
     void set_app(AppController* app) { app_ = app; }
+    void set_speaker(fastsm::speech::Speaker* speaker) { speaker_ = speaker; }
     void cycle_focus(); // Tab between the two panes
 
     // AppView
@@ -49,6 +52,7 @@ private:
     HINSTANCE inst_;
     WinExecutor* exec_;
     AppController* app_ = nullptr;
+    fastsm::speech::Speaker* speaker_ = nullptr;
     HWND hwnd_ = nullptr;
     HWND timelines_list_ = nullptr;
     HWND timeline_view_ = nullptr;

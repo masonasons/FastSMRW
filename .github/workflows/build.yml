@@ -1,0 +1,58 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fetches the vendored single-headers (not committed) and clones
+      # UniversalSpeech. Speech is linked only once its static lib is built from
+      # that clone; otherwise the build runs without speech.
+      - name: Download dependencies
+        shell: cmd
+        run: download-deps.bat
+
+      - name: Build and test
+        shell: cmd
+        run: build.bat test
+
+      - name: Package dist
+        shell: pwsh
+        run: Compress-Archive -Path dist\* -DestinationPath FastSMRW.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastSMRW
+          path: FastSMRW.zip
+
+      # Rolling prerelease updated on every push to main (feeds auto-update).
+      - name: Update 'latest' prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes 2>$null
+          gh release create latest FastSMRW.zip --prerelease --target $env:GITHUB_SHA `
+            --title "Latest (main)" --notes "Automated build of main ($env:GITHUB_SHA)."
+
+      # Versioned release on a v* tag.
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME FastSMRW.zip --title $env:GITHUB_REF_NAME --generate-notes
