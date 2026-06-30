@@ -141,6 +141,18 @@ void TimelineController::load_older() {
     });
 }
 
+void TimelineController::clear() {
+    raw_.clear();
+    visible_.clear();
+    scrollback_cursor_.reset();
+    if (source_.is_cacheable()) {
+        const std::string key = cache_key();
+        worker_->post([this, key] { cache_->remove(key); });
+    }
+    if (on_change)
+        on_change();
+}
+
 bool TimelineController::toggle_favorite(int visible_index) {
     if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
         return false;

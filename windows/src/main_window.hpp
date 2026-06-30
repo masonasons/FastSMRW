@@ -42,7 +42,9 @@ private:
     void do_favorite();
     void do_reply();
     void do_new_post();
+    void do_post_info();
     void do_add_account();
+    void about();
 
     HINSTANCE inst_;
     WinExecutor* exec_;

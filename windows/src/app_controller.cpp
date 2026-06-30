@@ -51,7 +51,7 @@ void AppController::next_timeline() {
         return;
     current_ = (current_ + 1) % static_cast<int>(timelines_.size());
     if (sound_)
-        sound_->play("navigate");
+        sound_->play(sound::Earcon::Navigate);
     if (view_)
         view_->current_timeline_changed();
 }
@@ -62,9 +62,38 @@ void AppController::previous_timeline() {
     const int n = static_cast<int>(timelines_.size());
     current_ = (current_ - 1 + n) % n;
     if (sound_)
-        sound_->play("navigate");
+        sound_->play(sound::Earcon::Navigate);
     if (view_)
         view_->current_timeline_changed();
+}
+
+void AppController::next_account() {
+    auto accts = accounts_.accounts();
+    if (accts.size() < 2)
+        return;
+    int idx = 0;
+    for (size_t i = 0; i < accts.size(); ++i)
+        if (accts[i]->account_key() == accounts_.selected_key())
+            idx = static_cast<int>(i);
+    accounts_.select(accts[(idx + 1) % accts.size()]->account_key());
+    if (sound_)
+        sound_->play(sound::Earcon::Navigate);
+    rebuild_timelines();
+}
+
+void AppController::previous_account() {
+    auto accts = accounts_.accounts();
+    if (accts.size() < 2)
+        return;
+    int idx = 0;
+    for (size_t i = 0; i < accts.size(); ++i)
+        if (accts[i]->account_key() == accounts_.selected_key())
+            idx = static_cast<int>(i);
+    const int n = static_cast<int>(accts.size());
+    accounts_.select(accts[(idx - 1 + n) % n]->account_key());
+    if (sound_)
+        sound_->play(sound::Earcon::Navigate);
+    rebuild_timelines();
 }
 
 void AppController::bootstrap() {
@@ -95,11 +124,11 @@ void AppController::rebuild_timelines() {
                 if (view_)
                     view_->announce(e);
                 if (sound_)
-                    sound_->play("error");
+                    sound_->play(sound::Earcon::Error);
             };
             tc->on_received_new = [this](int n) {
                 if (sound_ && n > 0)
-                    sound_->play("new");
+                    sound_->play(sound::Earcon::New);
             };
             timelines_.push_back(std::move(tc));
         }
@@ -113,7 +142,7 @@ void AppController::rebuild_timelines() {
         tc->load_cached();
         tc->refresh();
         if (first && sound_)
-            sound_->play("ready");
+            sound_->play(sound::Earcon::Refresh);
         first = false;
     }
 }

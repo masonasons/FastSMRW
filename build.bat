@@ -64,9 +64,11 @@ REM /W4 on our own code; third_party is also the search root for those includes.
 set "COMMON=/nologo /std:c++20 /W4 /EHsc /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /external:W0 /external:I third_party"
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%COMMON% /Od /Zi /MTd /D_DEBUG"
+    set "RUNTIME=/MTd"
     set "LINKFLAGS=/DEBUG"
 ) else (
     set "CFLAGS=%COMMON% /O2 /MT /DNDEBUG"
+    set "RUNTIME=/MT"
     set "LINKFLAGS="
 )
 set "COREINC=/I core\include"
@@ -86,6 +88,9 @@ set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\sou
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
 if errorlevel 1 goto error
+REM stb_vorbis is C and warns heavily; compile it separately, warnings off.
+cl /nologo /c /w /O2 %RUNTIME% /D_CRT_SECURE_NO_WARNINGS third_party\stb_vorbis\stb_vorbis.c /Fo"%OBJ%\core\stb_vorbis.obj"
+if errorlevel 1 goto error
 lib /nologo /OUT:"%BUILD%\fastsm_core.lib" "%OBJ%\core\*.obj"
 if errorlevel 1 goto error
 
@@ -97,6 +102,12 @@ echo Compiling and linking FastSMRW.exe...
 set "APP_SRC=windows\src\main.cpp windows\src\app_controller.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp"
 cl %CFLAGS% %COREINC% /I windows\src %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib winmm.lib
 if errorlevel 1 goto error
+
+REM ---- 2b) assemble the dist run folder (exe + bundled assets) ----
+echo Assembling dist...
+if not exist dist mkdir dist
+xcopy /e /i /y assets\* dist\ >nul
+copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
 
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (

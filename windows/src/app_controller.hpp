@@ -43,6 +43,8 @@ public:
     void select_timeline(int index);
     void next_timeline();
     void previous_timeline();
+    void next_account();
+    void previous_account();
 
     // Sign-in (runs on the worker thread; `done(ok, error)` fires on the UI thread).
     void add_mastodon(const std::string& instance, std::function<void(bool, std::string)> done);

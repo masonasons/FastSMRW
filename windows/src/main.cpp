@@ -14,6 +14,7 @@
 #include "win_executor.hpp"
 
 #include "fastsm/sound/sound_manager.hpp"
+#include "fastsm/store/paths.hpp"
 
 #pragma comment(lib, "comctl32.lib")
 
@@ -33,7 +34,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
     WinExecutor executor;
     fastsm::sound::SoundManager sound;
-    sound.set_dir(exe_dir() / "sounds");
+    // Bundled packs ship next to the exe (dist/soundpacks); user packs live in
+    // %APPDATA%\FastSMRW\soundpacks. Default pack selected until settings exist.
+    sound.set_bundled_packs_dir(exe_dir() / "soundpacks");
+    sound.set_user_packs_dir(fastsm::store::config_dir() / "soundpacks");
+    sound.set_soundpack("default");
 
     MainWindow window(hInstance, &executor);
     if (!window.create())

@@ -8,6 +8,7 @@
 #include "compose_dialog.hpp"
 #include "utf.hpp"
 
+#include "fastsm/fastsm.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
 #include "fastsm/util/date_parsing.hpp"
 
@@ -22,9 +23,36 @@ constexpr int kMinWidth = 920;
 constexpr int kMinHeight = 720;
 
 // Command ids.
-constexpr int ID_NEW_POST = 40001;
-constexpr int ID_ADD_ACCOUNT = 40002;
-constexpr int ID_REFRESH = 40003;
+enum {
+    ID_ABOUT = 40010,
+    ID_SETTINGS,
+    ID_QUIT,
+    ID_NEW_POST,
+    ID_REFRESH,
+    ID_CLOSE,
+    ID_CUT,
+    ID_COPY,
+    ID_PASTE,
+    ID_SELECT_ALL,
+    ID_REPLY,
+    ID_BOOST,
+    ID_FAVORITE,
+    ID_QUOTE,
+    ID_POST_INFO,
+    ID_VIEW_THREAD,
+    ID_USER_TIMELINE,
+    ID_USER_PROFILE,
+    ID_OPEN_BROWSER,
+    ID_NEW_TIMELINE,
+    ID_CLEAR_TIMELINE,
+    ID_CLEAR_ALL,
+    ID_GO_BACK,
+    ID_PREV_ACCOUNT,
+    ID_NEXT_ACCOUNT,
+    ID_ADD_ACCOUNT,
+    ID_MINIMIZE,
+    ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
+};
 
 int dpi_scale(HWND hwnd, int value) {
     return MulDiv(value, static_cast<int>(GetDpiForWindow(hwnd)), 96);
@@ -51,14 +79,74 @@ void add_single_column(HWND list, const wchar_t* title, int width) {
     ListView_InsertColumn(list, 0, &col);
 }
 
+// Mirrors the Mac main menu (MainMenu.swift). The "App menu" is renamed
+// "Application". Items for features not yet implemented are present but grayed,
+// so the structure matches and stays discoverable.
 HMENU build_menu() {
     HMENU bar = CreateMenu();
+
+    HMENU app = CreatePopupMenu();
+    AppendMenuW(app, MF_STRING, ID_ABOUT, L"&About FastSMRW");
+    AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(app, MF_STRING | MF_GRAYED, ID_SETTINGS, L"&Settings…\tCtrl+,");
+    AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
+
     HMENU file = CreatePopupMenu();
     AppendMenuW(file, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
+    AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(file, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
     AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(file, MF_STRING, ID_ADD_ACCOUNT, L"&Add Account...\tCtrl+Shift+A");
-    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(file), L"&FastSMRW");
+    AppendMenuW(file, MF_STRING, ID_CLOSE, L"&Close\tCtrl+W");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(file), L"&File");
+
+    HMENU edit = CreatePopupMenu();
+    AppendMenuW(edit, MF_STRING, ID_CUT, L"Cu&t\tCtrl+X");
+    AppendMenuW(edit, MF_STRING, ID_COPY, L"&Copy\tCtrl+C");
+    AppendMenuW(edit, MF_STRING, ID_PASTE, L"&Paste\tCtrl+V");
+    AppendMenuW(edit, MF_STRING, ID_SELECT_ALL, L"Select &All\tCtrl+A");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(edit), L"&Edit");
+
+    HMENU status = CreatePopupMenu();
+    AppendMenuW(status, MF_STRING, ID_REPLY, L"&Reply\tR");
+    AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tCtrl+Shift+B");
+    AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tCtrl+Shift+D");
+    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_QUOTE, L"&Quote\tCtrl+Shift+Q");
+    AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tCtrl+I");
+    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_VIEW_THREAD, L"View &Thread");
+    AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_TIMELINE, L"Open &User Timeline");
+    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
+    AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_OPEN_BROWSER, L"Open in Browser");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(status), L"&Status");
+
+    HMENU timeline = CreatePopupMenu();
+    AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
+    AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"&Clear Timeline\tCtrl+Backspace");
+    AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_CLEAR_ALL, L"Clear &All Timelines");
+    AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_GO_BACK, L"Go &Back\tCtrl+Z");
+    AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
+    for (int i = 1; i <= 9; ++i) {
+        wchar_t label[40];
+        wsprintfW(label, L"Go to Timeline &%d\tCtrl+%d", i, i);
+        AppendMenuW(timeline, MF_STRING, ID_GOTO_TIMELINE_1 + (i - 1), label);
+    }
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(timeline), L"&Timeline");
+
+    HMENU account = CreatePopupMenu();
+    AppendMenuW(account, MF_STRING, ID_ADD_ACCOUNT, L"&Add Account…\tCtrl+Shift+A");
+    AppendMenuW(account, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(account, MF_STRING, ID_PREV_ACCOUNT, L"&Previous Account\tCtrl+[");
+    AppendMenuW(account, MF_STRING, ID_NEXT_ACCOUNT, L"&Next Account\tCtrl+]");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(account), L"A&ccount");
+
+    HMENU window = CreatePopupMenu();
+    AppendMenuW(window, MF_STRING, ID_MINIMIZE, L"&Minimize\tCtrl+M");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(window), L"&Window");
+
     return bar;
 }
 
@@ -84,12 +172,24 @@ bool MainWindow::create() {
     if (!hwnd_)
         return false;
 
-    ACCEL accels[] = {
+    std::vector<ACCEL> accels = {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
+        {FVIRTKEY | FCONTROL, 'W', ID_CLOSE},
+        {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
+        {FVIRTKEY | FCONTROL, 'I', ID_POST_INFO},
+        {FVIRTKEY | FCONTROL, 'M', ID_MINIMIZE},
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
+        {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
+        {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
+        {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
+        {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
+        {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
     };
-    accel_ = CreateAcceleratorTableW(accels, static_cast<int>(std::size(accels)));
+    for (int i = 0; i < 9; ++i)
+        accels.push_back({FVIRTKEY | FCONTROL, static_cast<WORD>('1' + i),
+                          static_cast<WORD>(ID_GOTO_TIMELINE_1 + i)});
+    accel_ = CreateAcceleratorTableW(accels.data(), static_cast<int>(accels.size()));
     return true;
 }
 
@@ -159,14 +259,9 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             } else if (hdr->code == LVN_KEYDOWN) {
                 auto* kd = reinterpret_cast<NMLVKEYDOWN*>(lp);
                 on_view_keydown(kd->wVKey);
-            } else if (hdr->code == LVN_ITEMCHANGED) {
-                auto* nm = reinterpret_cast<NMLISTVIEW*>(lp);
-                if ((nm->uChanged & LVIF_STATE) && (nm->uNewState & LVIS_FOCUSED) &&
-                    !(nm->uOldState & LVIS_FOCUSED)) {
-                    if (app_ && app_->sound())
-                        app_->sound()->play("navigate");
-                }
             }
+            // No per-row earcon: like the Mac app, row movement is conveyed by
+            // the screen reader, not a "navigate" sound (which is silent).
         } else if (hdr->hwndFrom == timelines_list_) {
             if (hdr->code == LVN_ITEMCHANGED && !updating_selection_) {
                 auto* nm = reinterpret_cast<NMLISTVIEW*>(lp);
@@ -287,8 +382,8 @@ void MainWindow::do_boost() {
     if (!tc || row < 0)
         return;
     const bool now_boosted = tc->toggle_boost(row);
-    if (app_ && app_->sound())
-        app_->sound()->play(now_boosted ? "boost" : "unboost");
+    if (now_boosted && app_ && app_->sound())
+        app_->sound()->play(sound::Earcon::Boost);
 }
 
 void MainWindow::do_favorite() {
@@ -298,7 +393,7 @@ void MainWindow::do_favorite() {
         return;
     const bool now_fav = tc->toggle_favorite(row);
     if (app_ && app_->sound())
-        app_->sound()->play(now_fav ? "favorite" : "unfavorite");
+        app_->sound()->play(now_fav ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
 }
 
 void MainWindow::do_reply() {
@@ -321,7 +416,7 @@ void MainWindow::do_reply() {
         draft.reply_to_id = s->id;
         tc->post(draft, [this](bool ok) {
             if (app_ && app_->sound())
-                app_->sound()->play(ok ? "post" : "error");
+                app_->sound()->play(ok ? sound::Earcon::Reply : sound::Earcon::Error);
         });
     }
 }
@@ -338,7 +433,7 @@ void MainWindow::do_new_post() {
         draft.text = *text;
         tc->post(draft, [this](bool ok) {
             if (app_ && app_->sound())
-                app_->sound()->play(ok ? "post" : "error");
+                app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
         });
     }
 }
@@ -357,17 +452,91 @@ void MainWindow::do_add_account() {
     announce(data->platform == 0 ? "Authorizing in your browser..." : "Signing in...");
 }
 
+void MainWindow::about() {
+    std::wstring text = L"FastSMRW\r\nA fast, accessible Mastodon/Bluesky client.\r\nVersion ";
+    for (const char* p = fastsm::version(); *p; ++p)
+        text.push_back(static_cast<wchar_t>(*p));
+    MessageBoxW(hwnd_, text.c_str(), L"About FastSMRW", MB_OK | MB_ICONINFORMATION);
+}
+
+void MainWindow::do_post_info() {
+    TimelineController* tc = app_ ? app_->current() : nullptr;
+    const int row = selected_row();
+    if (!tc || row < 0)
+        return;
+    const auto& items = tc->items();
+    if (row >= static_cast<int>(items.size()))
+        return;
+    const std::wstring label =
+        to_wide(present::accessibility_label(items[static_cast<size_t>(row)], util::now_unix()));
+    MessageBoxW(hwnd_, label.c_str(), L"Post Info", MB_OK);
+}
+
 void MainWindow::handle_command(int id) {
+    if (id >= ID_GOTO_TIMELINE_1 && id <= ID_GOTO_TIMELINE_1 + 8) {
+        if (app_)
+            app_->select_timeline(id - ID_GOTO_TIMELINE_1);
+        return;
+    }
     switch (id) {
     case ID_NEW_POST:
         do_new_post();
         break;
-    case ID_ADD_ACCOUNT:
-        do_add_account();
-        break;
     case ID_REFRESH:
         if (app_ && app_->current())
             app_->current()->refresh();
+        break;
+    case ID_CLOSE:
+    case ID_QUIT:
+        DestroyWindow(hwnd_);
+        break;
+    case ID_ABOUT:
+        about();
+        break;
+    case ID_ADD_ACCOUNT:
+        do_add_account();
+        break;
+    case ID_REPLY:
+        do_reply();
+        break;
+    case ID_BOOST:
+        do_boost();
+        break;
+    case ID_FAVORITE:
+        do_favorite();
+        break;
+    case ID_POST_INFO:
+        do_post_info();
+        break;
+    case ID_CLEAR_TIMELINE:
+        if (app_ && app_->current()) {
+            app_->current()->clear();
+            if (app_->sound())
+                app_->sound()->play(sound::Earcon::Delete);
+        }
+        break;
+    case ID_PREV_ACCOUNT:
+        if (app_)
+            app_->previous_account();
+        break;
+    case ID_NEXT_ACCOUNT:
+        if (app_)
+            app_->next_account();
+        break;
+    case ID_MINIMIZE:
+        ShowWindow(hwnd_, SW_MINIMIZE);
+        break;
+    case ID_CUT:
+        SendMessageW(GetFocus(), WM_CUT, 0, 0);
+        break;
+    case ID_COPY:
+        SendMessageW(GetFocus(), WM_COPY, 0, 0);
+        break;
+    case ID_PASTE:
+        SendMessageW(GetFocus(), WM_PASTE, 0, 0);
+        break;
+    case ID_SELECT_ALL:
+        SendMessageW(GetFocus(), EM_SETSEL, 0, static_cast<LPARAM>(-1));
         break;
     default:
         break;

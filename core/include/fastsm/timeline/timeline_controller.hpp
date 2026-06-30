@@ -45,6 +45,7 @@ public:
     void load_cached();
     void refresh();
     void load_older();
+    void clear(); // empties the timeline and removes its cache
 
     // Optimistic toggles on the row at `visible_index`; returns the new state.
     bool toggle_favorite(int visible_index);
