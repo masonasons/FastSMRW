@@ -31,10 +31,14 @@ struct CachedTimeline {
     int cursor_kind = 0;
     std::string cursor_value;
     std::vector<CachedGap> gaps;
+    // Page-boundary cursors (same shape as a gap: after_id -> cursor) so paging
+    // can resume across restarts even after the cache was truncated.
+    std::vector<CachedGap> marks;
 };
 
 std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated, int cursor_kind,
-                         const std::string& cursor_value, const std::vector<CachedGap>& gaps);
+                         const std::string& cursor_value, const std::vector<CachedGap>& gaps,
+                         const std::vector<CachedGap>& marks);
 CachedTimeline decode_cache(std::string_view data);
 
 // Back-compat helpers (rows only) used by roundtrip tests.

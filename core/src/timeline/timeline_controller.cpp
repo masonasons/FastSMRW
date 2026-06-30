@@ -190,12 +190,49 @@ void TimelineController::persist() {
         return;
     // Snapshot on the main thread, write on the worker thread. The scrollback
     // cursor rides along so loading older posts resumes after a cache load.
-    auto snapshot = raw_;
-    const auto cursor = scrollback_cursor_;
-    const auto gaps = gaps_;
+    const int cap = cache_->max_entries();
+    std::vector<TimelineItem> snapshot;
+    std::optional<PageCursor> cursor;
+    bool truncated = false;
+    if (cap <= 0 || static_cast<int>(raw_.size()) <= cap) {
+        snapshot = raw_;
+        cursor = scrollback_cursor_;
+    } else {
+        truncated = true;
+        // Cap to the deepest page boundary at or above the cap, so the stored
+        // cursor exactly matches the stored rows -- works for opaque cursors too.
+        int cut = -1;
+        for (int i = std::min(cap, static_cast<int>(raw_.size())) - 1; i >= 0; --i) {
+            auto m = page_marks_.find(raw_[static_cast<size_t>(i)].id());
+            if (m != page_marks_.end()) {
+                cut = i;
+                cursor = m->second;
+                break;
+            }
+        }
+        if (cut >= 0) {
+            snapshot.assign(raw_.begin(), raw_.begin() + (cut + 1));
+        } else {
+            snapshot.assign(raw_.begin(), raw_.begin() + cap);
+            if (account_ && account_->platform() == Platform::Mastodon &&
+                source_.paginates_by_item_id() && !snapshot.empty())
+                cursor = PageCursor::max_id(snapshot.back().pagination_id());
+        }
+    }
+    std::unordered_set<std::string> ids;
+    for (const auto& it : snapshot)
+        ids.insert(it.id());
+    std::vector<store::CacheGap> gaps;
+    for (const auto& g : gaps_)
+        if (ids.count(g.after_id))
+            gaps.push_back(g);
+    std::vector<store::CacheGap> marks;
+    for (const auto& [id, c] : page_marks_)
+        if (ids.count(id))
+            marks.push_back({id, c});
     const std::string key = cache_key();
-    worker_->post([this, key, snapshot = std::move(snapshot), cursor, gaps] {
-        cache_->save(key, snapshot, cursor, gaps);
+    worker_->post([this, key, snapshot = std::move(snapshot), cursor, truncated, gaps, marks] {
+        cache_->save(key, snapshot, cursor, truncated, gaps, marks);
     });
 }
 
@@ -215,12 +252,14 @@ void TimelineController::load_cached() {
     // If it was truncated, the persisted cursor points below un-cached posts, so
     // re-derive for Mastodon (max_id) and otherwise drop it (Bluesky's opaque
     // cursor can't be rebuilt from the rows).
-    if (!cached.truncated && cached.scrollback)
-        scrollback_cursor_ = cached.scrollback;
+    if (cached.scrollback)
+        scrollback_cursor_ = cached.scrollback; // boundary-matched, exact for any platform
     else if (account_ && account_->platform() == Platform::Mastodon &&
              source_.paginates_by_item_id() && !raw_.empty())
         scrollback_cursor_ = PageCursor::max_id(raw_.back().pagination_id());
     gaps_ = std::move(cached.gaps);
+    for (const auto& m : cached.marks)
+        page_marks_[m.after_id] = m.cursor;
     rebuild_visible();
     if (on_change)
         on_change();
@@ -244,13 +283,16 @@ void TimelineController::refresh() {
 
     worker_->post([this, known = std::move(known), was_empty, kMaxRefreshPages]() mutable {
         std::vector<TimelineItem> fresh;
+        std::vector<std::pair<std::string, PageCursor>> marks;
         std::optional<PageCursor> tail; // cursor just past the fetched region
         PageCursor cursor = PageCursor::start();
         bool hit_known = false;
         for (int page = 0; page < kMaxRefreshPages; ++page) {
             TimelinePage p = account_->items(source_, fetch_limit_, cursor);
+            const size_t page_size = p.items.size();
+            const std::string last_id = page_size ? p.items.back().id() : std::string{};
             tail = p.next_cursor;
-            if (p.items.empty())
+            if (page_size == 0)
                 break;
             for (auto& it : p.items) {
                 if (known.find(it.id()) != known.end()) {
@@ -259,11 +301,17 @@ void TimelineController::refresh() {
                 }
                 fresh.push_back(std::move(it));
             }
-            if (hit_known || !p.next_cursor || static_cast<int>(p.items.size()) < fetch_limit_)
+            // On a cold load every page is a scrollback boundary; record its cursor.
+            if (was_empty && tail)
+                marks.push_back({last_id, *tail});
+            if (hit_known || !p.next_cursor || static_cast<int>(page_size) < fetch_limit_)
                 break;
             cursor = *p.next_cursor;
         }
-        main_->post([this, fresh = std::move(fresh), tail, was_empty, hit_known]() mutable {
+        main_->post([this, fresh = std::move(fresh), tail, was_empty, hit_known,
+                     marks = std::move(marks)]() mutable {
+            for (auto& m : marks)
+                page_marks_[m.first] = m.second;
             // The fresh posts didn't reach the cached posts -> there's a gap below
             // them; record it (after the oldest fresh post) so it can be filled.
             const bool disconnected = !was_empty && !hit_known && tail && !fresh.empty();
@@ -289,24 +337,31 @@ void TimelineController::load_older() {
     const int pages = max_refresh_pages_;
     worker_->post([this, start, pages] {
         std::vector<TimelineItem> older;
+        std::vector<std::pair<std::string, PageCursor>> marks;
         std::optional<PageCursor> next = start;
         for (int i = 0; i < pages && next; ++i) {
             TimelinePage page = account_->items(source_, fetch_limit_, *next);
+            const size_t page_size = page.items.size();
+            const std::string last_id = page_size ? page.items.back().id() : std::string{};
             next = page.next_cursor;
-            if (page.items.empty())
+            if (page_size == 0)
                 break;
             for (auto& it : page.items)
                 older.push_back(std::move(it));
-            if (!next || static_cast<int>(page.items.size()) < fetch_limit_)
+            if (next)
+                marks.push_back({last_id, *next}); // cursor to fetch below this page
+            if (!next || static_cast<int>(page_size) < fetch_limit_)
                 break;
         }
-        main_->post([this, older = std::move(older), next]() mutable {
+        main_->post([this, older = std::move(older), next, marks = std::move(marks)]() mutable {
             std::unordered_set<std::string> existing;
             for (const auto& it : raw_)
                 existing.insert(it.id());
             for (auto& it : older)
                 if (existing.find(it.id()) == existing.end())
                     raw_.push_back(std::move(it));
+            for (auto& m : marks)
+                page_marks_[m.first] = m.second;
             scrollback_cursor_ = next;
             rebuild_visible();
             persist();

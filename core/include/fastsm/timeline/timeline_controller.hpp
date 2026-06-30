@@ -3,6 +3,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "fastsm/models/models.hpp"
@@ -103,6 +104,11 @@ private:
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
+    // Page-boundary cursors (row id -> cursor to fetch the page just below it),
+    // recorded as we page downward. Lets persist() cap the cache to a real page
+    // boundary with a valid cursor, so scrollback resumes even for opaque
+    // (Bluesky) cursors after the cache is truncated.
+    std::unordered_map<std::string, PageCursor> page_marks_;
     std::function<bool(const TimelineItem&)> filter_;
     int max_refresh_pages_ = 5;
     bool loading_ = false;

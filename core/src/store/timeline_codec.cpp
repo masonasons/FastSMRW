@@ -9,7 +9,7 @@ namespace {
 // Bump this whenever the on-disk layout changes so older caches are rejected
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url.
-constexpr char kMagic[4] = {'F', 'S', 'C', '3'};
+constexpr char kMagic[4] = {'F', 'S', 'C', '4'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -367,8 +367,33 @@ TimelineItem read_item(Reader& r) {
 
 } // namespace
 
+namespace {
+void write_gaps(Writer& w, const std::vector<CachedGap>& gaps) {
+    w.u32(static_cast<std::uint32_t>(gaps.size()));
+    for (const auto& g : gaps) {
+        w.str(g.after_id);
+        w.u8(static_cast<std::uint8_t>(g.cursor_kind));
+        w.str(g.cursor_value);
+    }
+}
+std::vector<CachedGap> read_gaps(Reader& r) {
+    std::vector<CachedGap> out;
+    const std::uint32_t n = r.u32();
+    out.reserve(n);
+    for (std::uint32_t i = 0; i < n; ++i) {
+        CachedGap g;
+        g.after_id = r.str();
+        g.cursor_kind = r.u8();
+        g.cursor_value = r.str();
+        out.push_back(std::move(g));
+    }
+    return out;
+}
+} // namespace
+
 std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated, int cursor_kind,
-                         const std::string& cursor_value, const std::vector<CachedGap>& gaps) {
+                         const std::string& cursor_value, const std::vector<CachedGap>& gaps,
+                         const std::vector<CachedGap>& marks) {
     Writer w;
     w.buf.append(kMagic, sizeof(kMagic));
     w.u32(static_cast<std::uint32_t>(items.size()));
@@ -377,17 +402,13 @@ std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated,
     w.boolean(truncated);
     w.u8(static_cast<std::uint8_t>(cursor_kind));
     w.str(cursor_value);
-    w.u32(static_cast<std::uint32_t>(gaps.size()));
-    for (const auto& g : gaps) {
-        w.str(g.after_id);
-        w.u8(static_cast<std::uint8_t>(g.cursor_kind));
-        w.str(g.cursor_value);
-    }
+    write_gaps(w, gaps);
+    write_gaps(w, marks);
     return std::move(w.buf);
 }
 
 std::string encode_items(const std::vector<TimelineItem>& items) {
-    return encode_cache(items, false, 0, "", {});
+    return encode_cache(items, false, 0, "", {}, {});
 }
 
 CachedTimeline decode_cache(std::string_view data) {
@@ -408,15 +429,8 @@ CachedTimeline decode_cache(std::string_view data) {
     out.truncated = r.u8() != 0;
     out.cursor_kind = r.u8();
     out.cursor_value = r.str();
-    const std::uint32_t gap_count = r.u32();
-    out.gaps.reserve(gap_count);
-    for (std::uint32_t i = 0; i < gap_count; ++i) {
-        CachedGap g;
-        g.after_id = r.str();
-        g.cursor_kind = r.u8();
-        g.cursor_value = r.str();
-        out.gaps.push_back(std::move(g));
-    }
+    out.gaps = read_gaps(r);
+    out.marks = read_gaps(r);
     if (!r.ok)
         return {}; // malformed trailer -> miss
     return out;

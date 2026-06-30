@@ -21,6 +21,11 @@ FastSMRW changelog
   happen at all, so you were stuck at the first batch. Each load pulls as many
   pages as your "API calls per timeline load" setting (Advanced).
 
+- Loading older posts now keeps working after a restart even when your "Maximum
+  posts to cache" is smaller than what you'd scrolled through - including on
+  Bluesky. The cache is trimmed to a real page boundary so it can pick up exactly
+  where it left off.
+
 - Bluesky now supports the same social features as Mastodon: view a post's
   thread, open an author's posts, open Followers / Following lists, and the
   profile with follow / unfollow, mute, and block.

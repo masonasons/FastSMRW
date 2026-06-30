@@ -24,6 +24,7 @@ struct LoadedTimeline {
     std::optional<PageCursor> scrollback;
     bool truncated = false;
     std::vector<CacheGap> gaps;
+    std::vector<CacheGap> marks; // page-boundary cursors (id -> cursor below it)
 };
 
 // On-disk cache of timeline rows, one compact BINARY file (.fsc) per
@@ -36,12 +37,16 @@ public:
     explicit TimelineCache(std::filesystem::path dir, int max_entries = 200);
 
     LoadedTimeline load(const std::string& key) const;
+    // `truncated` = the caller already capped to a page boundary (so `scrollback`
+    // is that boundary's cursor). The cache still caps to max_entries as a
+    // backstop and ORs that into the stored flag.
     void save(const std::string& key, const std::vector<TimelineItem>& items,
-              const std::optional<PageCursor>& scrollback,
-              const std::vector<CacheGap>& gaps) const;
+              const std::optional<PageCursor>& scrollback, bool truncated,
+              const std::vector<CacheGap>& gaps, const std::vector<CacheGap>& marks) const;
     void remove(const std::string& key) const;
 
     void set_max_entries(int n) { max_entries_ = n; }
+    int max_entries() const { return max_entries_; }
 
 private:
     std::filesystem::path file_for(const std::string& key) const;
