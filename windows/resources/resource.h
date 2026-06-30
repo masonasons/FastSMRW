@@ -43,6 +43,8 @@
 // New Timeline dialog.
 #define IDD_NEW_TIMELINE   240
 #define IDC_TIMELINE_TYPE  241
+#define IDC_TIMELINE_VALUE 242
+#define IDC_TIMELINE_VALUE_LABEL 243
 
 // Settings property sheet pages.
 #define IDD_SET_GENERAL     300

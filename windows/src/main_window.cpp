@@ -1044,18 +1044,24 @@ void MainWindow::ev_compose_context(const json& e) {
 
 void MainWindow::ev_spawnable(const json& e) {
     spawnable_kinds_.clear();
-    std::vector<std::wstring> titles;
+    std::vector<fastsmui::NewTimelineEntry> entries;
     for (const auto& t : e.value("timelines", json::array())) {
         spawnable_kinds_.push_back(t.value("kind", std::string{}));
-        titles.push_back(to_wide(t.value("title", std::string{})));
+        entries.push_back({to_wide(t.value("title", std::string{})),
+                           to_wide(t.value("input", std::string{}))});
     }
-    if (titles.empty()) {
+    if (entries.empty()) {
         announce("No more timelines to add for this account.");
         return;
     }
-    auto idx = show_new_timeline_dialog(hwnd_, inst_, titles);
-    if (idx && *idx >= 0 && *idx < static_cast<int>(spawnable_kinds_.size()))
-        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", spawnable_kinds_[static_cast<size_t>(*idx)]}});
+    auto choice = show_new_timeline_dialog(hwnd_, inst_, entries);
+    if (!choice || choice->index < 0 || choice->index >= static_cast<int>(spawnable_kinds_.size()))
+        return;
+    json cmd = {{"cmd", "spawn_timeline"},
+                {"kind", spawnable_kinds_[static_cast<size_t>(choice->index)]}};
+    if (!choice->value.empty())
+        cmd["value"] = to_utf8(choice->value);
+    dispatch_cmd(cmd);
 }
 
 void MainWindow::announce(const std::string& message) {

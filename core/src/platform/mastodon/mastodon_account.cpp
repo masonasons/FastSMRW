@@ -124,6 +124,35 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         return page;
     }
 
+    // Search (posts or people) uses /api/v2/search, which returns an object with
+    // accounts/statuses arrays rather than a plain list. Top results only.
+    if (source.kind == TimelineSource::Kind::SearchPosts ||
+        source.kind == TimelineSource::Kind::SearchPeople) {
+        const bool people = source.kind == TimelineSource::Kind::SearchPeople;
+        const std::string url = credentials_.instance_url + "/api/v2/search?q=" +
+                                util::percent_encode(source.param) +
+                                "&type=" + (people ? "accounts" : "statuses") +
+                                "&limit=" + std::to_string(limit) + "&resolve=true";
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = url;
+        req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+        const net::HttpResponse res = http_->send(req);
+        if (!res.ok())
+            return page;
+        try {
+            json j = json::parse(res.body);
+            if (people)
+                for (const auto& a : j.value("accounts", json::array()))
+                    page.items.push_back(TimelineItem{mastodon::map_user(a)});
+            else
+                for (const auto& s : j.value("statuses", json::array()))
+                    page.items.push_back(TimelineItem{mastodon::map_status(s)});
+        } catch (...) {
+        }
+        return page;
+    }
+
     std::string path;
     std::string extra;
     switch (source.kind) {
@@ -156,7 +185,12 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Following:
         path = "/api/v1/accounts/" + source.param + "/following";
         break;
+    case TimelineSource::Kind::Hashtag:
+        path = "/api/v1/timelines/tag/" + util::percent_encode(source.param);
+        break;
     case TimelineSource::Kind::Thread:
+    case TimelineSource::Kind::SearchPosts:
+    case TimelineSource::Kind::SearchPeople:
         break; // handled above (early return)
     }
 

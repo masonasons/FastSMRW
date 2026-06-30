@@ -8,9 +8,22 @@
 
 namespace fastsmui {
 
-// Shows the New Timeline dialog with a combo of timeline titles. Returns the
-// chosen index (into `titles`) if opened, else nullopt.
-std::optional<int> show_new_timeline_dialog(HWND parent, HINSTANCE inst,
-                                            const std::vector<std::wstring>& titles);
+// One openable timeline type. `input_label` empty means no value is needed (a
+// standing feed); non-empty means the dialog prompts for that value (e.g. a
+// hashtag or search query).
+struct NewTimelineEntry {
+    std::wstring title;
+    std::wstring input_label;
+};
+
+struct NewTimelineChoice {
+    int index = -1;
+    std::wstring value; // the entered value (empty for input-less types)
+};
+
+// Shows the New Timeline dialog. Returns the chosen entry index + any entered
+// value, or nullopt if cancelled.
+std::optional<NewTimelineChoice> show_new_timeline_dialog(HWND parent, HINSTANCE inst,
+                                                          const std::vector<NewTimelineEntry>& entries);
 
 } // namespace fastsmui

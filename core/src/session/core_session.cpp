@@ -363,6 +363,13 @@ void CoreSession::cmd_get_spawnable() {
             if (!open)
                 tls.push_back({{"kind", src.cache_key()}, {"title", src.title()}});
         }
+        // Parameterized timelines: an "input" label tells the UI to prompt for a value.
+        if (account->platform() == Platform::Mastodon) {
+            tls.push_back({{"kind", "hashtag"}, {"title", "Hashtag"}, {"input", "Hashtag"}});
+            tls.push_back({{"kind", "search_posts"}, {"title", "Search Posts"}, {"input", "Search"}});
+            tls.push_back(
+                {{"kind", "search_people"}, {"title", "Search People"}, {"input", "Search"}});
+        }
     }
     emit({{"event", "spawnable_timelines"}, {"timelines", tls}});
 }
@@ -392,7 +399,28 @@ void CoreSession::spawn_source(const TimelineSource& src) {
 void CoreSession::cmd_spawn_timeline(const json& cmd) {
     if (!accounts_.selected())
         return;
-    if (auto src = source_from_kind(cmd.value("kind", std::string{})))
+    const std::string kind = cmd.value("kind", std::string{});
+    // Parameterized templates from the New Timeline dialog (a hashtag or a search).
+    if (kind == "hashtag" || kind == "search_posts" || kind == "search_people") {
+        std::string value = cmd.value("value", std::string{});
+        const size_t b = value.find_first_not_of(" \t#"); // trim spaces + a leading '#'
+        const size_t e = value.find_last_not_of(" \t");
+        value = (b == std::string::npos) ? std::string{} : value.substr(b, e - b + 1);
+        if (value.empty())
+            return;
+        if (kind == "hashtag") {
+            for (char& ch : value)
+                if (ch >= 'A' && ch <= 'Z')
+                    ch = static_cast<char>(ch - 'A' + 'a'); // case-insensitive cache key
+            spawn_source(TimelineSource::hashtag(value));
+        } else if (kind == "search_posts") {
+            spawn_source(TimelineSource::search_posts(value));
+        } else {
+            spawn_source(TimelineSource::search_people(value));
+        }
+        return;
+    }
+    if (auto src = source_from_kind(kind))
         spawn_source(*src);
 }
 

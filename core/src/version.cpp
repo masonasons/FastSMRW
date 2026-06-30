@@ -3,7 +3,7 @@
 namespace fastsm {
 
 const char* version() {
-    return "0.0.2";
+    return "0.0.3";
 }
 
 } // namespace fastsm

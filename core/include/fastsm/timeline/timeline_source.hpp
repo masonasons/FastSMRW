@@ -20,6 +20,9 @@ struct TimelineSource {
         UserPosts, // an author's posts (param = account id)
         Followers, // an account's followers (param = account id); rows are users
         Following, // who an account follows (param = account id); rows are users
+        Hashtag,     // posts tagged #param
+        SearchPosts, // full-text post search for param
+        SearchPeople, // people search for param; rows are users
     };
 
     Kind kind = Kind::Home;
@@ -50,6 +53,12 @@ struct TimelineSource {
             return title_text.empty() ? "Followers" : title_text;
         case Kind::Following:
             return title_text.empty() ? "Following" : title_text;
+        case Kind::Hashtag:
+            return title_text.empty() ? ("#" + param) : title_text;
+        case Kind::SearchPosts:
+            return title_text.empty() ? ("Search: " + param) : title_text;
+        case Kind::SearchPeople:
+            return title_text.empty() ? ("People: " + param) : title_text;
         }
         return "Timeline";
     }
@@ -79,22 +88,41 @@ struct TimelineSource {
             return "followers:" + param;
         case Kind::Following:
             return "following:" + param;
+        case Kind::Hashtag:
+            return "hashtag:" + param;
+        case Kind::SearchPosts:
+            return "search:posts:" + param;
+        case Kind::SearchPeople:
+            return "search:people:" + param;
         }
         return "timeline";
     }
 
-    // Spawned/ephemeral feeds (threads, author timelines, user lists) aren't
-    // cached for startup.
+    // Standing feeds are cached for instant startup; spawned/ephemeral ones
+    // (threads, author timelines, user lists, hashtags, searches) are not.
     bool is_cacheable() const {
-        return kind != Kind::Thread && kind != Kind::UserPosts && !is_user_list();
+        switch (kind) {
+        case Kind::Thread:
+        case Kind::UserPosts:
+        case Kind::Followers:
+        case Kind::Following:
+        case Kind::Hashtag:
+        case Kind::SearchPosts:
+        case Kind::SearchPeople:
+            return false;
+        default:
+            return true;
+        }
     }
     // Time-ordered feeds re-sort newest-first on merge; threads keep conversation
-    // order and user lists keep server order.
+    // order, user lists keep server order, and searches keep relevance order.
     bool is_time_ordered() const {
-        return kind != Kind::Thread && !is_user_list();
+        return kind != Kind::Thread && kind != Kind::SearchPosts && !is_user_list();
     }
     // Rows are users (not statuses), so the UI offers multi-select + batch actions.
-    bool is_user_list() const { return kind == Kind::Followers || kind == Kind::Following; }
+    bool is_user_list() const {
+        return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople;
+    }
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }
@@ -112,6 +140,7 @@ struct TimelineSource {
         case Kind::Home:
         case Kind::Local:
         case Kind::Federated:
+        case Kind::Hashtag:
             return "home";
         case Kind::Notifications:
             return "notification";
@@ -123,6 +152,8 @@ struct TimelineSource {
         case Kind::UserPosts:
         case Kind::Followers:
         case Kind::Following:
+        case Kind::SearchPosts:
+        case Kind::SearchPeople:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -147,6 +178,13 @@ struct TimelineSource {
     }
     static TimelineSource following(std::string account_id, std::string title = {}) {
         return {Kind::Following, std::move(account_id), std::move(title)};
+    }
+    static TimelineSource hashtag(std::string tag) { return {Kind::Hashtag, std::move(tag)}; }
+    static TimelineSource search_posts(std::string query) {
+        return {Kind::SearchPosts, std::move(query)};
+    }
+    static TimelineSource search_people(std::string query) {
+        return {Kind::SearchPeople, std::move(query)};
     }
 };
 
