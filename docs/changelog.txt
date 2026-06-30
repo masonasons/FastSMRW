@@ -45,3 +45,4 @@ Menus and window
 
 Compatibility
 - Runs on Windows 7 and later.
+- This changelog is included with the app.

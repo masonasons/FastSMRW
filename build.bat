@@ -128,6 +128,7 @@ echo Assembling dist...
 if not exist dist mkdir dist
 xcopy /e /i /y assets\* dist\ >nul
 copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
+if exist docs\changelog.txt copy /y docs\changelog.txt dist\ >nul
 REM UniversalSpeech runtime bridge DLLs (NVDA/SAPI/ZDSR), if present.
 if exist "deps\UniversalSpeech\bin-x64\*.dll" copy /y deps\UniversalSpeech\bin-x64\*.dll dist\ >nul
 
