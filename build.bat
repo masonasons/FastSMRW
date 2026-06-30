@@ -82,7 +82,7 @@ set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\plat
 set "CORE_SRC=%CORE_SRC% core\src\auth\mastodon_auth.cpp core\src\auth\bluesky_auth.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\base64.cpp core\src\store\paths.cpp core\src\store\dpapi.cpp core\src\store\timeline_cache.cpp core\src\store\app_config.cpp core\src\store\account_store.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\runtime\worker_queue.cpp core\src\timeline\timeline_controller.cpp"
-set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\sound\sound_manager.cpp"
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
 if errorlevel 1 goto error
@@ -94,7 +94,8 @@ echo Compiling resources...
 rc /nologo /I windows\resources /fo "%BUILD%\app.res" windows\resources\app.rc
 if errorlevel 1 goto error
 echo Compiling and linking FastSMRW.exe...
-cl %CFLAGS% %COREINC% /I windows\src windows\src\main.cpp "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib shell32.lib winhttp.lib crypt32.lib
+set "APP_SRC=windows\src\main.cpp windows\src\app_controller.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp"
+cl %CFLAGS% %COREINC% /I windows\src %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib winmm.lib
 if errorlevel 1 goto error
 
 REM ---- 3) optional: tests ----

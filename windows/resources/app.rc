@@ -1,5 +1,37 @@
 #include <windows.h>
+#include "resource.h"
 
 // Embed the application manifest (ComCtl v6 + per-monitor DPI awareness).
 // CREATEPROCESS_MANIFEST_RESOURCE_ID == 1, RT_MANIFEST == 24.
 1 24 "app.manifest"
+
+IDD_ADD_ACCOUNT DIALOGEX 0, 0, 260, 152
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Add Account"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT           "&Platform:", -1, 10, 12, 60, 10
+    COMBOBOX        IDC_PLATFORM_COMBO, 80, 10, 168, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT           "&Instance:", IDC_SERVICE_LABEL, 10, 34, 66, 10
+    EDITTEXT        IDC_SERVICE_EDIT, 80, 32, 168, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "&Handle:", IDC_HANDLE_LABEL, 10, 54, 66, 10
+    EDITTEXT        IDC_HANDLE_EDIT, 80, 52, 168, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "App pass&word:", IDC_APPPASS_LABEL, 10, 74, 66, 10
+    EDITTEXT        IDC_APPPASS_EDIT, 80, 72, 168, 12, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "Mastodon opens your browser to authorize. Bluesky uses a handle and app password.",
+                    -1, 10, 96, 240, 24
+    DEFPUSHBUTTON   "OK", IDOK, 140, 130, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 196, 130, 50, 14
+END
+
+IDD_COMPOSE DIALOGEX 0, 0, 300, 182
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Compose"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT           "", IDC_COMPOSE_CONTEXT, 10, 8, 280, 16
+    EDITTEXT        IDC_COMPOSE_EDIT, 10, 28, 280, 112,
+                    ES_MULTILINE | ES_WANTRETURN | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "&Post", IDOK, 180, 160, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 236, 160, 50, 14
+END

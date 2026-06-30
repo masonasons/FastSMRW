@@ -13,19 +13,24 @@ for screen-reader users.
 The OAuth client/source registered with servers is **`FastSMRW`** (it appears as
 "via FastSMRW" on posted Mastodon statuses).
 
-## Status — M0 (scaffolding)
+## Status — M1 (vertical slice)
 
-Builds end-to-end into:
+Working end-to-end (both platforms behind one `SocialAccount`):
 
-- `fastsm_core.lib` — the shared core (interfaces stubbed; models/networking/
-  timeline land in M1).
-- `FastSMRW.exe` — a Win32 shell: themed, DPI-aware main window split into a
-  left **Timelines** list and a right **Timeline** posts list (both report-mode
-  ListViews, natively accessible to screen readers).
-- `fastsm_tests.exe` — a tiny dependency-free unit-test runner.
+- **Add accounts** — Mastodon (browser OAuth via a 127.0.0.1 loopback redirect,
+  source `FastSMRW`) and Bluesky (handle + app password).
+- **Cache-first home timeline** — cached rows paint instantly, then refresh.
+- **Compose / reply**, **boost / favorite** (optimistic, with revert on failure).
+- **Keyboard UX** — ←/→ switch timelines, ↑/↓ navigate rows, R/B/F actions, Tab
+  between panes; earcons via miniaudio.
+- **Persistence** — accounts/tokens in DPAPI-encrypted `config.json`; per-timeline
+  on-disk cache.
+- **Client-side filtering** is built into the `TimelineController` chokepoint
+  (raw rows vs. the filtered view) so filters are trivial to add.
+- 134 core unit checks (models, mapping, util, store, presentation).
 
-See `docs`/the plan for the M1+ feature list (accounts, cache-first home
-timeline, compose/boost/favorite, then UX parity and the invisible interface).
+Deferred to later milestones: full timeline set + movement units + streaming
+(M2), and the configurable "invisible interface" speech via UIA (M3).
 
 ## Layout
 
