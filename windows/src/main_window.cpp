@@ -271,9 +271,19 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
-    case WM_SETFOCUS:
+    case WM_SETFOCUS: {
+        // Focus is returning to us (typically a modal dialog just closed). Handing
+        // focus to a virtual ListView that lost its focused item makes it focus
+        // row 0 and fire LVN_ITEMCHANGED -- which would clobber selected_id and
+        // snap us to the top. Suppress that, then restore the real position.
+        Timeline* tc = current();
+        const std::string keep = tc ? tc->selected_id : std::string{};
+        updating_selection_ = true;
         SetFocus(timeline_view_);
+        updating_selection_ = false;
+        restore_selection(keep);
         return 0;
+    }
 
     case WM_COMMAND:
         if (HIWORD(wp) == 0 || HIWORD(wp) == 1) { // menu or accelerator

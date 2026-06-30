@@ -29,6 +29,9 @@ FastSMRW changelog
 - Bluesky now loads up to 100 posts per request instead of 40 (its API's limit),
   so timelines fill in faster with fewer round-trips.
 
+- Closing a dialog (compose, settings, a profile, etc.) no longer occasionally
+  snaps you to the top of the timeline - it keeps you on the post you were on.
+
 - Bluesky now supports the same social features as Mastodon: view a post's
   thread, open an author's posts, open Followers / Following lists, and the
   profile with follow / unfollow, mute, and block.
