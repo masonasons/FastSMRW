@@ -1,0 +1,20 @@
+# Build trees
+/build/
+/out/
+.vs/
+
+# CMake user-local
+CMakeUserPresets.json
+
+# MSVC artifacts
+*.obj
+*.exe
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.user
+
+# Editor noise
+*.swp
+.DS_Store
