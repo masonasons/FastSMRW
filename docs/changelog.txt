@@ -1,0 +1,47 @@
+FastSMRW changelog
+==================
+
+0.0.1 (in development)
+----------------------
+
+Accounts
+- Sign in to Mastodon (opens your browser to authorize) and Bluesky (handle and
+  app password). The posting source shows as "FastSMRW".
+- Multiple accounts; switch between them with Ctrl+[ and Ctrl+].
+- Accounts are remembered between launches and stored securely on your PC.
+
+Timelines
+- Home timeline shows your cached posts instantly on launch, then refreshes.
+- Refresh now loads every new post since you were last here, instead of only the
+  newest page.
+- Left/Right arrows move between timelines.
+- Open more timelines (Local, Federated) with the New Timeline dialog (Ctrl+T);
+  close an opened timeline with Delete. Go straight to a timeline with Ctrl+1-9.
+- Each timeline remembers where you were: switching timelines or receiving new
+  posts keeps you on the post you were reading instead of jumping to the top.
+
+Reading and posting
+- Single keys on a post: R reply, Q quote, F favorite, B boost, E edit your own
+  post, Ctrl+I for full post info.
+- Compose dialog for new posts, replies, quotes, and edits, with content warning,
+  visibility, language, polls, and scheduling where the platform supports them.
+- The remaining character count appears in the compose window's title bar.
+- Replies pre-fill the @-mentions and keep the original post's content warning and
+  visibility.
+- Choose whether Enter sends a post or adds a new line (setting).
+
+Sounds
+- Earcons for actions and events (boost, favorite, sent, new posts, errors, list
+  edges), using the original FastSM default soundpack, bundled with the app.
+- Drop your own soundpack into the soundpacks folder to replace it.
+
+Accessibility
+- Built for screen readers: rich, configurable spoken descriptions of posts
+  (which details are read, and in what order, is configurable).
+- Screen-reader speech support via UniversalSpeech.
+
+Menus and window
+- Application, Status, Timeline, and Account menus with familiar shortcuts.
+
+Compatibility
+- Runs on Windows 7 and later.
