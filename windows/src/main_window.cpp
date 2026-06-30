@@ -491,7 +491,10 @@ void MainWindow::present_compose(ComposeMode mode, const Status* target) {
         req.context_label = "Replying to " + target->account.best_name() + ": " + target->text;
         if (account->platform() == Platform::Mastodon)
             req.prefill_text = present::mention_prefix(*target, account->me());
+        // Inherit the original post's attributes: visibility + content warning.
         req.default_visibility = target->visibility;
+        if (target->spoiler_text)
+            req.prefill_cw = *target->spoiler_text;
         reply_to_id = target->id;
     } else if (mode == ComposeMode::Quote && target) {
         req.title = L"Quote Post";

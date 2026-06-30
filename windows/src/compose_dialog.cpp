@@ -70,7 +70,9 @@ bool poll_valid(HWND dlg) { return !poll_active(dlg) || poll_option_count(dlg) >
 void update_counter(HWND dlg, Ctx* ctx) {
     const int len = GetWindowTextLengthW(GetDlgItem(dlg, IDC_COMPOSE_EDIT));
     const int remaining = ctx->req->max_chars - len;
-    SetDlgItemTextW(dlg, IDC_COMPOSE_COUNTER, std::to_wstring(remaining).c_str());
+    // The remaining character count lives in the title bar, not the window.
+    std::wstring title = ctx->req->title + L" (" + std::to_wstring(remaining) + L")";
+    SetWindowTextW(dlg, title.c_str());
 
     const std::string body = trim(text_of(GetDlgItem(dlg, IDC_COMPOSE_EDIT)));
     const bool ok = remaining >= 0 && !body.empty() && poll_valid(dlg);
@@ -138,7 +140,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         const ComposeRequest& req = *ctx->req;
         const bool editing = req.mode == ComposeMode::Edit;
 
-        SetWindowTextW(dlg, req.title.c_str());
+        // Character count goes in the title bar (update_counter); hide the
+        // in-window counter label.
+        show(dlg, IDC_COMPOSE_COUNTER, false);
 
         // Context (reply/quote).
         const bool has_context =
@@ -295,17 +299,6 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         }
         break;
     }
-
-    case WM_CTLCOLORSTATIC:
-        if (reinterpret_cast<HWND>(lp) == GetDlgItem(dlg, IDC_COMPOSE_COUNTER)) {
-            auto* ctx = reinterpret_cast<Ctx*>(GetWindowLongPtrW(dlg, DWLP_USER));
-            const int len = GetWindowTextLengthW(GetDlgItem(dlg, IDC_COMPOSE_EDIT));
-            HDC hdc = reinterpret_cast<HDC>(wp);
-            SetTextColor(hdc, len > ctx->req->max_chars ? RGB(200, 0, 0) : GetSysColor(COLOR_GRAYTEXT));
-            SetBkMode(hdc, TRANSPARENT);
-            return reinterpret_cast<INT_PTR>(GetSysColorBrush(COLOR_3DFACE));
-        }
-        break;
 
     case WM_NCDESTROY:
         RemoveWindowSubclass(GetDlgItem(dlg, IDC_COMPOSE_EDIT), EditProc, 1);
