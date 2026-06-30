@@ -43,12 +43,14 @@ REM ---- parse arguments ----
 set "CONFIG=release"
 set "RUN_TESTS=0"
 set "DO_CLEAN=0"
+set "BUILD_DLL=0"
 :parse_args
 if "%~1"=="" goto args_done
 if /i "%~1"=="debug"   set "CONFIG=debug"
 if /i "%~1"=="release" set "CONFIG=release"
 if /i "%~1"=="test"    set "RUN_TESTS=1"
 if /i "%~1"=="clean"   set "DO_CLEAN=1"
+if /i "%~1"=="dll"     set "BUILD_DLL=1"
 shift
 goto parse_args
 :args_done
@@ -103,6 +105,16 @@ cl /nologo /c /w /O2 %RUNTIME% /D_CRT_SECURE_NO_WARNINGS deps\stb_vorbis\stb_vor
 if errorlevel 1 goto error
 lib /nologo /OUT:"%BUILD%\fastsm_core.lib" "%OBJ%\core\*.obj"
 if errorlevel 1 goto error
+
+REM ---- optional: fastsm_core.dll (exported C ABI, for non-C++ language bindings) ----
+if "%BUILD_DLL%"=="1" (
+    echo Building fastsm_core.dll ...
+    cl %CFLAGS% /DFASTSM_CORE_DLL /DFASTSM_CORE_BUILD %COREINC% /c core\src\capi\fastsm_core.cpp /Fo"%OBJ%\dll_capi.obj"
+    if errorlevel 1 goto error
+    REM dll_capi.obj defines the exports; the rest is pulled from the static lib.
+    link /nologo /DLL "%OBJ%\dll_capi.obj" "%BUILD%\fastsm_core.lib" winhttp.lib crypt32.lib ole32.lib winmm.lib /OUT:"%BUILD%\fastsm_core.dll" /IMPLIB:"%BUILD%\fastsm_core_dll.lib"
+    if errorlevel 1 goto error
+)
 
 REM ---- optional: UniversalSpeech static speech (built by download-deps.bat) ----
 set "USPEECH_INC="

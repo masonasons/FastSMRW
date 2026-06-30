@@ -22,3 +22,6 @@ CMakeUserPresets.json
 # Editor noise
 *.swp
 .DS_Store
+
+# C ABI build artifacts (DLL build: build.bat dll)
+build/release/fastsm_core.dll

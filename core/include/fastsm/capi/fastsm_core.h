@@ -7,6 +7,19 @@
 
 #include <stddef.h>
 
+/* Export/import decoration. Defined empty for the static-lib build (the in-process
+ * Win32 app); the DLL build (for non-C++ bindings) defines FASTSM_CORE_DLL and,
+ * while compiling the DLL, FASTSM_CORE_BUILD. */
+#if defined(_WIN32) && defined(FASTSM_CORE_DLL)
+#if defined(FASTSM_CORE_BUILD)
+#define FASTSM_API __declspec(dllexport)
+#else
+#define FASTSM_API __declspec(dllimport)
+#endif
+#else
+#define FASTSM_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,21 +34,21 @@ typedef void (*fastsm_event_fn)(void* user, const char* event_json, size_t len);
 /* Create a core instance. `config_json` carries paths/options, e.g.
  * {"config_dir":"...","soundpacks_dir":"...","user_agent":"FastSMRW/0.0.1"}.
  * Returns NULL on failure. */
-fastsm_core* fastsm_core_create(const char* config_json);
+FASTSM_API fastsm_core* fastsm_core_create(const char* config_json);
 
 /* Register (or replace) the event sink. May be called before or after create-time
  * work; events emitted while no sink is set are dropped. */
-void fastsm_core_set_event_sink(fastsm_core* core, fastsm_event_fn cb, void* user);
+FASTSM_API void fastsm_core_set_event_sink(fastsm_core* core, fastsm_event_fn cb, void* user);
 
 /* Submit a command (UTF-8 JSON, `len` bytes). Non-blocking; results arrive as
  * events. Unknown/malformed commands are ignored. */
-void fastsm_core_dispatch(fastsm_core* core, const char* command_json, size_t len);
+FASTSM_API void fastsm_core_dispatch(fastsm_core* core, const char* command_json, size_t len);
 
 /* Destroy the instance, stopping its threads. The sink is not called afterward. */
-void fastsm_core_destroy(fastsm_core* core);
+FASTSM_API void fastsm_core_destroy(fastsm_core* core);
 
 /* Engine version string (static storage). */
-const char* fastsm_core_version(void);
+FASTSM_API const char* fastsm_core_version(void);
 
 #ifdef __cplusplus
 }
