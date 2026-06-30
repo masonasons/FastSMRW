@@ -6,7 +6,13 @@
 namespace fastsm::store {
 namespace {
 
-constexpr char kMagic[4] = {'F', 'S', 'C', '1'};
+// Bump this whenever the on-disk layout changes so older caches are rejected
+// cleanly (a magic mismatch -> empty) instead of being read with a mismatched
+// reader. v2 added Status::url.
+constexpr char kMagic[4] = {'F', 'S', 'C', '2'};
+// Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
+// quote nesting is shallow in practice.
+constexpr int kMaxStatusDepth = 24;
 
 // --- little-endian writer over a growing byte buffer ---
 struct Writer {
@@ -255,8 +261,12 @@ void write_status(Writer& w, const Status& s) {
     w.str(s.url);
 }
 
-Status read_status(Reader& r) {
+Status read_status(Reader& r, int depth = 0) {
     Status s;
+    if (depth > kMaxStatusDepth) { // corrupt/misaligned data — refuse to recurse
+        r.ok = false;
+        return s;
+    }
     s.id = r.str();
     s.account = read_user(r);
     s.content = r.str();
@@ -268,9 +278,9 @@ Status read_status(Reader& r) {
     s.in_reply_to_id = r.opt_str();
     s.in_reply_to_account_id = r.opt_str();
     if (r.boolean())
-        s.reblog = std::make_shared<Status>(read_status(r));
+        s.reblog = std::make_shared<Status>(read_status(r, depth + 1));
     if (r.boolean())
-        s.quote = std::make_shared<Status>(read_status(r));
+        s.quote = std::make_shared<Status>(read_status(r, depth + 1));
     const std::uint32_t media_n = r.u32();
     for (std::uint32_t i = 0; i < media_n && r.ok; ++i)
         s.media_attachments.push_back(read_media(r));
