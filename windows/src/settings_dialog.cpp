@@ -166,6 +166,17 @@ void move_speech(HWND dlg, int delta) {
     ListView_EnsureVisible(list, target, FALSE);
 }
 
+// Ctrl+Up / Ctrl+Down reorder the focused field (and suppress the default
+// focus-rectangle move).
+LRESULT CALLBACK SpeechListProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR) {
+    if (msg == WM_KEYDOWN && (wp == VK_UP || wp == VK_DOWN) &&
+        (GetKeyState(VK_CONTROL) & 0x8000)) {
+        move_speech(GetParent(h), wp == VK_UP ? -1 : +1);
+        return 0;
+    }
+    return DefSubclassProc(h, msg, wp, lp);
+}
+
 INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
@@ -191,8 +202,12 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         if (row > 0)
             ListView_SetItemState(list, 0, LVIS_SELECTED | LVIS_FOCUSED,
                                   LVIS_SELECTED | LVIS_FOCUSED);
+        SetWindowSubclass(list, SpeechListProc, 1, 0);
         return TRUE;
     }
+    case WM_DESTROY:
+        RemoveWindowSubclass(GetDlgItem(dlg, IDC_SET_SPEECH_LIST), SpeechListProc, 1);
+        break;
     case WM_COMMAND:
         if (LOWORD(wp) == IDC_SET_SPEECH_UP) {
             move_speech(dlg, -1);
