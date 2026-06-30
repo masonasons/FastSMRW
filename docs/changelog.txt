@@ -36,8 +36,8 @@ Sounds
 - Drop your own soundpack into the soundpacks folder to replace it.
 
 Accessibility
-- Built for screen readers: rich, configurable spoken descriptions of posts
-  (which details are read, and in what order, is configurable).
+- Built for screen readers: rich, configurable descriptions of posts (which
+  details are read, and in what order) — the default order matches the Mac app.
 - Screen-reader speech support via UniversalSpeech.
 
 Menus and window

@@ -252,8 +252,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                     const auto& items = tc->items();
                     const int idx = di->item.iItem;
                     if (idx >= 0 && idx < static_cast<int>(items.size())) {
-                        scratch_ = to_wide(
-                            present::compact_line(items[static_cast<size_t>(idx)], util::now_unix()));
+                        // The displayed/spoken post text follows the configurable
+                        // speech template (default order matches the Mac).
+                        scratch_ = to_wide(present::accessibility_label(
+                            items[static_cast<size_t>(idx)], util::now_unix()));
                         di->item.pszText = scratch_.data();
                     }
                 }
