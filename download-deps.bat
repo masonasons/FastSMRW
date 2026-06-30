@@ -27,16 +27,32 @@ if not exist deps\stb_vorbis\stb_vorbis.c (
     curl -fsSL -o deps\stb_vorbis\stb_vorbis.c https://raw.githubusercontent.com/nothings/stb/master/stb_vorbis.c || goto err
 )
 
-REM --- UniversalSpeech (samtupy/UniversalSpeechMSVCStatic): static speech + bridge DLLs ---
-if not exist deps\UniversalSpeechMSVCStatic (
-    echo Cloning UniversalSpeechMSVCStatic...
-    git clone --depth 1 https://github.com/samtupy/UniversalSpeechMSVCStatic deps\UniversalSpeechMSVCStatic || goto err
-) else (
-    echo UniversalSpeechMSVCStatic already present.
+REM --- UniversalSpeech (samtupy/UniversalSpeechMSVCStatic): build static lib + bridge DLLs ---
+REM Built from source with SCons (needs Python + Visual C++ build tools), like
+REM FastPlay. If the build can't run, speech is simply disabled.
+if not exist deps\UniversalSpeech (
+    echo Cloning UniversalSpeech...
+    git clone --depth 1 https://github.com/samtupy/UniversalSpeechMSVCStatic.git deps\UniversalSpeech || goto err
+)
+if not exist deps\UniversalSpeech\UniversalSpeechStatic.lib (
+    echo Building UniversalSpeech with SCons...
+    pushd deps\UniversalSpeech
+    where scons >nul 2>&1
+    if errorlevel 1 (
+        echo SCons not found - installing via pip...
+        pip install scons
+    )
+    call scons
+    popd
+    if exist deps\UniversalSpeech\UniversalSpeechStatic.lib (
+        echo UniversalSpeech built.
+    ) else (
+        echo WARNING: UniversalSpeech build failed ^(need Python + scons + VC build tools^). Speech disabled.
+    )
 )
 
 echo.
-echo Dependencies ready. Run build.bat to build with speech enabled.
+echo Dependencies ready. Run build.bat.
 exit /b 0
 
 :err

@@ -53,8 +53,24 @@ enum {
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
+// GetDpiForWindow is Windows 10 (1607)+. Load it dynamically so the app still
+// launches on Windows 7/8 (where the static import would fail with "entry point
+// not found"); there we fall back to the system DPI.
+int window_dpi(HWND hwnd) {
+    using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+    static GetDpiForWindowFn get_dpi = reinterpret_cast<GetDpiForWindowFn>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+    if (get_dpi)
+        return static_cast<int>(get_dpi(hwnd));
+    HDC dc = GetDC(hwnd);
+    const int dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96;
+    if (dc)
+        ReleaseDC(hwnd, dc);
+    return dpi > 0 ? dpi : 96;
+}
+
 int dpi_scale(HWND hwnd, int value) {
-    return MulDiv(value, static_cast<int>(GetDpiForWindow(hwnd)), 96);
+    return MulDiv(value, window_dpi(hwnd), 96);
 }
 
 HWND make_listview(HWND parent, int id) {

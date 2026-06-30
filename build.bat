@@ -102,17 +102,15 @@ if errorlevel 1 goto error
 lib /nologo /OUT:"%BUILD%\fastsm_core.lib" "%OBJ%\core\*.obj"
 if errorlevel 1 goto error
 
-REM ---- optional: UniversalSpeech static speech (run download-deps.bat first) ----
-REM Links a prebuilt static lib if present. Build it once from the cloned repo
-REM (deps\UniversalSpeechMSVCStatic, its makefile/SConstruct) to UniversalSpeech.lib.
+REM ---- optional: UniversalSpeech static speech (built by download-deps.bat) ----
 set "USPEECH_INC="
 set "USPEECH_DEF="
 set "USPEECH_LIB="
-if exist "deps\UniversalSpeechMSVCStatic\UniversalSpeech.lib" (
+if exist "deps\UniversalSpeech\UniversalSpeechStatic.lib" (
     echo UniversalSpeech static lib found - enabling speech output.
-    set "USPEECH_INC=/I deps\UniversalSpeechMSVCStatic\include"
+    set "USPEECH_INC=/I deps\UniversalSpeech\include"
     set "USPEECH_DEF=/DHAVE_UNIVERSALSPEECH /DUSE_UNIVERSAL_SPEECH /DUNIVERSAL_SPEECH_STATIC"
-    set "USPEECH_LIB=deps\UniversalSpeechMSVCStatic\UniversalSpeech.lib oleaut32.lib version.lib psapi.lib"
+    set "USPEECH_LIB=deps\UniversalSpeech\UniversalSpeechStatic.lib oleaut32.lib version.lib psapi.lib"
 )
 
 REM ---- 2) Win32 app -> FastSMRW.exe ----
@@ -130,7 +128,7 @@ if not exist dist mkdir dist
 xcopy /e /i /y assets\* dist\ >nul
 copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
 REM UniversalSpeech runtime bridge DLLs (NVDA/SAPI/ZDSR), if present.
-if exist "deps\UniversalSpeechMSVCStatic\bin-x64\*.dll" copy /y deps\UniversalSpeechMSVCStatic\bin-x64\*.dll dist\ >nul
+if exist "deps\UniversalSpeech\bin-x64\*.dll" copy /y deps\UniversalSpeech\bin-x64\*.dll dist\ >nul
 
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
