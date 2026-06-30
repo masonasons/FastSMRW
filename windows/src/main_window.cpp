@@ -44,8 +44,10 @@ enum {
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
     ID_GO_BACK,
-    ID_MOVE_PREV,
-    ID_MOVE_NEXT,
+    ID_MOVE_UP,
+    ID_MOVE_DOWN,
+    ID_CYCLE_PREV,
+    ID_CYCLE_NEXT,
     ID_PREV_ACCOUNT,
     ID_NEXT_ACCOUNT,
     ID_ADD_ACCOUNT,
@@ -212,8 +214,10 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
-        {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_PREV},   // jump to prev author
-        {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_NEXT}, // jump to next author
+        {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
+        {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_DOWN}, // jump down by movement unit
+        {FVIRTKEY | FCONTROL, VK_LEFT, ID_CYCLE_PREV},  // pick previous movement unit
+        {FVIRTKEY | FCONTROL, VK_RIGHT, ID_CYCLE_NEXT}, // pick next movement unit
     };
     for (int i = 0; i < 9; ++i)
         accels.push_back({FVIRTKEY | FCONTROL, static_cast<WORD>('1' + i),
@@ -656,15 +660,21 @@ void MainWindow::handle_command(int id) {
     case ID_GO_BACK:
         dispatch_cmd({{"cmd", "go_back"}});
         break;
-    case ID_MOVE_PREV:
-    case ID_MOVE_NEXT: {
+    case ID_MOVE_UP:
+    case ID_MOVE_DOWN: {
         const std::string from = selected_id();
         if (!from.empty())
             dispatch_cmd({{"cmd", "move"},
                           {"from_id", from},
-                          {"dir", id == ID_MOVE_PREV ? "prev" : "next"}});
+                          {"dir", id == ID_MOVE_UP ? "prev" : "next"}});
         break;
     }
+    case ID_CYCLE_PREV:
+        dispatch_cmd({{"cmd", "cycle_movement"}, {"dir", "prev"}});
+        break;
+    case ID_CYCLE_NEXT:
+        dispatch_cmd({{"cmd", "cycle_movement"}, {"dir", "next"}});
+        break;
     default:
         break;
     }

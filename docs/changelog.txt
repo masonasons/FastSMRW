@@ -20,8 +20,9 @@ Timelines
   Delete. Go straight to a timeline with Ctrl+1-9.
 - Each timeline remembers where you were: switching timelines or receiving new
   posts keeps you on the post you were reading instead of jumping to the top.
-- Ctrl+Down / Ctrl+Up jump to the next / previous post by a different author
-  (skip past a run of replies from one person).
+- Movement keys: Ctrl+Left/Right pick a movement unit (Same User, Thread, or a
+  time gap of 1h/2h/6h/1d) and announce it; Ctrl+Up/Down then jump by that unit
+  (e.g. to the next post by the same person, or the next post in the thread).
 - Ctrl+Z (Go Back) returns you to where you were before a jump.
 - Fixed switching between open timelines sometimes landing on an unselected row,
   so your place is now reliably restored (and announced) on every timeline.

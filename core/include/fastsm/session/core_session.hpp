@@ -17,6 +17,7 @@
 #include "fastsm/store/account_store.hpp"
 #include "fastsm/store/app_settings.hpp"
 #include "fastsm/store/timeline_cache.hpp"
+#include "fastsm/timeline/movement.hpp"
 #include "fastsm/timeline/streaming_client.hpp"
 #include "fastsm/timeline/timeline_controller.hpp"
 
@@ -65,6 +66,7 @@ private:
     void cmd_open_status(const nlohmann::json& cmd);
     void cmd_post_info(const nlohmann::json& cmd);
     void cmd_move(const nlohmann::json& cmd);
+    void cmd_cycle_movement(const nlohmann::json& cmd);
     void cmd_go_back();
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
@@ -107,6 +109,9 @@ private:
     // Closed timelines kept alive (with in-flight async) until shutdown.
     std::vector<std::unique_ptr<TimelineController>> retired_;
     int current_ = 0;
+
+    std::vector<MovementUnit> movement_units_ = MovementUnit::catalog();
+    int movement_unit_ = 0; // currently selected unit (Ctrl+Left/Right cycles)
 
     std::atomic<int> auto_refresh_seconds_{0};
     std::atomic<bool> auto_refresh_running_{true};

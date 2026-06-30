@@ -116,6 +116,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_post_info(cmd);
     else if (c == "move")
         cmd_move(cmd);
+    else if (c == "cycle_movement")
+        cmd_cycle_movement(cmd);
     else if (c == "go_back")
         cmd_go_back();
     else if (c == "get_spawnable")
@@ -474,28 +476,35 @@ void CoreSession::cmd_post_info(const json& cmd) {
 
 void CoreSession::cmd_move(const json& cmd) {
     TimelineController* tc = current();
-    if (!tc)
+    if (!tc || movement_units_.empty())
         return;
     const int idx = tc->visible_index_of(cmd.value("from_id", std::string{}));
     if (idx < 0)
         return;
-    const auto& items = tc->items();
-    auto author_of = [](const TimelineItem& it) -> std::string {
-        if (const Status* s = it.actionable_status())
-            return s->account.acct;
-        return {};
-    };
-    const std::string cur = author_of(items[static_cast<size_t>(idx)]);
-    const int step = cmd.value("dir", std::string("next")) == "prev" ? -1 : 1;
-    for (int i = idx + step; i >= 0 && i < static_cast<int>(items.size()); i += step) {
-        if (author_of(items[static_cast<size_t>(i)]) != cur) {
-            const std::string id = items[static_cast<size_t>(i)].id();
-            tc->note_selection(id); // records the jump for Go Back
-            emit({{"event", "select_row"}, {"id", id}});
-            return;
-        }
+    if (movement_unit_ < 0 || movement_unit_ >= static_cast<int>(movement_units_.size()))
+        movement_unit_ = 0;
+    const bool down = cmd.value("dir", std::string("next")) != "prev";
+    const int dest =
+        movement::destination(tc->items(), idx, movement_units_[static_cast<size_t>(movement_unit_)],
+                              down);
+    if (dest < 0) {
+        sound_.play(sound::Earcon::Boundary); // nowhere to jump for this unit
+        return;
     }
-    sound_.play(sound::Earcon::Boundary); // no different-author post that way
+    const std::string id = tc->items()[static_cast<size_t>(dest)].id();
+    tc->note_selection(id); // records the jump for Go Back
+    emit({{"event", "select_row"}, {"id", id}});
+}
+
+void CoreSession::cmd_cycle_movement(const json& cmd) {
+    const int n = static_cast<int>(movement_units_.size());
+    if (n == 0) {
+        emit_announce("No movement units configured");
+        return;
+    }
+    const int delta = cmd.value("dir", std::string("next")) == "prev" ? -1 : 1;
+    movement_unit_ = ((movement_unit_ + delta) % n + n) % n;
+    emit_announce("Move by " + movement_units_[static_cast<size_t>(movement_unit_)].title());
 }
 
 void CoreSession::cmd_go_back() {
