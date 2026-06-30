@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <winhttp.h>
 
+#include <algorithm>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -201,6 +203,115 @@ HttpResponse WinHttpClient::send(const HttpRequest& req) {
     }
 
     return res;
+}
+
+void WinHttpClient::send_stream(const HttpRequest& req,
+                                const std::function<bool()>& should_continue,
+                                const std::function<void(std::string_view)>& on_chunk) {
+    const std::wstring wurl = to_wide(req.url);
+    URL_COMPONENTS uc{};
+    uc.dwStructSize = sizeof(uc);
+    uc.dwSchemeLength = static_cast<DWORD>(-1);
+    uc.dwHostNameLength = static_cast<DWORD>(-1);
+    uc.dwUrlPathLength = static_cast<DWORD>(-1);
+    uc.dwExtraInfoLength = static_cast<DWORD>(-1);
+    if (!WinHttpCrackUrl(wurl.c_str(), static_cast<DWORD>(wurl.size()), 0, &uc))
+        return;
+
+    const std::wstring host(uc.lpszHostName, uc.dwHostNameLength);
+    std::wstring path(uc.lpszUrlPath, uc.dwUrlPathLength + uc.dwExtraInfoLength);
+    if (path.empty())
+        path = L"/";
+    const bool secure = uc.nScheme == INTERNET_SCHEME_HTTPS;
+
+    Handle session(WinHttpOpen(user_agent_.c_str(), WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+    if (!session)
+        return;
+    // Long receive timeout: Mastodon sends keep-alives every ~30s, so 60s lets a
+    // genuinely dead connection drop (the client then reconnects). should_continue
+    // is re-checked each loop, so a clean stop is noticed within one read cycle.
+    WinHttpSetTimeouts(session, 15000, 15000, 30000, 60000);
+    {
+        DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+#ifdef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
+        protocols |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+#endif
+        if (!WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols,
+                              sizeof(protocols))) {
+            DWORD tls12 = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+            WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &tls12, sizeof(tls12));
+        }
+    }
+
+    Handle connect(WinHttpConnect(session, host.c_str(), uc.nPort, 0));
+    if (!connect)
+        return;
+
+    const std::wstring method = to_wide(req.method);
+    const DWORD flags = secure ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET request = WinHttpOpenRequest(connect, method.c_str(), path.c_str(), nullptr,
+                                           WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!request)
+        return;
+    // Register so cancel_streams() can close this handle and unblock the read.
+    {
+        std::lock_guard<std::mutex> lk(stream_mutex_);
+        active_streams_.push_back(request);
+    }
+    // Close + deregister exactly once (cancel_streams may have done it already).
+    auto cleanup = [&] {
+        std::lock_guard<std::mutex> lk(stream_mutex_);
+        auto it = std::find(active_streams_.begin(), active_streams_.end(), request);
+        if (it != active_streams_.end()) {
+            active_streams_.erase(it);
+            WinHttpCloseHandle(request);
+        }
+    };
+
+    std::wstring header_block;
+    for (const auto& [key, value] : req.headers) {
+        header_block += to_wide(key);
+        header_block += L": ";
+        header_block += to_wide(value);
+        header_block += L"\r\n";
+    }
+    if (!header_block.empty()) {
+        WinHttpAddRequestHeaders(request, header_block.c_str(), static_cast<DWORD>(-1),
+                                 WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE);
+    }
+
+    if (WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0,
+                           0) &&
+        WinHttpReceiveResponse(request, nullptr)) {
+        DWORD code = 0;
+        DWORD code_size = sizeof(code);
+        WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX, &code, &code_size,
+                            WINHTTP_NO_HEADER_INDEX);
+        if (code >= 200 && code < 300) { // a usable stream (not 401/404/...)
+            while (should_continue()) {
+                DWORD available = 0;
+                if (!WinHttpQueryDataAvailable(request, &available))
+                    break; // receive timeout, cancelled, or dropped
+                if (available == 0)
+                    break; // server closed the stream
+                std::string chunk(available, '\0');
+                DWORD read = 0;
+                if (!WinHttpReadData(request, chunk.data(), available, &read) || read == 0)
+                    break;
+                on_chunk(std::string_view(chunk.data(), read));
+            }
+        }
+    }
+    cleanup();
+}
+
+void WinHttpClient::cancel_streams() {
+    std::lock_guard<std::mutex> lk(stream_mutex_);
+    for (void* h : active_streams_)
+        WinHttpCloseHandle(h);
+    active_streams_.clear();
 }
 
 } // namespace fastsm::net

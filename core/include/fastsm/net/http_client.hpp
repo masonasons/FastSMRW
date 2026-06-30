@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -41,6 +42,18 @@ public:
     // Performs the request synchronously. Implementations must be callable from
     // the core's worker thread (never the UI thread).
     virtual HttpResponse send(const HttpRequest& request) = 0;
+
+    // Opens a long-lived request (e.g. an SSE stream) and invokes on_chunk for
+    // each received chunk until the stream ends, a transport error occurs, or
+    // should_continue() returns false. Blocks until then; call on a dedicated
+    // thread. Default does nothing (non-streaming transports / test fakes).
+    virtual void send_stream(const HttpRequest& request,
+                             const std::function<bool()>& should_continue,
+                             const std::function<void(std::string_view)>& on_chunk) {
+        (void)request;
+        (void)should_continue;
+        (void)on_chunk;
+    }
 };
 
 } // namespace fastsm::net
