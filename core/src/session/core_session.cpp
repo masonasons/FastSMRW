@@ -47,6 +47,23 @@ PostDraft draft_from_json(const json& d) {
     return draft;
 }
 
+// Title-case label for a user action (batch announce).
+std::string user_action_label(const std::string& action) {
+    if (action == "follow")
+        return "Follow";
+    if (action == "unfollow")
+        return "Unfollow";
+    if (action == "mute")
+        return "Mute";
+    if (action == "unmute")
+        return "Unmute";
+    if (action == "block")
+        return "Block";
+    if (action == "unblock")
+        return "Unblock";
+    return "Action";
+}
+
 // Spoken confirmation for a relationship action.
 std::string relationship_message(const std::string& action, const std::string& handle) {
     const std::string at = handle.empty() ? "user" : "@" + handle;
@@ -154,6 +171,12 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_user_profile(cmd);
     else if (c == "set_relationship")
         cmd_set_relationship(cmd);
+    else if (c == "open_followers")
+        cmd_open_followers(cmd);
+    else if (c == "open_following")
+        cmd_open_following(cmd);
+    else if (c == "user_action")
+        cmd_user_action(cmd);
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -392,6 +415,10 @@ void CoreSession::cmd_open_thread(const json& cmd) {
 
 std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
     std::vector<User> users;
+    if (const User* row_user = item.user()) { // a user-list row is just that user
+        users.push_back(*row_user);
+        return users;
+    }
     const Status* outer = item.status();
     if (!outer)
         return users;
@@ -501,6 +528,83 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
                 return;
             }
             emit_announce(relationship_message(action, handle));
+        });
+    });
+}
+
+void CoreSession::open_user_list(const json& cmd, bool following) {
+    if (!accounts_.selected())
+        return;
+    std::string id = cmd.value("account_id", std::string{});
+    std::string handle = cmd.value("acct", std::string{});
+    if (id.empty()) { // resolve from the selected row (a user row or a post author)
+        TimelineController* tc = current();
+        const TimelineItem* item = tc ? find_item(tc, cmd.value("id", std::string{})) : nullptr;
+        if (item) {
+            const std::vector<User> users = users_in_post(*item);
+            if (!users.empty()) {
+                id = users.front().id;
+                handle = users.front().acct.empty() ? users.front().username : users.front().acct;
+            }
+        }
+    }
+    if (id.empty())
+        return;
+    if (following)
+        spawn_source(TimelineSource::following(id, "Following: @" + handle));
+    else
+        spawn_source(TimelineSource::followers(id, "Followers: @" + handle));
+}
+
+void CoreSession::cmd_open_followers(const json& cmd) { open_user_list(cmd, false); }
+void CoreSession::cmd_open_following(const json& cmd) { open_user_list(cmd, true); }
+
+void CoreSession::cmd_user_action(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    TimelineController* tc = current();
+    const std::string action = cmd.value("action", std::string{});
+    if (!acct || !tc || action.empty() || !cmd.contains("ids") || !cmd["ids"].is_array())
+        return;
+    // Resolve the selected user-row ids to account ids.
+    std::vector<std::string> account_ids;
+    for (const auto& rid : cmd["ids"]) {
+        if (!rid.is_string())
+            continue;
+        if (const TimelineItem* item = find_item(tc, rid.get<std::string>()))
+            if (const User* u = item->user())
+                account_ids.push_back(u->id);
+    }
+    if (account_ids.empty())
+        return;
+    worker_.post([this, acct, account_ids, action] {
+        int failures = 0;
+        for (const auto& id : account_ids) {
+            bool ok = false;
+            if (action == "follow")
+                ok = acct->follow(id);
+            else if (action == "unfollow")
+                ok = acct->unfollow(id);
+            else if (action == "mute")
+                ok = acct->mute(id);
+            else if (action == "unmute")
+                ok = acct->unmute(id);
+            else if (action == "block")
+                ok = acct->block(id);
+            else if (action == "unblock")
+                ok = acct->unblock(id);
+            if (!ok)
+                ++failures;
+        }
+        const int total = static_cast<int>(account_ids.size());
+        loop_.post([this, action, failures, total] {
+            const std::string noun = total == 1 ? " user" : " users";
+            if (failures > 0) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce(user_action_label(action) + " failed for " +
+                              std::to_string(failures) + " of " + std::to_string(total) + noun);
+            } else {
+                emit_announce(user_action_label(action) + ": " + std::to_string(total) + noun);
+            }
         });
     });
 }
@@ -947,8 +1051,10 @@ void CoreSession::emit_timelines() {
     json tls = json::array();
     for (auto& tc : timelines_) {
         const TimelineSource& s = tc->source();
-        tls.push_back(
-            {{"title", s.title()}, {"kind", s.cache_key()}, {"dismissable", s.is_dismissable()}});
+        tls.push_back({{"title", s.title()},
+                       {"kind", s.cache_key()},
+                       {"dismissable", s.is_dismissable()},
+                       {"user_list", s.is_user_list()}});
     }
     emit({{"event", "timelines_changed"}, {"timelines", tls}, {"current", current_}});
 }

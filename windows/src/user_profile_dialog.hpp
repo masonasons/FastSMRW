@@ -9,6 +9,8 @@ namespace fastsmui {
 
 enum class UserProfileAction {
     ViewPosts,
+    Followers,
+    Following,
     OpenBrowser,
     ToggleFollow,
     ToggleMute,

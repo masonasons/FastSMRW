@@ -17,6 +17,11 @@ FastSMRW changelog
   quotes, or boosts), U and Ctrl+U show a menu to choose whose posts or profile
   to open.
 - Press Space on a post to open its thread (same as View Thread).
+- View an account's Followers or Following list (buttons in the Ctrl+U profile):
+  each opens as its own timeline of people.
+- On a people list you can select one or more people (multi-select) and press
+  Enter to follow, unfollow, mute, unmute, block, or unblock them all at once. U
+  and Ctrl+U also work on a person in a list (open their posts or profile).
 - Close the current timeline with Backspace, from anywhere in the window.
 - Closing an opened timeline returns you to the timeline you opened it from,
   instead of whatever was next in the list.

@@ -150,6 +150,12 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::UserPosts:
         path = "/api/v1/accounts/" + source.param + "/statuses";
         break;
+    case TimelineSource::Kind::Followers:
+        path = "/api/v1/accounts/" + source.param + "/followers";
+        break;
+    case TimelineSource::Kind::Following:
+        path = "/api/v1/accounts/" + source.param + "/following";
+        break;
     case TimelineSource::Kind::Thread:
         break; // handled above (early return)
     }
@@ -178,9 +184,14 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         return page;
 
     const bool notifications = source.is_notification_timeline();
+    const bool user_list = source.is_user_list();
     std::string last_id;
     for (const auto& entry : j) {
-        if (notifications) {
+        if (user_list) {
+            User u = mastodon::map_user(entry);
+            last_id = u.id;
+            page.items.push_back(TimelineItem{std::move(u)});
+        } else if (notifications) {
             Notification n = mastodon::map_notification(entry);
             last_id = n.id;
             page.items.push_back(TimelineItem{std::move(n)});
@@ -196,7 +207,9 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         if (auto next = parse_next_max_id(*link))
             page.next_cursor = PageCursor::max_id(*next);
     }
-    if (!page.next_cursor && !last_id.empty())
+    // Followers/following paginate only via the Link header (the cursor is a
+    // relationship id, not an account id), so don't fall back to the last id.
+    if (!page.next_cursor && !last_id.empty() && !user_list)
         page.next_cursor = PageCursor::max_id(last_id);
     return page;
 }

@@ -387,6 +387,13 @@ void MainWindow::populate_timelines_list() {
 
 void MainWindow::bind_current_to_view(bool force) {
     Timeline* tc = current();
+    // User lists allow multi-select (for batch follow/mute/block); post timelines
+    // stay single-select. Flip the list style only when it needs to change.
+    const bool want_multi = tc && tc->user_list;
+    const LONG_PTR style = GetWindowLongPtrW(timeline_view_, GWL_STYLE);
+    if (want_multi == static_cast<bool>(style & LVS_SINGLESEL))
+        SetWindowLongPtrW(timeline_view_, GWL_STYLE,
+                          want_multi ? (style & ~LVS_SINGLESEL) : (style | LVS_SINGLESEL));
     std::vector<std::string> ids;
     if (tc) {
         ids.reserve(tc->rows.size());
@@ -504,7 +511,10 @@ void MainWindow::on_view_keydown(int vk) {
         break;
     }
     case VK_RETURN:
-        do_post_info();
+        if (Timeline* t = current(); t && t->user_list)
+            show_user_actions(); // batch follow/mute/block on selected users
+        else
+            do_post_info();
         break;
     default:
         break;
@@ -612,6 +622,12 @@ void MainWindow::ev_user_profile(const json& e) {
     case UserProfileAction::ViewPosts:
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
         break;
+    case UserProfileAction::Followers:
+        dispatch_cmd({{"cmd", "open_followers"}, {"account_id", account_id}, {"acct", acct}});
+        break;
+    case UserProfileAction::Following:
+        dispatch_cmd({{"cmd", "open_following"}, {"account_id", account_id}, {"acct", acct}});
+        break;
     case UserProfileAction::OpenBrowser:
         if (!url.empty())
             ShellExecuteW(nullptr, L"open", to_wide(url).c_str(), nullptr, nullptr, SW_SHOW);
@@ -674,6 +690,72 @@ void MainWindow::ev_user_picker(const json& e) {
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
     else
         dispatch_cmd({{"cmd", "open_user_profile"}, {"id", row_id}, {"account_id", account_id}});
+}
+
+void MainWindow::show_user_actions() {
+    Timeline* tc = current();
+    if (!tc)
+        return;
+    // Collect the selected user rows (fall back to the focused row).
+    std::vector<std::string> ids;
+    int row = -1;
+    while ((row = ListView_GetNextItem(timeline_view_, row, LVNI_SELECTED)) >= 0)
+        if (row < static_cast<int>(tc->rows.size()))
+            ids.push_back(tc->rows[static_cast<size_t>(row)].id);
+    if (ids.empty()) {
+        const int f = selected_row();
+        if (f >= 0 && f < static_cast<int>(tc->rows.size()))
+            ids.push_back(tc->rows[static_cast<size_t>(f)].id);
+    }
+    if (ids.empty())
+        return;
+    const int count = static_cast<int>(ids.size());
+    struct Act {
+        const wchar_t* label;
+        const char* action;
+    };
+    static const Act kActs[] = {
+        {L"&Follow", "follow"}, {L"&Unfollow", "unfollow"}, {L"&Mute", "mute"},
+        {L"Un&mute", "unmute"}, {L"&Block", "block"},       {L"Un&block", "unblock"},
+    };
+    const int kActCount = static_cast<int>(sizeof(kActs) / sizeof(kActs[0]));
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+    for (int i = 0; i < kActCount; ++i) {
+        std::wstring label = kActs[i].label;
+        if (count > 1)
+            label += L" (" + std::to_wstring(count) + L")";
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(i + 1), label.c_str());
+    }
+    POINT pt{0, 0};
+    const int frow = selected_row();
+    RECT rc;
+    if (frow >= 0 && ListView_GetItemRect(timeline_view_, frow, &rc, LVIR_BOUNDS)) {
+        pt.x = rc.left;
+        pt.y = rc.bottom;
+        ClientToScreen(timeline_view_, &pt);
+    } else {
+        GetCursorPos(&pt);
+    }
+    const int chosen = static_cast<int>(TrackPopupMenu(menu,
+                                                       TPM_RETURNCMD | TPM_NONOTIFY |
+                                                           TPM_LEFTALIGN | TPM_TOPALIGN,
+                                                       pt.x, pt.y, 0, hwnd_, nullptr));
+    DestroyMenu(menu);
+    if (chosen <= 0 || chosen > kActCount)
+        return;
+    const char* action = kActs[chosen - 1].action;
+    if (std::string(action) == "block" && settings_.value("confirm_block", true)) {
+        const std::wstring msg =
+            count > 1 ? L"Block " + std::to_wstring(count) + L" users?" : L"Block this user?";
+        if (!confirm(hwnd_, msg.c_str(), L"Block"))
+            return;
+    }
+    json jids = json::array();
+    for (const auto& s : ids)
+        jids.push_back(s);
+    dispatch_cmd({{"cmd", "user_action"}, {"action", action}, {"ids", std::move(jids)}});
 }
 
 void MainWindow::do_new_timeline() { dispatch_cmd({{"cmd", "get_spawnable"}}); }
@@ -860,6 +942,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.title = to_wide(t.value("title", std::string{}));
         tl.kind = t.value("kind", std::string{});
         tl.dismissable = t.value("dismissable", false);
+        tl.user_list = t.value("user_list", false);
         for (const auto& old : timelines_) // carry rows/position for the same timeline
             if (old.kind == tl.kind) {
                 tl.rows = old.rows;

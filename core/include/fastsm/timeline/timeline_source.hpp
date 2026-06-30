@@ -18,6 +18,8 @@ struct TimelineSource {
         Favorites,
         Thread,    // a post's conversation (param = focused status id)
         UserPosts, // an author's posts (param = account id)
+        Followers, // an account's followers (param = account id); rows are users
+        Following, // who an account follows (param = account id); rows are users
     };
 
     Kind kind = Kind::Home;
@@ -44,6 +46,10 @@ struct TimelineSource {
             return title_text.empty() ? "Thread" : title_text;
         case Kind::UserPosts:
             return title_text.empty() ? "User" : title_text;
+        case Kind::Followers:
+            return title_text.empty() ? "Followers" : title_text;
+        case Kind::Following:
+            return title_text.empty() ? "Following" : title_text;
         }
         return "Timeline";
     }
@@ -69,14 +75,26 @@ struct TimelineSource {
             return "thread:" + param;
         case Kind::UserPosts:
             return "userPosts:" + param;
+        case Kind::Followers:
+            return "followers:" + param;
+        case Kind::Following:
+            return "following:" + param;
         }
         return "timeline";
     }
 
-    // Threads are fetched whole and not re-sorted. Spawned/ephemeral feeds
-    // (threads, author timelines) aren't cached for startup.
-    bool is_cacheable() const { return kind != Kind::Thread && kind != Kind::UserPosts; }
-    bool is_time_ordered() const { return kind != Kind::Thread; }
+    // Spawned/ephemeral feeds (threads, author timelines, user lists) aren't
+    // cached for startup.
+    bool is_cacheable() const {
+        return kind != Kind::Thread && kind != Kind::UserPosts && !is_user_list();
+    }
+    // Time-ordered feeds re-sort newest-first on merge; threads keep conversation
+    // order and user lists keep server order.
+    bool is_time_ordered() const {
+        return kind != Kind::Thread && !is_user_list();
+    }
+    // Rows are users (not statuses), so the UI offers multi-select + batch actions.
+    bool is_user_list() const { return kind == Kind::Followers || kind == Kind::Following; }
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }
@@ -103,6 +121,8 @@ struct TimelineSource {
         case Kind::Favorites:
         case Kind::Thread:
         case Kind::UserPosts:
+        case Kind::Followers:
+        case Kind::Following:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -121,6 +141,12 @@ struct TimelineSource {
     }
     static TimelineSource user_posts(std::string account_id, std::string title = {}) {
         return {Kind::UserPosts, std::move(account_id), std::move(title)};
+    }
+    static TimelineSource followers(std::string account_id, std::string title = {}) {
+        return {Kind::Followers, std::move(account_id), std::move(title)};
+    }
+    static TimelineSource following(std::string account_id, std::string title = {}) {
+        return {Kind::Following, std::move(account_id), std::move(title)};
     }
 };
 

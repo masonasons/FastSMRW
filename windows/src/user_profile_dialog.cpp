@@ -59,6 +59,12 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_PROFILE_POSTS:
             finish(UserProfileAction::ViewPosts);
             return TRUE;
+        case IDC_PROFILE_FOLLOWERS:
+            finish(UserProfileAction::Followers);
+            return TRUE;
+        case IDC_PROFILE_FOLLOWING:
+            finish(UserProfileAction::Following);
+            return TRUE;
         case IDC_PROFILE_BROWSER:
             finish(UserProfileAction::OpenBrowser);
             return TRUE;

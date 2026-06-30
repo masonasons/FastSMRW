@@ -45,6 +45,7 @@ private:
         std::wstring title;
         std::string kind;
         bool dismissable = false;
+        bool user_list = false; // rows are users: multi-select + batch actions
         std::vector<Row> rows;
         std::string selected_id; // UI-authoritative remembered position
     };
@@ -71,6 +72,7 @@ private:
     void do_favorite();
     void compose(const char* mode); // dispatch compose_context for the selection
     void do_post_info();
+    void show_user_actions(); // batch follow/mute/block on a user list
     void do_new_timeline();
     void do_add_account();
     void do_settings();
