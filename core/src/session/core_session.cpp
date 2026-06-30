@@ -62,6 +62,10 @@ std::string relationship_message(const std::string& action, const std::string& h
         return "Blocked " + at;
     if (action == "unblock")
         return "Unblocked " + at;
+    if (action == "show_boosts")
+        return "Showing boosts from " + at;
+    if (action == "hide_boosts")
+        return "Hiding boosts from " + at;
     return "Done";
 }
 
@@ -435,25 +439,28 @@ void CoreSession::emit_user_profile(const User& u) {
     const User user = u;
     const std::string text = present::user_profile(u);
     const std::string handle = u.acct.empty() ? u.username : u.acct;
+    const bool can_hide_boosts = acct && acct->features().hide_boosts;
     // Fetch the relationship off-thread, then emit (so the dialog's follow/mute/
     // block buttons reflect the real state). Profiling a mention still works (the
     // relationship is by id).
-    worker_.post([this, acct, user, text, handle] {
+    worker_.post([this, acct, user, text, handle, can_hide_boosts] {
         std::optional<Relationship> rel;
         if (acct && !user.id.empty())
             rel = acct->relationship(user.id);
-        loop_.post([this, user, text, handle, rel] {
+        loop_.post([this, user, text, handle, rel, can_hide_boosts] {
             json e = {{"event", "user_profile"},
                       {"text", text},
                       {"account_id", user.id},
                       {"acct", handle},
                       {"url", user.url},
-                      {"has_relationship", rel.has_value()}};
+                      {"has_relationship", rel.has_value()},
+                      {"can_hide_boosts", can_hide_boosts}};
             if (rel) {
                 e["following"] = rel->following;
                 e["muting"] = rel->muting;
                 e["blocking"] = rel->blocking;
                 e["requested"] = rel->requested;
+                e["showing_reblogs"] = rel->showing_reblogs;
             }
             emit(e);
         });
@@ -483,6 +490,10 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
             ok = acct->block(id);
         else if (action == "unblock")
             ok = acct->unblock(id);
+        else if (action == "show_boosts")
+            ok = acct->set_show_boosts(id, true);
+        else if (action == "hide_boosts")
+            ok = acct->set_show_boosts(id, false);
         loop_.post([this, ok, action, handle] {
             if (!ok) {
                 sound_.play(sound::Earcon::Error);

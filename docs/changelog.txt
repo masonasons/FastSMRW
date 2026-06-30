@@ -8,9 +8,11 @@ FastSMRW changelog
   menu's Open User Timeline, or the View Author button in Post info.
 - Open a user's profile with Ctrl+U (or the Status menu): their name, handle,
   bio, and follower / following / post counts, with buttons to view their posts,
-  follow / unfollow, mute, block, or open their profile in your browser. The
-  follow / mute / block buttons reflect your current relationship and announce
-  the result.
+  follow / unfollow, mute, block, hide or show their boosts, or open their
+  profile in your browser. The relationship buttons reflect your current
+  relationship and announce the result.
+- New setting (Settings > Confirmation): ask before blocking a user. When on,
+  blocking from a profile asks first.
 - When a post involves more than one person (its author plus anyone it mentions,
   quotes, or boosts), U and Ctrl+U show a menu to choose whose posts or profile
   to open.

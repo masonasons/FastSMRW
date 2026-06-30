@@ -36,6 +36,14 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         EnableWindow(GetDlgItem(dlg, IDC_PROFILE_FOLLOW), r.known);
         EnableWindow(GetDlgItem(dlg, IDC_PROFILE_MUTE), r.known);
         EnableWindow(GetDlgItem(dlg, IDC_PROFILE_BLOCK), r.known);
+        // Boosts button only for platforms that support hiding boosts.
+        if (r.can_hide_boosts) {
+            SetDlgItemTextW(dlg, IDC_PROFILE_BOOSTS,
+                            r.showing_reblogs ? L"Hide Boos&ts" : L"Show Boos&ts");
+            EnableWindow(GetDlgItem(dlg, IDC_PROFILE_BOOSTS), r.known);
+        } else {
+            ShowWindow(GetDlgItem(dlg, IDC_PROFILE_BOOSTS), SW_HIDE);
+        }
 
         SetFocus(GetDlgItem(dlg, IDC_PROFILE_TEXT)); // read the profile immediately
         return FALSE;                                // focus set explicitly
@@ -62,6 +70,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             return TRUE;
         case IDC_PROFILE_BLOCK:
             finish(UserProfileAction::ToggleBlock);
+            return TRUE;
+        case IDC_PROFILE_BOOSTS:
+            finish(UserProfileAction::ToggleBoosts);
             return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);

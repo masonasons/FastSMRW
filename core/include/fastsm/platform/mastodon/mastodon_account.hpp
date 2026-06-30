@@ -41,6 +41,7 @@ public:
     bool unmute(const std::string& id) override;
     bool block(const std::string& id) override;
     bool unblock(const std::string& id) override;
+    bool set_show_boosts(const std::string& id, bool show) override;
 
     std::optional<StreamRequest> user_stream_request() const override;
     std::optional<StreamItem> parse_stream_event(const std::string& event,

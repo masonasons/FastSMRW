@@ -67,6 +67,7 @@
 #define IDC_SET_CONFIRM_BOOST 351
 #define IDC_SET_CONFIRM_FAV   352
 #define IDC_SET_CONFIRM_CLEAR 353
+#define IDC_SET_CONFIRM_BLOCK 354
 
 // Post Info dialog.
 #define IDD_POST_INFO         360
@@ -86,3 +87,4 @@
 #define IDC_PROFILE_FOLLOW    374
 #define IDC_PROFILE_MUTE      375
 #define IDC_PROFILE_BLOCK     376
+#define IDC_PROFILE_BOOSTS    377

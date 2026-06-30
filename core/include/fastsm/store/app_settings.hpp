@@ -17,6 +17,7 @@ struct AppSettings {
     bool confirm_boost = false;
     bool confirm_favorite = false;
     bool confirm_clear_timeline = true;
+    bool confirm_block = true;
     int auto_refresh_seconds = 0; // 0 = off; otherwise poll interval
     bool streaming_enabled = false; // real-time streaming (Mastodon)
     present::SpeechSettings speech = present::SpeechSettings::defaults();

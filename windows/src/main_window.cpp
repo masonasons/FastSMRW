@@ -597,6 +597,8 @@ void MainWindow::ev_user_profile(const json& e) {
     rel.muting = e.value("muting", false);
     rel.blocking = e.value("blocking", false);
     rel.requested = e.value("requested", false);
+    rel.showing_reblogs = e.value("showing_reblogs", true);
+    rel.can_hide_boosts = e.value("can_hide_boosts", false);
     const std::string keep_id = selected_id();
     auto action = show_user_profile_dialog(hwnd_, inst_, text, rel);
     restore_selection(keep_id);
@@ -621,7 +623,15 @@ void MainWindow::ev_user_profile(const json& e) {
         set_rel(rel.muting ? "unmute" : "mute");
         break;
     case UserProfileAction::ToggleBlock:
-        set_rel(rel.blocking ? "unblock" : "block");
+        if (rel.blocking) {
+            set_rel("unblock");
+        } else if (!settings_.value("confirm_block", true) ||
+                   confirm(hwnd_, (L"Block @" + to_wide(acct) + L"?").c_str(), L"Block")) {
+            set_rel("block");
+        }
+        break;
+    case UserProfileAction::ToggleBoosts:
+        set_rel(rel.showing_reblogs ? "hide_boosts" : "show_boosts");
         break;
     }
 }

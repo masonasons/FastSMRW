@@ -56,6 +56,7 @@ PlatformFeatures MastodonAccount::features() const {
     f.polls = true;
     f.editing = true;
     f.scheduling = true;
+    f.hide_boosts = true;
     return f;
 }
 
@@ -315,6 +316,7 @@ std::optional<Relationship> MastodonAccount::relationship(const std::string& id)
         r.muting = j.value("muting", false);
         r.blocking = j.value("blocking", false);
         r.requested = j.value("requested", false);
+        r.showing_reblogs = j.value("showing_reblogs", true);
         return r;
     } catch (...) {
         return std::nullopt;
@@ -334,6 +336,14 @@ bool MastodonAccount::mute(const std::string& id) { return account_action(id, "m
 bool MastodonAccount::unmute(const std::string& id) { return account_action(id, "unmute"); }
 bool MastodonAccount::block(const std::string& id) { return account_action(id, "block"); }
 bool MastodonAccount::unblock(const std::string& id) { return account_action(id, "unblock"); }
+bool MastodonAccount::set_show_boosts(const std::string& id, bool show) {
+    // Re-follow with the reblogs flag to show/hide this account's boosts.
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/" + id + "/follow";
+    std::string body;
+    long status = 0;
+    return request("POST", url, std::string("reblogs=") + (show ? "true" : "false"),
+                   "application/x-www-form-urlencoded", body, status);
+}
 
 std::optional<StreamRequest> MastodonAccount::user_stream_request() const {
     // The user stream delivers home-timeline updates + notifications over SSE.

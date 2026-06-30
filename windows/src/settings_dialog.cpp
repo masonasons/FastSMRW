@@ -309,6 +309,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         checked(dlg, IDC_SET_CONFIRM_BOOST, ctx->settings.confirm_boost);
         checked(dlg, IDC_SET_CONFIRM_FAV, ctx->settings.confirm_favorite);
         checked(dlg, IDC_SET_CONFIRM_CLEAR, ctx->settings.confirm_clear_timeline);
+        checked(dlg, IDC_SET_CONFIRM_BLOCK, ctx->settings.confirm_block);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -317,6 +318,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             ctx->settings.confirm_boost = is_checked(dlg, IDC_SET_CONFIRM_BOOST);
             ctx->settings.confirm_favorite = is_checked(dlg, IDC_SET_CONFIRM_FAV);
             ctx->settings.confirm_clear_timeline = is_checked(dlg, IDC_SET_CONFIRM_CLEAR);
+            ctx->settings.confirm_block = is_checked(dlg, IDC_SET_CONFIRM_BLOCK);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

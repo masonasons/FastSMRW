@@ -7,7 +7,14 @@
 
 namespace fastsmui {
 
-enum class UserProfileAction { ViewPosts, OpenBrowser, ToggleFollow, ToggleMute, ToggleBlock };
+enum class UserProfileAction {
+    ViewPosts,
+    OpenBrowser,
+    ToggleFollow,
+    ToggleMute,
+    ToggleBlock,
+    ToggleBoosts
+};
 
 // The viewer's relationship to the user (for relationship-aware button labels).
 struct UserProfileRelationship {
@@ -15,7 +22,9 @@ struct UserProfileRelationship {
     bool following = false;
     bool muting = false;
     bool blocking = false;
-    bool requested = false; // follow request pending
+    bool requested = false;      // follow request pending
+    bool showing_reblogs = true; // their boosts are shown
+    bool can_hide_boosts = false; // platform supports hiding boosts
 };
 
 // Modal Open User Profile dialog (Mac parity): a read-only review of the user's

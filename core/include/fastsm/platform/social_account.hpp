@@ -22,6 +22,7 @@ struct PlatformFeatures {
     bool polls = false;
     bool editing = false;
     bool scheduling = false;
+    bool hide_boosts = false; // can hide/show a followed account's boosts (Mastodon)
 };
 
 // The viewer's relationship to another account (Mastodon).
@@ -31,7 +32,8 @@ struct Relationship {
     bool followed_by = false;
     bool muting = false;
     bool blocking = false;
-    bool requested = false; // follow request pending (locked accounts)
+    bool requested = false;        // follow request pending (locked accounts)
+    bool showing_reblogs = true;   // false == this account's boosts are hidden
 };
 
 // Pagination cursor. Mastodon pages by max_id; Bluesky by an opaque token.
@@ -133,6 +135,8 @@ public:
     virtual bool unmute(const std::string&) { return false; }
     virtual bool block(const std::string&) { return false; }
     virtual bool unblock(const std::string&) { return false; }
+    // Show or hide a followed account's boosts in the home timeline.
+    virtual bool set_show_boosts(const std::string&, bool) { return false; }
 
     // --- Real-time streaming (optional; Mastodon SSE user stream) ---
 
