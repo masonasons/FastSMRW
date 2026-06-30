@@ -41,6 +41,11 @@ struct Status {
     std::optional<std::string> instance_url;     // remote instance, if fetched abroad
     Platform platform = Platform::Mastodon;
 
+    // Bluesky strong reference + viewer record URIs (empty on Mastodon).
+    std::optional<std::string> cid;         // post cid (for like/repost subject)
+    std::optional<std::string> like_uri;    // viewer's like record (to unlike)
+    std::optional<std::string> repost_uri;  // viewer's repost record (to unrepost)
+
     bool is_boost() const { return reblog != nullptr; }
     bool has_content_warning() const { return spoiler_text && !spoiler_text->empty(); }
 

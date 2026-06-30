@@ -159,6 +159,9 @@ void to_json(json& j, const Status& v) {
     put_opt(j, "poll", v.poll);
     put_opt(j, "application_name", v.application_name);
     put_opt(j, "instance_url", v.instance_url);
+    put_opt(j, "cid", v.cid);
+    put_opt(j, "like_uri", v.like_uri);
+    put_opt(j, "repost_uri", v.repost_uri);
     if (v.visibility)
         j["visibility"] = static_cast<int>(*v.visibility);
     put_status_ptr(j, "reblog", v.reblog);
@@ -190,6 +193,9 @@ void from_json(const json& j, Status& v) {
     get_opt(j, "poll", v.poll);
     get_opt(j, "application_name", v.application_name);
     get_opt(j, "instance_url", v.instance_url);
+    get_opt(j, "cid", v.cid);
+    get_opt(j, "like_uri", v.like_uri);
+    get_opt(j, "repost_uri", v.repost_uri);
     if (auto it = j.find("visibility"); it != j.end() && !it->is_null())
         v.visibility = static_cast<Visibility>(it->get<int>());
     else

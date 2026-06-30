@@ -1,27 +1,81 @@
 #pragma once
 
+#include <optional>
 #include <string>
+#include <vector>
 
-#include "fastsm/models/platform.hpp"
+#include "fastsm/models/models.hpp"
+#include "fastsm/timeline/timeline_source.hpp"
 
-// SocialAccount is the central abstraction that unifies Mastodon and Bluesky.
-// In M1 this gains the full surface (timeline paging, posting, boost/favorite,
-// user resolution, etc.); for now it anchors the platform layer so the rest of
-// the structure can compile and link.
+// SocialAccount unifies Mastodon and Bluesky behind one interface. M1 covers the
+// home-timeline vertical slice: paged fetch, post, and boost/favorite toggles.
+// (Remote-post resolution, user actions, push, etc. arrive in later milestones.)
 
 namespace fastsm {
+
+// Capability flags so the UI can adapt per platform.
+struct PlatformFeatures {
+    bool visibility = false;      // post visibility levels (Mastodon)
+    bool content_warning = false; // spoiler text
+    bool quote_posts = false;
+    bool polls = false;
+    bool editing = false;
+    bool scheduling = false;
+};
+
+// Pagination cursor. Mastodon pages by max_id; Bluesky by an opaque token.
+enum class CursorKind { Start, MaxID, Token };
+
+struct PageCursor {
+    CursorKind kind = CursorKind::Start;
+    std::string value;
+
+    bool is_start() const { return kind == CursorKind::Start; }
+
+    static PageCursor start() { return {}; }
+    static PageCursor max_id(std::string v) { return {CursorKind::MaxID, std::move(v)}; }
+    static PageCursor token(std::string v) { return {CursorKind::Token, std::move(v)}; }
+};
+
+struct TimelinePage {
+    std::vector<TimelineItem> items;
+    std::optional<PageCursor> next_cursor; // nullopt = end of timeline
+};
+
+// Input for composing a post.
+struct PostDraft {
+    std::string text;
+    std::optional<std::string> reply_to_id;
+    std::optional<Visibility> visibility;
+    std::optional<std::string> spoiler_text;
+    std::optional<std::string> quoted_status_id;
+    std::optional<std::string> language;
+};
 
 class SocialAccount {
 public:
     virtual ~SocialAccount() = default;
 
     virtual Platform platform() const = 0;
-
-    // Maximum characters allowed in a post on this platform/instance.
+    virtual const User& me() const = 0;
     virtual int max_chars() const = 0;
+    virtual std::string account_key() const = 0; // "mastodon:<id>" / "bluesky:<did>"
+    virtual PlatformFeatures features() const = 0;
+    virtual std::vector<TimelineSource> default_timelines() const = 0;
 
-    // Persistence key, e.g. "mastodon:<id>" / "bluesky:<did>".
-    virtual std::string account_key() const = 0;
+    // Fetch one page. Implementations run synchronously on the worker thread.
+    virtual TimelinePage items(const TimelineSource& source, int limit,
+                               const PageCursor& cursor) = 0;
+
+    // Create a post; returns the created status on success.
+    virtual std::optional<Status> post(const PostDraft& draft) = 0;
+
+    // Interaction toggles. Take the full status so platforms can extract what
+    // they need (Mastodon: id; Bluesky: at-uri + cid + viewer record uris).
+    virtual bool boost(const Status& status) = 0;
+    virtual bool unboost(const Status& status) = 0;
+    virtual bool favorite(const Status& status) = 0;
+    virtual bool unfavorite(const Status& status) = 0;
 };
 
 } // namespace fastsm

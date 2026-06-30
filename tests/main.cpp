@@ -18,6 +18,15 @@ void test_entity_decoding();
 void test_date_parsing();
 void test_relative_dates();
 
+// From test_mastodon_map.cpp
+void test_mastodon_status_mapping();
+void test_mastodon_notification_mapping();
+void test_form_encode();
+
+// From test_bluesky_map.cpp
+void test_bluesky_feed_mapping();
+void test_bluesky_plain_post();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -44,6 +53,11 @@ int main() {
     test_entity_decoding();
     test_date_parsing();
     test_relative_dates();
+    test_mastodon_status_mapping();
+    test_mastodon_notification_mapping();
+    test_form_encode();
+    test_bluesky_feed_mapping();
+    test_bluesky_plain_post();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;
