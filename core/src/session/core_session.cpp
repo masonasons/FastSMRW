@@ -361,48 +361,122 @@ void CoreSession::cmd_open_thread(const json& cmd) {
     spawn_source(TimelineSource::thread(status_id, title));
 }
 
+std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
+    std::vector<User> users;
+    const Status* outer = item.status();
+    if (!outer)
+        return users;
+    const Platform plat = outer->account.platform;
+    auto contains = [&](const std::string& id) {
+        for (const auto& u : users)
+            if (u.id == id)
+                return true;
+        return false;
+    };
+    auto add_user = [&](const User& u) {
+        if (!u.id.empty() && !contains(u.id))
+            users.push_back(u);
+    };
+    auto add_mention = [&](const Mention& m) {
+        if (m.id.empty() || contains(m.id))
+            return;
+        User u;
+        u.id = m.id;
+        u.acct = m.acct;
+        u.username = m.username;
+        u.display_name = m.username; // a mention carries no display name
+        u.url = m.url;
+        u.platform = plat;
+        users.push_back(u);
+    };
+    auto add_status = [&](const Status& s) {
+        add_user(s.account);
+        for (const auto& m : s.mentions)
+            add_mention(m);
+        if (s.quote) {
+            add_user(s.quote->account);
+            for (const auto& m : s.quote->mentions)
+                add_mention(m);
+        }
+    };
+    add_status(*outer);            // booster/quoter + its mentions
+    if (outer->reblog)             // boosted author + its mentions
+        add_status(*outer->reblog);
+    return users;
+}
+
+void CoreSession::emit_user_profile(const User& u) {
+    emit({{"event", "user_profile"},
+          {"text", present::user_profile(u)},
+          {"account_id", u.id},
+          {"acct", u.acct.empty() ? u.username : u.acct},
+          {"url", u.url}});
+}
+
+void CoreSession::emit_user_picker(const std::string& purpose, const std::string& row_id,
+                                   const std::vector<User>& users) {
+    json arr = json::array();
+    for (const auto& u : users)
+        arr.push_back({{"id", u.id}, {"acct", u.acct.empty() ? u.username : u.acct}});
+    emit({{"event", "user_picker"},
+          {"purpose", purpose},
+          {"id", row_id},
+          {"users", std::move(arr)}});
+}
+
 void CoreSession::cmd_open_user_timeline(const json& cmd) {
     if (!accounts_.selected())
         return;
-    // From the profile dialog: the account id + handle are already known.
+    // A specific user was chosen (from the picker menu or the profile dialog).
     if (cmd.contains("account_id")) {
         const std::string aid = cmd.value("account_id", std::string{});
         if (!aid.empty())
             spawn_source(TimelineSource::user_posts(aid, "@" + cmd.value("acct", std::string{})));
         return;
     }
-    // From a post row: resolve the author (for a boost, the original author).
     TimelineController* tc = current();
     const std::string row_id = cmd.value("id", std::string{});
-    if (!tc || row_id.empty())
-        return;
-    const TimelineItem* item = find_item(tc, row_id);
+    const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
     if (!item)
         return;
-    const Status* s = item->actionable_status();
-    if (!s || s->account.id.empty())
+    const std::vector<User> users = users_in_post(*item);
+    if (users.empty())
         return;
-    const std::string& handle = s->account.acct.empty() ? s->account.username : s->account.acct;
-    spawn_source(TimelineSource::user_posts(s->account.id, "@" + handle));
+    if (users.size() == 1) {
+        const User& u = users.front();
+        spawn_source(
+            TimelineSource::user_posts(u.id, "@" + (u.acct.empty() ? u.username : u.acct)));
+        return;
+    }
+    emit_user_picker("timeline", row_id, users); // let the UI pick which user
 }
 
 void CoreSession::cmd_open_user_profile(const json& cmd) {
+    if (!accounts_.selected())
+        return;
     TimelineController* tc = current();
     const std::string row_id = cmd.value("id", std::string{});
-    if (!accounts_.selected() || !tc || row_id.empty())
-        return;
-    const TimelineItem* item = find_item(tc, row_id);
+    const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
     if (!item)
         return;
-    const Status* s = item->actionable_status();
-    if (!s || s->account.id.empty())
+    const std::vector<User> users = users_in_post(*item);
+    if (users.empty())
         return;
-    const User& a = s->account;
-    emit({{"event", "user_profile"},
-          {"text", present::user_profile(a)},
-          {"account_id", a.id},
-          {"acct", a.acct.empty() ? a.username : a.acct},
-          {"url", a.url}});
+    // A specific user was chosen from the picker menu.
+    if (cmd.contains("account_id")) {
+        const std::string aid = cmd.value("account_id", std::string{});
+        for (const User& u : users)
+            if (u.id == aid) {
+                emit_user_profile(u);
+                return;
+            }
+        return;
+    }
+    if (users.size() == 1) {
+        emit_user_profile(users.front());
+        return;
+    }
+    emit_user_picker("profile", row_id, users);
 }
 
 void CoreSession::cmd_close_timeline() {

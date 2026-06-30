@@ -73,6 +73,12 @@ private:
     void cmd_open_thread(const nlohmann::json& cmd);
     void cmd_open_user_timeline(const nlohmann::json& cmd);
     void cmd_open_user_profile(const nlohmann::json& cmd);
+    // Every user referenced by a post (author, mentions, and one level of
+    // quoted/boosted author + mentions), deduped — for the u / Ctrl+U picker.
+    std::vector<User> users_in_post(const TimelineItem& item) const;
+    void emit_user_profile(const User& u);
+    void emit_user_picker(const std::string& purpose, const std::string& row_id,
+                          const std::vector<User>& users);
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_add_account(const nlohmann::json& cmd);

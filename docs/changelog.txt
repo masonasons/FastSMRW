@@ -9,4 +9,8 @@ FastSMRW changelog
 - Open a user's profile with Ctrl+U (or the Status menu): their name, handle,
   bio, and follower / following / post counts, with buttons to view their posts
   or open their profile in your browser.
+- When a post involves more than one person (its author plus anyone it mentions,
+  quotes, or boosts), U and Ctrl+U show a menu to choose whose posts or profile
+  to open.
 - Press Space on a post to open its thread (same as View Thread).
+- Close the current timeline with Backspace, from anywhere in the window.

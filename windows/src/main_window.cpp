@@ -607,6 +607,46 @@ void MainWindow::ev_user_profile(const json& e) {
     }
 }
 
+void MainWindow::ev_user_picker(const json& e) {
+    if (!e.contains("users") || !e["users"].is_array() || e["users"].empty())
+        return;
+    const std::string purpose = e.value("purpose", std::string{});
+    const std::string row_id = e.value("id", std::string{});
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+    std::vector<std::pair<std::string, std::string>> list; // (account_id, acct)
+    UINT cmd_id = 1;
+    for (const auto& u : e["users"]) {
+        const std::string acct = u.value("acct", std::string{});
+        AppendMenuW(menu, MF_STRING, cmd_id++, to_wide("@" + acct).c_str());
+        list.push_back({u.value("id", std::string{}), acct});
+    }
+    // Pop up at the selected row (matches the Mac's popUpAtSelectedRow).
+    POINT pt{0, 0};
+    const int row = selected_row();
+    RECT rc;
+    if (row >= 0 && ListView_GetItemRect(timeline_view_, row, &rc, LVIR_BOUNDS)) {
+        pt.x = rc.left;
+        pt.y = rc.bottom;
+        ClientToScreen(timeline_view_, &pt);
+    } else {
+        GetCursorPos(&pt);
+    }
+    const int chosen = static_cast<int>(TrackPopupMenu(menu,
+                                                       TPM_RETURNCMD | TPM_NONOTIFY |
+                                                           TPM_LEFTALIGN | TPM_TOPALIGN,
+                                                       pt.x, pt.y, 0, hwnd_, nullptr));
+    DestroyMenu(menu);
+    if (chosen <= 0 || chosen > static_cast<int>(list.size()))
+        return;
+    const auto& [account_id, acct] = list[static_cast<size_t>(chosen - 1)];
+    if (purpose == "timeline")
+        dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
+    else
+        dispatch_cmd({{"cmd", "open_user_profile"}, {"id", row_id}, {"account_id", account_id}});
+}
+
 void MainWindow::do_new_timeline() { dispatch_cmd({{"cmd", "get_spawnable"}}); }
 
 void MainWindow::do_add_account() {
@@ -772,6 +812,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_post_info(e);
     else if (ev == "user_profile")
         ev_user_profile(e);
+    else if (ev == "user_picker")
+        ev_user_picker(e);
     else if (ev == "select_row")
         restore_selection(e.value("id", std::string{}));
     else if (ev == "open_url")
