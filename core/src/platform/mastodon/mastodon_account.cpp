@@ -93,6 +93,8 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     // A thread: the focused status plus its ancestors and descendants, in
     // conversation order. Fetched whole (not paginated).
     if (source.kind == TimelineSource::Kind::Thread) {
+        // The focused status plus its ancestors and descendants (the local
+        // instance's view of the conversation), in order. Matches the Mac.
         const std::string base = credentials_.instance_url + "/api/v1/statuses/" + source.param;
         std::string body;
         long st = 0;

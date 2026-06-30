@@ -20,7 +20,8 @@ struct TimelineSource {
     };
 
     Kind kind = Kind::Home;
-    std::string param; // parameter for parameterized kinds (Thread: status id)
+    std::string param;      // parameter for parameterized kinds (Thread: status id)
+    std::string title_text; // display title for parameterized kinds (e.g. "Thread: @x")
 
     std::string title() const {
         switch (kind) {
@@ -39,7 +40,7 @@ struct TimelineSource {
         case Kind::Favorites:
             return "Favorites";
         case Kind::Thread:
-            return "Thread";
+            return title_text.empty() ? "Thread" : title_text;
         }
         return "Timeline";
     }
@@ -109,8 +110,8 @@ struct TimelineSource {
     static TimelineSource federated() { return {Kind::Federated}; }
     static TimelineSource bookmarks() { return {Kind::Bookmarks}; }
     static TimelineSource favorites() { return {Kind::Favorites}; }
-    static TimelineSource thread(std::string status_id) {
-        return {Kind::Thread, std::move(status_id)};
+    static TimelineSource thread(std::string status_id, std::string title = {}) {
+        return {Kind::Thread, std::move(status_id), std::move(title)};
     }
 };
 

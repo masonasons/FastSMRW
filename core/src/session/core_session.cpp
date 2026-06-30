@@ -345,10 +345,16 @@ void CoreSession::cmd_open_thread(const json& cmd) {
         return;
     // Use the underlying post (for a boost, the original) as the thread root.
     std::string status_id = row_id;
+    std::string title = "Thread";
     if (const TimelineItem* item = find_item(tc, row_id))
-        if (const Status* s = item->actionable_status())
+        if (const Status* s = item->actionable_status()) {
             status_id = s->id;
-    spawn_source(TimelineSource::thread(status_id));
+            const std::string& name =
+                s->account.display_name.empty() ? s->account.acct : s->account.display_name;
+            if (!name.empty())
+                title = "Thread: " + name;
+        }
+    spawn_source(TimelineSource::thread(status_id, title));
 }
 
 void CoreSession::cmd_close_timeline() {

@@ -747,6 +747,11 @@ void MainWindow::ev_timelines_changed(const json& e) {
         current_ = 0;
     populate_timelines_list();
     bind_current_to_view(/*force=*/true); // a switch always rebinds (even to an empty timeline)
+    // Match the Mac's focusTable(): after switching to or spawning a timeline, put
+    // focus on the posts so the user lands on the content — not stranded on the
+    // timelines list. Guarded so we never steal focus from an open dialog.
+    if (GetForegroundWindow() == hwnd_)
+        SetFocus(timeline_view_);
 }
 
 void MainWindow::ev_timeline_updated(const json& e) {
