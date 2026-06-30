@@ -57,6 +57,7 @@ private:
     void layout();
     void populate_timelines_list();
     void bind_current_to_view(bool force = false);
+    void maybe_load_older(int row); // pull the next page when near the bottom
     Timeline* current();
     int index_of_id(const Timeline& tl, const std::string& id) const;
     int selected_row() const;
@@ -99,6 +100,7 @@ private:
     std::wstring scratch_;                   // backing store for virtual-list item text
     std::vector<std::string> rendered_ids_;  // last rendered row ids (reload guard)
     bool updating_selection_ = false;
+    bool load_pending_ = false; // a load_older is in flight (avoid spamming)
 
     std::vector<Timeline> timelines_;
     int current_ = 0;

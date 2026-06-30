@@ -4,6 +4,11 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- Timelines now load older posts automatically as you reach the bottom (seamless
+  infinite scroll), in every timeline that supports it - this previously did not
+  happen at all, so you were stuck at the first batch. Each load pulls as many
+  pages as your "API calls per timeline load" setting (Advanced).
+
 - Bluesky now supports the same social features as Mastodon: view a post's
   thread, open an author's posts, open Followers / Following lists, and the
   profile with follow / unfollow, mute, and block.

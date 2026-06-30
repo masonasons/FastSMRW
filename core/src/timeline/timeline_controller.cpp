@@ -199,18 +199,29 @@ void TimelineController::load_older() {
     if (loading_ || !scrollback_cursor_)
         return;
     loading_ = true;
-    const PageCursor cursor = *scrollback_cursor_;
-    worker_->post([this, cursor] {
-        TimelinePage page = account_->items(source_, fetch_limit_, cursor);
-        main_->post([this, page = std::move(page)]() mutable {
+    const PageCursor start = *scrollback_cursor_;
+    const int pages = max_refresh_pages_;
+    worker_->post([this, start, pages] {
+        std::vector<TimelineItem> older;
+        std::optional<PageCursor> next = start;
+        for (int i = 0; i < pages && next; ++i) {
+            TimelinePage page = account_->items(source_, fetch_limit_, *next);
+            next = page.next_cursor;
+            if (page.items.empty())
+                break;
+            for (auto& it : page.items)
+                older.push_back(std::move(it));
+            if (!next || static_cast<int>(page.items.size()) < fetch_limit_)
+                break;
+        }
+        main_->post([this, older = std::move(older), next]() mutable {
             std::unordered_set<std::string> existing;
             for (const auto& it : raw_)
                 existing.insert(it.id());
-            for (auto& it : page.items) {
+            for (auto& it : older)
                 if (existing.find(it.id()) == existing.end())
                     raw_.push_back(std::move(it));
-            }
-            scrollback_cursor_ = page.next_cursor;
+            scrollback_cursor_ = next;
             rebuild_visible();
             persist();
             loading_ = false;

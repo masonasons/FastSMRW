@@ -293,6 +293,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                     if (idx >= 0 && idx < static_cast<int>(tc->rows.size())) {
                         scratch_ = tc->rows[static_cast<size_t>(idx)].text;
                         di->item.pszText = scratch_.data();
+                        maybe_load_older(idx); // a near-bottom row was rendered
                     }
                 }
             } else if (hdr->code == LVN_KEYDOWN) {
@@ -304,6 +305,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                     if (tc && focused >= 0 && focused < static_cast<int>(tc->rows.size())) {
                         tc->selected_id = tc->rows[static_cast<size_t>(focused)].id;
                         dispatch_cmd({{"cmd", "note_selection"}, {"id", tc->selected_id}});
+                        maybe_load_older(focused); // near the bottom -> pull next page
                     }
                 }
             }
@@ -384,6 +386,19 @@ void MainWindow::populate_timelines_list() {
         ListView_SetItemState(timelines_list_, current_, LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
     updating_selection_ = false;
+}
+
+void MainWindow::maybe_load_older(int row) {
+    if (load_pending_)
+        return;
+    Timeline* tc = current();
+    if (!tc)
+        return;
+    const int count = static_cast<int>(tc->rows.size());
+    if (count > 0 && row >= count - 10) { // within 10 rows of the bottom
+        load_pending_ = true;
+        dispatch_cmd({{"cmd", "load_older"}});
+    }
 }
 
 void MainWindow::bind_current_to_view(bool force) {
@@ -964,6 +979,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
     current_ = e.value("current", 0);
     if (current_ < 0 || current_ >= static_cast<int>(timelines_.size()))
         current_ = 0;
+    load_pending_ = false; // switching timelines resets the paging guard
     populate_timelines_list();
     bind_current_to_view(/*force=*/true); // a switch always rebinds (even to an empty timeline)
     // Match the Mac's focusTable(): when a NEW timeline appears (e.g. opening a
@@ -990,8 +1006,10 @@ void MainWindow::ev_timeline_updated(const json& e) {
     }
     if (tl.selected_id.empty()) // first load: adopt the core's remembered position
         tl.selected_id = e.value("selected_id", std::string{});
-    if (index == current_)
+    if (index == current_) {
+        load_pending_ = false; // rows changed -> a queued page can load next
         bind_current_to_view();
+    }
 }
 
 void MainWindow::ev_settings(const json& e) {
