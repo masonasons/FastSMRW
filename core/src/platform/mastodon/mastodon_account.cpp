@@ -9,6 +9,39 @@
 using nlohmann::json;
 
 namespace fastsm {
+namespace {
+
+// Mastodon paginates some endpoints (bookmarks/favourites, ...) via the Link
+// header: Link: <https://host/api/v1/bookmarks?max_id=109>; rel="next", <...>.
+// Return the rel="next" link's max_id, if present.
+std::optional<std::string> parse_next_max_id(const std::string& link) {
+    size_t pos = 0;
+    while (true) {
+        const size_t lt = link.find('<', pos);
+        if (lt == std::string::npos)
+            break;
+        const size_t gt = link.find('>', lt);
+        if (gt == std::string::npos)
+            break;
+        const std::string url = link.substr(lt + 1, gt - lt - 1);
+        const size_t comma = link.find(',', gt);
+        const std::string params =
+            link.substr(gt, (comma == std::string::npos ? link.size() : comma) - gt);
+        if (params.find("rel=\"next\"") != std::string::npos) {
+            if (const size_t m = url.find("max_id="); m != std::string::npos) {
+                const size_t start = m + 7;
+                const size_t end = url.find('&', start);
+                return url.substr(start, (end == std::string::npos ? url.size() : end) - start);
+            }
+        }
+        if (comma == std::string::npos)
+            break;
+        pos = comma + 1;
+    }
+    return std::nullopt;
+}
+
+} // namespace
 
 MastodonAccount::MastodonAccount(MastodonCredentials credentials, User me, net::IHttpClient* http,
                                  int max_chars)
@@ -31,7 +64,9 @@ std::vector<TimelineSource> MastodonAccount::default_timelines() const {
 }
 
 std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
-    return {TimelineSource::local(), TimelineSource::federated()};
+    return {TimelineSource::local(),     TimelineSource::federated(),
+            TimelineSource::mentions(),  TimelineSource::bookmarks(),
+            TimelineSource::favorites()};
 }
 
 bool MastodonAccount::request(const std::string& method, const std::string& url,
@@ -56,6 +91,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     TimelinePage page;
 
     std::string path;
+    std::string extra;
     switch (source.kind) {
     case TimelineSource::Kind::Home:
         path = "/api/v1/timelines/home";
@@ -68,24 +104,34 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         path = "/api/v1/timelines/public";
         break;
     case TimelineSource::Kind::Mentions:
-        path = "/api/v1/notifications"; // filtered client-side in M2
+        path = "/api/v1/notifications";
+        extra = "&types[]=mention"; // only @-mentions
+        break;
+    case TimelineSource::Kind::Bookmarks:
+        path = "/api/v1/bookmarks";
+        break;
+    case TimelineSource::Kind::Favorites:
+        path = "/api/v1/favourites";
         break;
     }
 
-    std::string url = credentials_.instance_url + path + "?limit=" + std::to_string(limit);
+    std::string url = credentials_.instance_url + path + "?limit=" + std::to_string(limit) + extra;
     if (source.kind == TimelineSource::Kind::Local)
         url += "&local=true";
     if (cursor.kind == CursorKind::MaxID)
         url += "&max_id=" + cursor.value;
 
-    std::string body;
-    long status = 0;
-    if (!request("GET", url, "", "", body, status))
+    net::HttpRequest req;
+    req.method = "GET";
+    req.url = url;
+    req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+    const net::HttpResponse res = http_->send(req);
+    if (!res.ok())
         return page;
 
     json j;
     try {
-        j = json::parse(body);
+        j = json::parse(res.body);
     } catch (...) {
         return page;
     }
@@ -105,7 +151,13 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
             page.items.push_back(TimelineItem{std::move(s)});
         }
     }
-    if (!last_id.empty())
+    // Prefer the Link header's rel="next" max_id (required for bookmarks/
+    // favourites, which don't paginate by status id); fall back to the last id.
+    if (auto link = res.header("Link")) {
+        if (auto next = parse_next_max_id(*link))
+            page.next_cursor = PageCursor::max_id(*next);
+    }
+    if (!page.next_cursor && !last_id.empty())
         page.next_cursor = PageCursor::max_id(last_id);
     return page;
 }

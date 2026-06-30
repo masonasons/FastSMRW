@@ -14,6 +14,8 @@ struct TimelineSource {
         Mentions,
         Local,
         Federated,
+        Bookmarks,
+        Favorites,
     };
 
     Kind kind = Kind::Home;
@@ -30,6 +32,10 @@ struct TimelineSource {
             return "Local";
         case Kind::Federated:
             return "Federated";
+        case Kind::Bookmarks:
+            return "Bookmarks";
+        case Kind::Favorites:
+            return "Favorites";
         }
         return "Timeline";
     }
@@ -47,6 +53,10 @@ struct TimelineSource {
             return "local";
         case Kind::Federated:
             return "federated";
+        case Kind::Bookmarks:
+            return "bookmarks";
+        case Kind::Favorites:
+            return "favourites";
         }
         return "timeline";
     }
@@ -55,10 +65,10 @@ struct TimelineSource {
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }
-    // Standing feeds (home/notifications/mentions) can't be closed; spawned ones
-    // (local/federated/...) can (Delete key).
+    // Standing feeds (home/notifications) can't be closed; spawned ones
+    // (local/federated/mentions/bookmarks/favorites/...) can (Delete key).
     bool is_dismissable() const {
-        return kind == Kind::Local || kind == Kind::Federated;
+        return kind != Kind::Home && kind != Kind::Notifications;
     }
 
     // Soundpack base name chimed when this timeline receives new posts on
@@ -74,6 +84,9 @@ struct TimelineSource {
             return "notification";
         case Kind::Mentions:
             return "mentions";
+        case Kind::Bookmarks:
+        case Kind::Favorites:
+            return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
     }
@@ -84,6 +97,8 @@ struct TimelineSource {
     static TimelineSource mentions() { return {Kind::Mentions}; }
     static TimelineSource local() { return {Kind::Local}; }
     static TimelineSource federated() { return {Kind::Federated}; }
+    static TimelineSource bookmarks() { return {Kind::Bookmarks}; }
+    static TimelineSource favorites() { return {Kind::Favorites}; }
 };
 
 } // namespace fastsm

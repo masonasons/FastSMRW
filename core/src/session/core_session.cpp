@@ -574,6 +574,10 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::local();
     if (kind == "federated")
         return TimelineSource::federated();
+    if (kind == "bookmarks")
+        return TimelineSource::bookmarks();
+    if (kind == "favourites")
+        return TimelineSource::favorites();
     return std::nullopt;
 }
 
