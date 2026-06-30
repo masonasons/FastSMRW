@@ -57,6 +57,79 @@ BEGIN
     PUSHBUTTON "Cancel", IDCANCEL, 256, 340, 50, 14
 END
 
+// ---- Settings property-sheet pages ----
+IDD_SET_GENERAL DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "General"
+FONT 9, "Segoe UI"
+BEGIN
+    AUTOCHECKBOX "Use &Ctrl+Return to send posts (instead of Return)",
+                 IDC_SET_CMDRETURN, 10, 12, 220, 12
+END
+
+IDD_SET_TIMELINES DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Timelines"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "&Maximum posts to cache per timeline:", -1, 10, 13, 168, 9
+    EDITTEXT   IDC_SET_CACHELIMIT, 180, 11, 42, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL    "", IDC_SET_CACHELIMIT_SPIN, "msctls_updown32",
+               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
+    LTEXT      "Posts kept on disk per timeline for instant startup (100-20000).",
+               -1, 10, 30, 220, 18
+END
+
+IDD_SET_AUDIO DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Audio"
+FONT 9, "Segoe UI"
+BEGIN
+    AUTOCHECKBOX "&Play sounds", IDC_SET_SOUNDS, 10, 12, 120, 12
+    LTEXT      "&Soundpack:", -1, 10, 32, 50, 9
+    COMBOBOX   IDC_SET_SOUNDPACK, 62, 30, 152, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON "&Open Soundpacks Folder", IDC_SET_OPENPACKS, 10, 52, 130, 14
+    LTEXT      "A Default pack is built in. Add your own pack to the soundpacks folder, then pick it here.",
+               -1, 10, 72, 220, 18
+END
+
+IDD_SET_SPEECH DIALOGEX 0, 0, 240, 180
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Speech"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Check which details are spoken for a post, and order them:", -1, 10, 8, 220, 9
+    CONTROL    "", IDC_SET_SPEECH_LIST, "SysListView32",
+               LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,
+               10, 22, 160, 148
+    PUSHBUTTON "Move &Up", IDC_SET_SPEECH_UP, 176, 22, 56, 14
+    PUSHBUTTON "Move &Down", IDC_SET_SPEECH_DOWN, 176, 40, 56, 14
+END
+
+IDD_SET_ADVANCED DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Advanced"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "&API calls per timeline load (1-10):", -1, 10, 13, 150, 9
+    EDITTEXT   IDC_SET_FETCHPAGES, 162, 11, 42, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL    "", IDC_SET_FETCHPAGES_SPIN, "msctls_updown32",
+               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
+    LTEXT      "Each call fetches about 40 posts. Applies to refresh and scrollback.",
+               -1, 10, 30, 220, 18
+END
+
+IDD_SET_CONFIRM DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Confirmation"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Show a confirmation before:", -1, 10, 10, 220, 9
+    AUTOCHECKBOX "&Boosting", IDC_SET_CONFIRM_BOOST, 10, 24, 200, 12
+    AUTOCHECKBOX "&Favoriting", IDC_SET_CONFIRM_FAV, 10, 40, 200, 12
+    AUTOCHECKBOX "&Clearing a timeline", IDC_SET_CONFIRM_CLEAR, 10, 56, 200, 12
+END
+
 IDD_NEW_TIMELINE DIALOGEX 0, 0, 220, 82
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "New Timeline"

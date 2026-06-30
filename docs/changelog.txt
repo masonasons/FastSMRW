@@ -40,6 +40,16 @@ Accessibility
   details are read, and in what order) — the default order matches the Mac app.
 - Screen-reader speech support via UniversalSpeech.
 
+Settings
+- A Settings dialog (Ctrl+,) organized into tabs:
+  - General: send posts with Return or Ctrl+Return.
+  - Timelines: how many posts to cache per timeline.
+  - Audio: turn sounds on/off, pick a soundpack, open the soundpacks folder.
+  - Speech: choose which post details are read, and reorder them.
+  - Advanced: how many pages to load per refresh.
+  - Confirmation: ask before boosting, favoriting, or clearing a timeline.
+- Settings are saved and applied immediately.
+
 Menus and window
 - Application, Status, Timeline, and Account menus with familiar shortcuts.
 

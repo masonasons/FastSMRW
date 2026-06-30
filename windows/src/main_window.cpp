@@ -7,6 +7,7 @@
 #include "app_messages.hpp"
 #include "compose_dialog.hpp"
 #include "new_timeline_dialog.hpp"
+#include "settings_dialog.hpp"
 #include "utf.hpp"
 
 #include "fastsm/fastsm.hpp"
@@ -96,6 +97,10 @@ void add_single_column(HWND list, const wchar_t* title, int width) {
     ListView_InsertColumn(list, 0, &col);
 }
 
+bool confirm(HWND owner, const wchar_t* message, const wchar_t* title) {
+    return MessageBoxW(owner, message, title, MB_YESNO | MB_ICONQUESTION) == IDYES;
+}
+
 // Mirrors the Mac main menu (MainMenu.swift). The "App menu" is renamed
 // "Application". Items for features not yet implemented are present but grayed,
 // so the structure matches and stays discoverable.
@@ -105,7 +110,7 @@ HMENU build_menu() {
     HMENU app = CreatePopupMenu();
     AppendMenuW(app, MF_STRING, ID_ABOUT, L"&About FastSMRW");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(app, MF_STRING | MF_GRAYED, ID_SETTINGS, L"&Settings…\tCtrl+,");
+    AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+,");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
@@ -177,6 +182,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
+        {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
         {FVIRTKEY | FCONTROL, 'I', ID_POST_INFO},
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
@@ -447,8 +453,12 @@ void MainWindow::do_boost() {
     const int row = selected_row();
     if (!tc || row < 0)
         return;
+    const Status* s = selected_status();
+    const bool boosting = s ? !s->boosted : true;
+    if (boosting && app_->settings().confirm_boost && !confirm(hwnd_, L"Boost this post?", L"Boost"))
+        return;
     const bool now_boosted = tc->toggle_boost(row);
-    if (now_boosted && app_ && app_->sound())
+    if (now_boosted && app_->sound())
         app_->sound()->play(sound::Earcon::Boost);
 }
 
@@ -457,8 +467,13 @@ void MainWindow::do_favorite() {
     const int row = selected_row();
     if (!tc || row < 0)
         return;
+    const Status* s = selected_status();
+    const bool favoriting = s ? !s->favourited : true;
+    if (favoriting && app_->settings().confirm_favorite &&
+        !confirm(hwnd_, L"Favorite this post?", L"Favorite"))
+        return;
     const bool now_fav = tc->toggle_favorite(row);
-    if (app_ && app_->sound())
+    if (app_->sound())
         app_->sound()->play(now_fav ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
 }
 
@@ -572,6 +587,16 @@ void MainWindow::do_new_timeline() {
             app_->spawn_timeline(sources[static_cast<size_t>(*choice)]);
 }
 
+void MainWindow::do_settings() {
+    if (!app_)
+        return;
+    std::vector<std::string> packs{"Default"};
+    if (app_->sound())
+        packs = app_->sound()->list_soundpacks();
+    if (auto result = show_settings_dialog(hwnd_, inst_, app_->settings(), packs))
+        app_->update_settings(*result);
+}
+
 void MainWindow::do_add_account() {
     auto data = show_add_account_dialog(hwnd_, inst_);
     if (!data || !app_)
@@ -626,6 +651,9 @@ void MainWindow::handle_command(int id) {
     case ID_ABOUT:
         about();
         break;
+    case ID_SETTINGS:
+        do_settings();
+        break;
     case ID_ADD_ACCOUNT:
         do_add_account();
         break;
@@ -649,9 +677,13 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_CLEAR_TIMELINE:
         if (app_ && app_->current()) {
-            app_->current()->clear();
-            if (app_->sound())
-                app_->sound()->play(sound::Earcon::Delete);
+            if (!app_->settings().confirm_clear_timeline ||
+                confirm(hwnd_, L"Clear this timeline? This removes the loaded posts and its cache.",
+                        L"Clear Timeline")) {
+                app_->current()->clear();
+                if (app_->sound())
+                    app_->sound()->play(sound::Earcon::Delete);
+            }
         }
         break;
     case ID_PREV_ACCOUNT:

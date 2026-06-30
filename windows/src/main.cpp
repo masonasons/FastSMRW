@@ -32,8 +32,9 @@ std::filesystem::path exe_dir() {
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
-    INITCOMMONCONTROLSEX icc{sizeof(icc),
-                             ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES | ICC_DATE_CLASSES};
+    INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES |
+                                              ICC_DATE_CLASSES | ICC_TAB_CLASSES |
+                                              ICC_UPDOWN_CLASS};
     InitCommonControlsEx(&icc);
 
     WinExecutor executor;

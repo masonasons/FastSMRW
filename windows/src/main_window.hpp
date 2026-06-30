@@ -53,6 +53,7 @@ private:
     void do_post_info();
     void do_new_timeline();
     void do_add_account();
+    void do_settings();
     void about();
     // Builds the compose request for a mode and posts/edits the result.
     void present_compose(ComposeMode mode, const fastsm::Status* target);
