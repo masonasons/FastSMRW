@@ -17,11 +17,20 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_INITDIALOG: {
         auto* c = reinterpret_cast<Ctx*>(lp);
         SetWindowLongPtrW(dlg, DWLP_USER, reinterpret_cast<LONG_PTR>(c));
-        SetDlgItemTextW(dlg, IDC_POSTINFO_TEXT, c->text->c_str());
+        // Win32 multiline EDIT needs CRLF line breaks; the core composes with LF.
+        std::wstring crlf;
+        crlf.reserve(c->text->size() + 16);
+        for (wchar_t ch : *c->text) {
+            if (ch == L'\n')
+                crlf += L"\r\n";
+            else
+                crlf += ch;
+        }
+        SetDlgItemTextW(dlg, IDC_POSTINFO_TEXT, crlf.c_str());
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_QUOTE), c->quote_ok);
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_BROWSER), c->browser_ok);
-        SetFocus(GetDlgItem(dlg, IDC_POSTINFO_REPLY));
-        return FALSE; // focus set explicitly
+        SetFocus(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // read the post immediately
+        return FALSE;                                 // focus set explicitly
     }
     case WM_COMMAND: {
         auto* c = reinterpret_cast<Ctx*>(GetWindowLongPtrW(dlg, DWLP_USER));
