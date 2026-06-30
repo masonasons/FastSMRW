@@ -42,6 +42,7 @@ private:
     void bind_current_to_view();
     int selected_row() const;
     const fastsm::Status* selected_status() const; // actionable status of selected row
+    void restore_selection(const std::string& id);  // re-assert the row for an item id
     void on_view_keydown(int vk);
     void handle_command(int id);
     void do_boost();

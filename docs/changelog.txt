@@ -24,6 +24,8 @@ Timelines
 - Fixed timelines re-downloading from scratch on every launch: they now load
   instantly from the cache and only fetch posts that are actually new.
 - Notifications and mentions now always show newest first.
+- Replying to (or composing against) a post no longer jumps your place back to
+  the top of the timeline.
 
 Reading and posting
 - Single keys on a post: R reply, Q quote, F favorite, B boost, E edit your own

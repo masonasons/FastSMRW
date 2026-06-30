@@ -493,6 +493,21 @@ const Status* MainWindow::selected_status() const {
     return items[static_cast<size_t>(row)].actionable_status();
 }
 
+void MainWindow::restore_selection(const std::string& id) {
+    TimelineController* tc = app_ ? app_->current() : nullptr;
+    if (!tc || id.empty())
+        return;
+    const int idx = tc->visible_index_of(id);
+    if (idx < 0)
+        return;
+    tc->note_selection(id); // undo any spurious selection captured during the modal
+    const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
+    updating_selection_ = true;
+    ListView_SetItemState(timeline_view_, idx, want, want);
+    ListView_EnsureVisible(timeline_view_, idx, FALSE);
+    updating_selection_ = false;
+}
+
 void MainWindow::present_compose(ComposeMode mode, const Status* target) {
     TimelineController* tc = app_ ? app_->current() : nullptr;
     if (!tc || !tc->account()) {
@@ -532,7 +547,11 @@ void MainWindow::present_compose(ComposeMode mode, const Status* target) {
         req.title = L"New Post";
     }
 
+    // Remember where we are; closing the modal dialog hands focus back to the
+    // list, which can reset its focused row (and our position) to the top.
+    const std::string keep_id = tc->selected_id();
     auto result = show_compose_dialog(hwnd_, inst_, req);
+    restore_selection(keep_id);
     if (!result)
         return;
     PostDraft draft = std::move(result->draft);
