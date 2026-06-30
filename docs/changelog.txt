@@ -4,6 +4,11 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- When a refresh brings in new posts that don't connect to what you already had
+  (you were away a while), the app now remembers the gap and fills it in
+  automatically as you scroll down into it - so the timeline stays continuous
+  instead of silently jumping. These gaps are saved with the cache too.
+
 - The scroll position for loading older posts is now saved in the cache, so
   scrolling down to load more keeps working after you restart the app or switch
   accounts (previously it only worked in the session where you first loaded the

@@ -44,7 +44,7 @@ void test_timeline_cache() {
         items.push_back(TimelineItem{std::move(s)});
     }
 
-    cache.save(key, items, fastsm::PageCursor::max_id("a2"));
+    cache.save(key, items, fastsm::PageCursor::max_id("a2"), {});
     const store::LoadedTimeline loaded = cache.load(key);
     CHECK_EQ(loaded.items.size(), size_t(2));
     CHECK_EQ(loaded.items[0].id(), std::string("s:a1"));

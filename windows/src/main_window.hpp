@@ -40,6 +40,7 @@ private:
         std::wstring text;
         bool favorited = false;
         bool boosted = false;
+        bool gap_after = false; // unloaded posts follow this row (auto-fill)
     };
     struct Timeline {
         std::wstring title;

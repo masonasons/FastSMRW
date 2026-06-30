@@ -368,7 +368,7 @@ TimelineItem read_item(Reader& r) {
 } // namespace
 
 std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated, int cursor_kind,
-                         const std::string& cursor_value) {
+                         const std::string& cursor_value, const std::vector<CachedGap>& gaps) {
     Writer w;
     w.buf.append(kMagic, sizeof(kMagic));
     w.u32(static_cast<std::uint32_t>(items.size()));
@@ -377,12 +377,17 @@ std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated,
     w.boolean(truncated);
     w.u8(static_cast<std::uint8_t>(cursor_kind));
     w.str(cursor_value);
-    w.u32(0); // reserved: middle-gap count (none written yet)
+    w.u32(static_cast<std::uint32_t>(gaps.size()));
+    for (const auto& g : gaps) {
+        w.str(g.after_id);
+        w.u8(static_cast<std::uint8_t>(g.cursor_kind));
+        w.str(g.cursor_value);
+    }
     return std::move(w.buf);
 }
 
 std::string encode_items(const std::vector<TimelineItem>& items) {
-    return encode_cache(items, false, 0, "");
+    return encode_cache(items, false, 0, "", {});
 }
 
 CachedTimeline decode_cache(std::string_view data) {
@@ -403,7 +408,15 @@ CachedTimeline decode_cache(std::string_view data) {
     out.truncated = r.u8() != 0;
     out.cursor_kind = r.u8();
     out.cursor_value = r.str();
-    (void)r.u32(); // reserved gap count
+    const std::uint32_t gap_count = r.u32();
+    out.gaps.reserve(gap_count);
+    for (std::uint32_t i = 0; i < gap_count; ++i) {
+        CachedGap g;
+        g.after_id = r.str();
+        g.cursor_kind = r.u8();
+        g.cursor_value = r.str();
+        out.gaps.push_back(std::move(g));
+    }
     if (!r.ok)
         return {}; // malformed trailer -> miss
     return out;

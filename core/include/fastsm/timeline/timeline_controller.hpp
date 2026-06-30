@@ -45,6 +45,10 @@ public:
     void load_cached();
     void refresh();
     void load_older();
+    // Fill a tracked middle gap (after the row with after_id) by fetching its
+    // cursor's pages, stitching them in, and closing/advancing the gap.
+    void load_gap(const std::string& after_id);
+    const std::vector<store::CacheGap>& gaps() const { return gaps_; }
     void clear(); // empties the timeline and removes its cache
 
     // Merge one real-time (streamed) item: prepend if new, re-sort, chime, cache.
@@ -98,6 +102,7 @@ private:
     std::vector<TimelineItem> raw_;     // everything fetched/cached
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     std::optional<PageCursor> scrollback_cursor_;
+    std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     std::function<bool(const TimelineItem&)> filter_;
     int max_refresh_pages_ = 5;
     bool loading_ = false;

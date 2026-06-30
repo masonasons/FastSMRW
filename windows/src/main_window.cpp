@@ -395,6 +395,14 @@ void MainWindow::maybe_load_older(int row) {
     if (!tc)
         return;
     const int count = static_cast<int>(tc->rows.size());
+    // A tracked middle gap within the next few rows -> fill it transparently.
+    for (int g = row; g < count && g <= row + 5; ++g) {
+        if (tc->rows[static_cast<size_t>(g)].gap_after) {
+            load_pending_ = true;
+            dispatch_cmd({{"cmd", "load_gap"}, {"id", tc->rows[static_cast<size_t>(g)].id}});
+            return;
+        }
+    }
     if (count > 0 && row >= count - 10) { // within 10 rows of the bottom
         load_pending_ = true;
         dispatch_cmd({{"cmd", "load_older"}});
@@ -1002,6 +1010,7 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.text = to_wide(r.value("text", std::string{}));
         row.favorited = r.value("favorited", false);
         row.boosted = r.value("boosted", false);
+        row.gap_after = r.value("gap_after", false);
         tl.rows.push_back(std::move(row));
     }
     if (tl.selected_id.empty()) // first load: adopt the core's remembered position

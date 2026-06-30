@@ -116,6 +116,75 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
     persist();
 }
 
+void TimelineController::load_gap(const std::string& after_id) {
+    if (loading_)
+        return;
+    auto git = std::find_if(gaps_.begin(), gaps_.end(),
+                            [&](const store::CacheGap& g) { return g.after_id == after_id; });
+    if (git == gaps_.end())
+        return;
+    loading_ = true;
+    const PageCursor start = git->cursor;
+    const int pages = max_refresh_pages_;
+    std::unordered_set<std::string> known;
+    known.reserve(raw_.size());
+    for (const auto& it : raw_)
+        known.insert(it.id());
+    worker_->post([this, after_id, start, pages, known = std::move(known)]() mutable {
+        std::vector<TimelineItem> fetched;
+        std::optional<PageCursor> next = start;
+        bool connected = false;
+        for (int i = 0; i < pages && next && !connected; ++i) {
+            TimelinePage p = account_->items(source_, fetch_limit_, *next);
+            next = p.next_cursor;
+            for (auto& it : p.items) {
+                if (known.find(it.id()) != known.end()) {
+                    connected = true; // reached the cached segment below the gap
+                    break;
+                }
+                fetched.push_back(std::move(it));
+            }
+        }
+        if (!next)
+            connected = true; // ran out of feed -> nothing more to fill
+        main_->post([this, after_id, fetched = std::move(fetched), next, connected]() mutable {
+            std::unordered_set<std::string> existing;
+            existing.reserve(raw_.size());
+            for (const auto& it : raw_)
+                existing.insert(it.id());
+            std::vector<TimelineItem> fresh;
+            for (auto& it : fetched)
+                if (existing.find(it.id()) == existing.end())
+                    fresh.push_back(std::move(it));
+            std::string new_after = after_id;
+            auto pos = std::find_if(raw_.begin(), raw_.end(),
+                                    [&](const TimelineItem& it) { return it.id() == after_id; });
+            if (pos != raw_.end()) {
+                ++pos; // stitch the fetched posts in just after the gap anchor
+                if (!fresh.empty())
+                    new_after = fresh.back().id();
+                raw_.insert(pos, std::make_move_iterator(fresh.begin()),
+                            std::make_move_iterator(fresh.end()));
+            }
+            auto g2 = std::find_if(gaps_.begin(), gaps_.end(),
+                                   [&](const store::CacheGap& g) { return g.after_id == after_id; });
+            if (g2 != gaps_.end()) {
+                if (connected || !next)
+                    gaps_.erase(g2); // gap closed
+                else {
+                    g2->after_id = new_after; // gap shrank; advance it
+                    g2->cursor = *next;
+                }
+            }
+            rebuild_visible();
+            persist();
+            loading_ = false;
+            if (on_change)
+                on_change();
+        });
+    });
+}
+
 void TimelineController::persist() {
     if (!source_.is_cacheable())
         return;
@@ -123,9 +192,11 @@ void TimelineController::persist() {
     // cursor rides along so loading older posts resumes after a cache load.
     auto snapshot = raw_;
     const auto cursor = scrollback_cursor_;
+    const auto gaps = gaps_;
     const std::string key = cache_key();
-    worker_->post(
-        [this, key, snapshot = std::move(snapshot), cursor] { cache_->save(key, snapshot, cursor); });
+    worker_->post([this, key, snapshot = std::move(snapshot), cursor, gaps] {
+        cache_->save(key, snapshot, cursor, gaps);
+    });
 }
 
 void TimelineController::load_cached() {
@@ -149,6 +220,7 @@ void TimelineController::load_cached() {
     else if (account_ && account_->platform() == Platform::Mastodon &&
              source_.paginates_by_item_id() && !raw_.empty())
         scrollback_cursor_ = PageCursor::max_id(raw_.back().pagination_id());
+    gaps_ = std::move(cached.gaps);
     rebuild_visible();
     if (on_change)
         on_change();
@@ -174,12 +246,12 @@ void TimelineController::refresh() {
         std::vector<TimelineItem> fresh;
         std::optional<PageCursor> tail; // cursor just past the fetched region
         PageCursor cursor = PageCursor::start();
+        bool hit_known = false;
         for (int page = 0; page < kMaxRefreshPages; ++page) {
             TimelinePage p = account_->items(source_, fetch_limit_, cursor);
             tail = p.next_cursor;
             if (p.items.empty())
                 break;
-            bool hit_known = false;
             for (auto& it : p.items) {
                 if (known.find(it.id()) != known.end()) {
                     hit_known = true; // reached posts we already have
@@ -191,10 +263,17 @@ void TimelineController::refresh() {
                 break;
             cursor = *p.next_cursor;
         }
-        main_->post([this, fresh = std::move(fresh), tail, was_empty]() mutable {
+        main_->post([this, fresh = std::move(fresh), tail, was_empty, hit_known]() mutable {
+            // The fresh posts didn't reach the cached posts -> there's a gap below
+            // them; record it (after the oldest fresh post) so it can be filled.
+            const bool disconnected = !was_empty && !hit_known && tail && !fresh.empty();
+            const std::string gap_after = disconnected ? fresh.back().id() : std::string{};
+            const std::optional<PageCursor> gap_cursor = tail;
             // On a first load (nothing known) seed the scrollback cursor; on a
             // refresh keep the existing one (it points below the current bottom).
             merge_fresh(std::move(fresh), was_empty ? tail : scrollback_cursor_);
+            if (disconnected && gap_cursor)
+                gaps_.push_back({gap_after, *gap_cursor});
             loading_ = false;
             if (on_change)
                 on_change();

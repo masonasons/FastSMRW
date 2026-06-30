@@ -58,6 +58,7 @@ private:
     void cmd_refresh();
     void cmd_refresh_all();
     void cmd_load_older();
+    void cmd_load_gap(const nlohmann::json& cmd);
     void cmd_note_selection(const nlohmann::json& cmd);
     void cmd_toggle_boost(const nlohmann::json& cmd);
     void cmd_toggle_favorite(const nlohmann::json& cmd);

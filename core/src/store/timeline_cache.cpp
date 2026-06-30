@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iterator>
 #include <system_error>
+#include <unordered_set>
 
 #include "fastsm/store/timeline_codec.hpp"
 
@@ -41,28 +42,47 @@ LoadedTimeline TimelineCache::load(const std::string& key) const {
     LoadedTimeline out;
     out.items = std::move(c.items);
     out.truncated = c.truncated;
-    if (c.cursor_kind == 1)
-        out.scrollback = PageCursor::max_id(c.cursor_value);
-    else if (c.cursor_kind == 2)
-        out.scrollback = PageCursor::token(c.cursor_value);
+    auto to_cursor = [](int k, const std::string& v) -> std::optional<PageCursor> {
+        if (k == 1)
+            return PageCursor::max_id(v);
+        if (k == 2)
+            return PageCursor::token(v);
+        return std::nullopt;
+    };
+    out.scrollback = to_cursor(c.cursor_kind, c.cursor_value);
+    for (const auto& g : c.gaps)
+        if (auto pc = to_cursor(g.cursor_kind, g.cursor_value))
+            out.gaps.push_back({g.after_id, *pc});
     return out;
 }
 
 void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>& items,
-                         const std::optional<PageCursor>& scrollback) const {
+                         const std::optional<PageCursor>& scrollback,
+                         const std::vector<CacheGap>& gaps) const {
     const size_t cap = static_cast<size_t>(max_entries_ < 0 ? 0 : max_entries_);
     const bool truncated = items.size() > cap;
     std::vector<TimelineItem> capped;
     if (truncated)
         capped.assign(items.begin(), items.begin() + cap);
+    const std::vector<TimelineItem>& stored = truncated ? capped : items;
+    auto kind_of = [](const PageCursor& c) {
+        return c.kind == CursorKind::MaxID ? 1 : c.kind == CursorKind::Token ? 2 : 0;
+    };
     int kind = 0;
     std::string value;
     if (scrollback) {
-        kind = scrollback->kind == CursorKind::MaxID ? 1 : scrollback->kind == CursorKind::Token ? 2
-                                                                                                  : 0;
+        kind = kind_of(*scrollback);
         value = scrollback->value;
     }
-    const std::string blob = encode_cache(truncated ? capped : items, truncated, kind, value);
+    // Keep only gaps that land within the rows we actually store.
+    std::unordered_set<std::string> stored_ids;
+    for (const auto& it : stored)
+        stored_ids.insert(it.id());
+    std::vector<CachedGap> cgaps;
+    for (const auto& g : gaps)
+        if (stored_ids.count(g.after_id))
+            cgaps.push_back({g.after_id, kind_of(g.cursor), g.cursor.value});
+    const std::string blob = encode_cache(stored, truncated, kind, value, cgaps);
 
     const std::filesystem::path path = file_for(key);
     const std::filesystem::path tmp = path.string() + ".tmp";

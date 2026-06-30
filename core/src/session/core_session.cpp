@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <optional>
+#include <set>
 
 #include "fastsm/auth/bluesky_auth.hpp"
 #include "fastsm/auth/mastodon_auth.hpp"
@@ -139,6 +140,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_refresh_all();
     else if (c == "load_older")
         cmd_load_older();
+    else if (c == "load_gap")
+        cmd_load_gap(cmd);
     else if (c == "note_selection")
         cmd_note_selection(cmd);
     else if (c == "toggle_boost")
@@ -341,6 +344,11 @@ void CoreSession::cmd_refresh() {
 void CoreSession::cmd_refresh_all() {
     for (auto& tc : timelines_)
         tc->refresh();
+}
+
+void CoreSession::cmd_load_gap(const json& cmd) {
+    if (TimelineController* tc = current())
+        tc->load_gap(cmd.value("id", std::string{}));
 }
 
 void CoreSession::cmd_load_older() {
@@ -1118,9 +1126,16 @@ void CoreSession::emit_timeline(int index) {
         return;
     TimelineController* tc = timelines_[static_cast<size_t>(index)].get();
     const std::int64_t now = util::now_unix();
+    std::set<std::string> gap_after;
+    for (const auto& g : tc->gaps())
+        gap_after.insert(g.after_id);
     json rows = json::array();
-    for (const auto& item : tc->items())
-        rows.push_back(row_json(item, now));
+    for (const auto& item : tc->items()) {
+        json r = row_json(item, now);
+        if (gap_after.count(item.id()))
+            r["gap_after"] = true; // unloaded posts follow this row
+        rows.push_back(std::move(r));
+    }
     emit({{"event", "timeline_updated"},
           {"index", index},
           {"selected_id", tc->selected_id()},

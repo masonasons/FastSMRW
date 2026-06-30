@@ -17,15 +17,24 @@ namespace fastsm::store {
 // which case the cursor points below the full, un-cached backlog). cursor_kind:
 // 0 = none, 1 = max_id, 2 = token. (A reserved gap list is written for forward
 // compat but not yet populated.)
+// A "gap": after the row with after_id there are unloaded posts; the cursor
+// (kind 1 = max_id, 2 = token) fetches them.
+struct CachedGap {
+    std::string after_id;
+    int cursor_kind = 0;
+    std::string cursor_value;
+};
+
 struct CachedTimeline {
     std::vector<TimelineItem> items;
     bool truncated = false;
     int cursor_kind = 0;
     std::string cursor_value;
+    std::vector<CachedGap> gaps;
 };
 
 std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated, int cursor_kind,
-                         const std::string& cursor_value);
+                         const std::string& cursor_value, const std::vector<CachedGap>& gaps);
 CachedTimeline decode_cache(std::string_view data);
 
 // Back-compat helpers (rows only) used by roundtrip tests.
