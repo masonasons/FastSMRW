@@ -4,6 +4,18 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- Speech settings now cover three kinds of rows separately. The Speech tab has
+  Configure Posts, Configure Users, and Configure Notifications buttons; each
+  opens a dialog to check which details are spoken and reorder them (Ctrl+Up /
+  Ctrl+Down or the Move buttons).
+- Notification rows now read who acted, what they did, the related post, and the
+  time - and you can choose/reorder those parts (Speech > Notifications).
+- People rows (Followers / Following / People search) now follow your Users
+  speech settings instead of always reading just name and handle.
+- New setting (Timelines tab): "Show mentions in the Notifications timeline" (on
+  by default). Turn it off to hide mentions there - handy when you keep a
+  separate Mentions timeline open.
+
 - The New Timeline dialog (Ctrl+T) can now open a Hashtag timeline, Search Posts,
   or Search People (Mastodon) - pick the type and type the hashtag or search text.
 - Search People opens as a people list with the same multi-select and batch

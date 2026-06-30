@@ -84,7 +84,8 @@ BEGIN
                -1, 10, 82, 224, 18
     AUTOCHECKBOX "&Stream in real time (Mastodon)", IDC_SET_STREAMING, 10, 104, 224, 12
     LTEXT      "Receive new posts and notifications live over a streaming connection.",
-               -1, 10, 118, 224, 18
+               -1, 10, 118, 224, 16
+    AUTOCHECKBOX "Show m&entions in the Notifications timeline", IDC_SET_SHOW_MENTIONS, 10, 138, 224, 12
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 160
@@ -105,12 +106,26 @@ STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Speech"
 FONT 9, "Segoe UI"
 BEGIN
-    LTEXT      "Check which details are spoken for a post, and order them:", -1, 10, 8, 220, 9
-    CONTROL    "", IDC_SET_SPEECH_LIST, "SysListView32",
+    LTEXT      "Choose which details the screen reader speaks, and their order, for each kind of row:",
+               -1, 10, 10, 220, 18
+    PUSHBUTTON "Configure &Posts…", IDC_SET_SPEECH_POSTS, 10, 36, 140, 16
+    PUSHBUTTON "Configure &Users…", IDC_SET_SPEECH_USERS, 10, 58, 140, 16
+    PUSHBUTTON "Configure &Notifications…", IDC_SET_SPEECH_NOTIFS, 10, 80, 140, 16
+END
+
+IDD_SPEECH_DETAIL DIALOGEX 0, 0, 264, 200
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Speech Details"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Check which details are spoken, and order them:", -1, 8, 8, 248, 9
+    CONTROL    "", IDC_SPEECH_DETAIL_LIST, "SysListView32",
                LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,
-               10, 22, 148, 148
-    PUSHBUTTON "Move &Up\n(Ctrl+Up)", IDC_SET_SPEECH_UP, 164, 22, 68, 20, BS_MULTILINE
-    PUSHBUTTON "Move &Down\n(Ctrl+Down)", IDC_SET_SPEECH_DOWN, 164, 46, 68, 20, BS_MULTILINE
+               8, 22, 172, 150
+    PUSHBUTTON "Move &Up\n(Ctrl+Up)", IDC_SPEECH_DETAIL_UP, 188, 22, 68, 20, BS_MULTILINE
+    PUSHBUTTON "Move &Down\n(Ctrl+Down)", IDC_SPEECH_DETAIL_DOWN, 188, 46, 68, 20, BS_MULTILINE
+    DEFPUSHBUTTON "OK", IDOK, 150, 180, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 206, 180, 50, 14
 END
 
 IDD_SET_ADVANCED DIALOGEX 0, 0, 240, 160

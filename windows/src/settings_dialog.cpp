@@ -97,6 +97,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         }
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
         checked(dlg, IDC_SET_STREAMING, ctx->settings.streaming_enabled);
+        checked(dlg, IDC_SET_SHOW_MENTIONS, ctx->settings.show_mentions_in_notifications);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -111,6 +112,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             if (sel >= 0 && sel < n)
                 ctx->settings.auto_refresh_seconds = AppSettings::kAutoRefreshOptions[sel];
             ctx->settings.streaming_enabled = is_checked(dlg, IDC_SET_STREAMING);
+            ctx->settings.show_mentions_in_notifications = is_checked(dlg, IDC_SET_SHOW_MENTIONS);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
@@ -160,7 +162,7 @@ INT_PTR CALLBACK AudioProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     return FALSE;
 }
 
-// --- Speech page: a checked, reorderable list of post fields ---
+// --- Reusable "Speech Details" modal: a checked, reorderable field list ---
 
 void swap_speech_items(HWND list, int a, int b) {
     wchar_t ta[128] = {}, tb[128] = {};
@@ -191,8 +193,7 @@ void swap_speech_items(HWND list, int a, int b) {
     ListView_SetCheckState(list, b, ca);
 }
 
-void move_speech(HWND dlg, int delta) {
-    HWND list = GetDlgItem(dlg, IDC_SET_SPEECH_LIST);
+void move_speech_in_list(HWND list, int delta) {
     const int sel = ListView_GetNextItem(list, -1, LVNI_SELECTED);
     const int n = ListView_GetItemCount(list);
     const int target = sel + delta;
@@ -203,78 +204,146 @@ void move_speech(HWND dlg, int delta) {
     ListView_EnsureVisible(list, target, FALSE);
 }
 
-// Ctrl+Up / Ctrl+Down reorder the focused field (and suppress the default
-// focus-rectangle move).
+// Ctrl+Up / Ctrl+Down reorder the focused field.
 LRESULT CALLBACK SpeechListProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR) {
     if (msg == WM_KEYDOWN && (wp == VK_UP || wp == VK_DOWN) &&
         (GetKeyState(VK_CONTROL) & 0x8000)) {
-        move_speech(GetParent(h), wp == VK_UP ? -1 : +1);
+        move_speech_in_list(h, wp == VK_UP ? -1 : +1);
         return 0;
     }
     return DefSubclassProc(h, msg, wp, lp);
 }
 
-INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+// One generic, orderable, toggleable row (id carries the field enum value).
+struct SpeechRow {
+    int id;
+    std::wstring label;
+    bool enabled;
+};
+
+struct DetailCtx {
+    const std::wstring* title;
+    std::vector<SpeechRow>* rows;
+};
+
+INT_PTR CALLBACK SpeechDetailProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
-        Ctx* ctx = on_init(dlg, lp);
-        HWND list = GetDlgItem(dlg, IDC_SET_SPEECH_LIST);
+        auto* c = reinterpret_cast<DetailCtx*>(lp);
+        SetWindowLongPtrW(dlg, DWLP_USER, reinterpret_cast<LONG_PTR>(c));
+        SetWindowTextW(dlg, c->title->c_str());
+        HWND list = GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST);
         ListView_SetExtendedListViewStyle(list, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
         LVCOLUMNW col{};
         col.mask = LVCF_WIDTH;
-        col.cx = 150;
+        col.cx = 168;
         ListView_InsertColumn(list, 0, &col);
         int row = 0;
-        for (const auto& item : ctx->settings.speech.status) {
+        for (const auto& r : *c->rows) {
             LVITEMW lv{};
             lv.mask = LVIF_TEXT | LVIF_PARAM;
             lv.iItem = row;
-            const std::wstring name = to_wide(present::field_display_name(item.field));
-            lv.pszText = const_cast<wchar_t*>(name.c_str());
-            lv.lParam = static_cast<LPARAM>(item.field);
+            lv.pszText = const_cast<wchar_t*>(r.label.c_str());
+            lv.lParam = r.id;
             ListView_InsertItem(list, &lv);
-            ListView_SetCheckState(list, row, item.enabled);
+            ListView_SetCheckState(list, row, r.enabled);
             ++row;
         }
         if (row > 0)
             ListView_SetItemState(list, 0, LVIS_SELECTED | LVIS_FOCUSED,
                                   LVIS_SELECTED | LVIS_FOCUSED);
         SetWindowSubclass(list, SpeechListProc, 1, 0);
-        return TRUE;
+        SetFocus(list);
+        return FALSE;
     }
     case WM_DESTROY:
-        RemoveWindowSubclass(GetDlgItem(dlg, IDC_SET_SPEECH_LIST), SpeechListProc, 1);
+        RemoveWindowSubclass(GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST), SpeechListProc, 1);
         break;
-    case WM_COMMAND:
-        if (LOWORD(wp) == IDC_SET_SPEECH_UP) {
-            move_speech(dlg, -1);
+    case WM_COMMAND: {
+        const int id = LOWORD(wp);
+        if (id == IDC_SPEECH_DETAIL_UP) {
+            move_speech_in_list(GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST), -1);
             return TRUE;
         }
-        if (LOWORD(wp) == IDC_SET_SPEECH_DOWN) {
-            move_speech(dlg, +1);
+        if (id == IDC_SPEECH_DETAIL_DOWN) {
+            move_speech_in_list(GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST), +1);
             return TRUE;
         }
-        break;
-    case WM_NOTIFY:
-        if (is_apply(lp)) {
-            Ctx* ctx = ctx_of(dlg);
-            HWND list = GetDlgItem(dlg, IDC_SET_SPEECH_LIST);
+        if (id == IDOK) {
+            auto* c = reinterpret_cast<DetailCtx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            HWND list = GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST);
             const int n = ListView_GetItemCount(list);
-            std::vector<present::SpeechItem<present::StatusSpeechField>> items;
+            std::vector<SpeechRow> out;
             for (int i = 0; i < n; ++i) {
                 LVITEMW lv{};
                 lv.mask = LVIF_PARAM;
                 lv.iItem = i;
                 ListView_GetItem(list, &lv);
-                items.push_back({static_cast<present::StatusSpeechField>(lv.lParam),
-                                 ListView_GetCheckState(list, i) != 0});
+                wchar_t label[256] = {};
+                ListView_GetItemText(list, i, 0, label, 256);
+                out.push_back(
+                    {static_cast<int>(lv.lParam), label, ListView_GetCheckState(list, i) != 0});
             }
-            ctx->settings.speech.status = std::move(items);
-            ctx->applied = true;
-            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            *c->rows = std::move(out);
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        if (id == IDCANCEL) {
+            EndDialog(dlg, IDCANCEL);
             return TRUE;
         }
         break;
+    }
+    }
+    return FALSE;
+}
+
+bool show_speech_detail(HWND parent, const std::wstring& title, std::vector<SpeechRow>& rows) {
+    DetailCtx c{&title, &rows};
+    return DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_SPEECH_DETAIL), parent,
+                           SpeechDetailProc, reinterpret_cast<LPARAM>(&c)) == IDOK;
+}
+
+// Edit one category's typed field list via the generic modal.
+template <class Field>
+void edit_speech(HWND parent, const std::wstring& title,
+                 std::vector<present::SpeechItem<Field>>& items) {
+    std::vector<SpeechRow> rows;
+    for (const auto& it : items)
+        rows.push_back(
+            {static_cast<int>(it.field), to_wide(present::field_display_name(it.field)), it.enabled});
+    if (!show_speech_detail(parent, title, rows))
+        return;
+    std::vector<present::SpeechItem<Field>> out;
+    for (const auto& r : rows)
+        out.push_back({static_cast<Field>(r.id), r.enabled});
+    items = std::move(out);
+}
+
+// Speech page: three buttons that open the reusable detail modal per category.
+INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG:
+        on_init(dlg, lp);
+        return TRUE;
+    case WM_COMMAND: {
+        Ctx* ctx = ctx_of(dlg);
+        if (!ctx)
+            break;
+        switch (LOWORD(wp)) {
+        case IDC_SET_SPEECH_POSTS:
+            edit_speech(dlg, L"Speech Details — Posts", ctx->settings.speech.status);
+            return TRUE;
+        case IDC_SET_SPEECH_USERS:
+            edit_speech(dlg, L"Speech Details — Users", ctx->settings.speech.user);
+            return TRUE;
+        case IDC_SET_SPEECH_NOTIFS:
+            edit_speech(dlg, L"Speech Details — Notifications",
+                        ctx->settings.speech.notification);
+            return TRUE;
+        }
+        break;
+    }
     }
     return FALSE;
 }

@@ -45,6 +45,7 @@ struct TimelineItem {
     }
 
     const User* user() const { return std::get_if<User>(&value); }
+    const Notification* notification() const { return std::get_if<Notification>(&value); }
 
     // Mutable access for optimistic UI updates (boost/favorite toggles).
     Status* mutable_status() {

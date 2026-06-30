@@ -989,8 +989,21 @@ void CoreSession::apply_settings() {
     sound_.set_soundpack(settings_.soundpack);
     present::SpeechConfig::set_current(settings_.speech);
     cache_.set_max_entries(settings_.cache_limit);
-    for (auto& tc : timelines_)
+    const bool show_mentions = settings_.show_mentions_in_notifications;
+    for (auto& tc : timelines_) {
         tc->set_max_refresh_pages(settings_.fetch_pages);
+        // Optionally hide mention notifications from the Notifications timeline
+        // (e.g. when a separate Mentions timeline is open).
+        if (tc->source().kind == TimelineSource::Kind::Notifications) {
+            if (show_mentions)
+                tc->set_filter(nullptr);
+            else
+                tc->set_filter([](const TimelineItem& item) {
+                    const Notification* n = item.notification();
+                    return !(n && n->type == Notification::Kind::Mention);
+                });
+        }
+    }
     auto_refresh_seconds_.store(settings_.auto_refresh_seconds);
     update_streaming();
 }

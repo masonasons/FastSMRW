@@ -46,6 +46,7 @@ AppSettings settings_from_json(const json& root) {
     settings.confirm_block = root.value("confirm_block", true);
     settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 0);
     settings.streaming_enabled = root.value("streaming_enabled", false);
+    settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
 
     SpeechSettings speech;
     if (auto it = root.find("speech"); it != root.end() && it->is_object()) {
@@ -53,6 +54,9 @@ AppSettings settings_from_json(const json& root) {
             speech.status = items_from_json<StatusSpeechField>(*s, status_field_from_key);
         if (auto u = it->find("user"); u != it->end())
             speech.user = items_from_json<UserSpeechField>(*u, user_field_from_key);
+        if (auto nf = it->find("notification"); nf != it->end())
+            speech.notification =
+                items_from_json<NotificationSpeechField>(*nf, notification_field_from_key);
     }
     settings.speech = speech.normalized();
     return settings;
@@ -71,8 +75,10 @@ json settings_to_json(const AppSettings& settings) {
     root["confirm_block"] = settings.confirm_block;
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
+    root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
+    root["speech"]["notification"] = items_to_json(settings.speech.notification);
     return root;
 }
 

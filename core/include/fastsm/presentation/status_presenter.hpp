@@ -28,6 +28,9 @@ std::string accessibility_label(const Status& s, std::int64_t now,
                                 const std::vector<SpeechItem<StatusSpeechField>>& fields);
 std::string accessibility_label(const Status& s, std::int64_t now);
 std::string accessibility_label(const TimelineItem& item, std::int64_t now);
+// Configurable spoken labels for a user row / a notification (SpeechConfig).
+std::string accessibility_label(const User& u);
+std::string accessibility_label(const Notification& n, std::int64_t now);
 
 // A readable, multi-line rendering of a post for the Post Info dialog (Mac
 // parity): author/@handle, spoken time, content warning, text, media, stats.

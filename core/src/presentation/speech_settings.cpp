@@ -142,6 +142,49 @@ bool user_field_from_key(std::string_view key, UserSpeechField& out) {
     return false;
 }
 
+const char* field_key(NotificationSpeechField f) {
+    switch (f) {
+    case NotificationSpeechField::Actor:
+        return "actor";
+    case NotificationSpeechField::Action:
+        return "action";
+    case NotificationSpeechField::Handle:
+        return "handle";
+    case NotificationSpeechField::Text:
+        return "text";
+    case NotificationSpeechField::Time:
+        return "time";
+    }
+    return "";
+}
+
+const char* field_display_name(NotificationSpeechField f) {
+    switch (f) {
+    case NotificationSpeechField::Actor:
+        return "Who (name)";
+    case NotificationSpeechField::Action:
+        return "What they did";
+    case NotificationSpeechField::Handle:
+        return "Handle (@user)";
+    case NotificationSpeechField::Text:
+        return "Related post text";
+    case NotificationSpeechField::Time:
+        return "Time";
+    }
+    return "";
+}
+
+bool notification_field_from_key(std::string_view key, NotificationSpeechField& out) {
+    for (int i = 0; i <= static_cast<int>(NotificationSpeechField::Time); ++i) {
+        const auto f = static_cast<NotificationSpeechField>(i);
+        if (key == field_key(f)) {
+            out = f;
+            return true;
+        }
+    }
+    return false;
+}
+
 namespace {
 template <class Field>
 std::vector<SpeechItem<Field>> merge(const std::vector<SpeechItem<Field>>& items,
@@ -174,6 +217,10 @@ SpeechSettings SpeechSettings::defaults() {
         {U::Author}, {U::Handle},  {U::Bot},            {U::Locked},
         {U::Bio},    {U::Followers}, {U::Following, false}, {U::Posts, false},
     };
+    using N = NotificationSpeechField;
+    s.notification = {
+        {N::Actor}, {N::Action}, {N::Handle, false}, {N::Text}, {N::Time},
+    };
     return s;
 }
 
@@ -182,6 +229,7 @@ SpeechSettings SpeechSettings::normalized() const {
     SpeechSettings out;
     out.status = merge(status, def.status);
     out.user = merge(user, def.user);
+    out.notification = merge(notification, def.notification);
     return out;
 }
 

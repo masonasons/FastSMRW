@@ -39,6 +39,14 @@ enum class UserSpeechField {
     Posts,
 };
 
+enum class NotificationSpeechField {
+    Actor,  // who acted (display name)
+    Action, // what they did ("followed you", "boosted your post", ...)
+    Handle, // @user
+    Text,   // the related post's text
+    Time,
+};
+
 // Stable string id (for settings.json) and human label (for the settings UI).
 const char* field_key(StatusSpeechField f);
 const char* field_display_name(StatusSpeechField f);
@@ -47,6 +55,10 @@ bool status_field_from_key(std::string_view key, StatusSpeechField& out);
 const char* field_key(UserSpeechField f);
 const char* field_display_name(UserSpeechField f);
 bool user_field_from_key(std::string_view key, UserSpeechField& out);
+
+const char* field_key(NotificationSpeechField f);
+const char* field_display_name(NotificationSpeechField f);
+bool notification_field_from_key(std::string_view key, NotificationSpeechField& out);
 
 // One orderable, toggleable field.
 template <class Field> struct SpeechItem {
@@ -63,6 +75,7 @@ template <class Field> struct SpeechItem {
 struct SpeechSettings {
     std::vector<SpeechItem<StatusSpeechField>> status;
     std::vector<SpeechItem<UserSpeechField>> user;
+    std::vector<SpeechItem<NotificationSpeechField>> notification;
 
     // The Mac default order/visibility.
     static SpeechSettings defaults();
@@ -73,7 +86,7 @@ struct SpeechSettings {
     SpeechSettings normalized() const;
 
     bool operator==(const SpeechSettings& o) const {
-        return status == o.status && user == o.user;
+        return status == o.status && user == o.user && notification == o.notification;
     }
 };
 

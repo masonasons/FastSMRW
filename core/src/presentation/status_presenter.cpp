@@ -145,6 +145,101 @@ std::string accessibility_label(const Status& s, std::int64_t now) {
     return accessibility_label(s, now, SpeechConfig::current().status);
 }
 
+namespace {
+std::optional<std::string> user_field_string(UserSpeechField f, const User& u) {
+    switch (f) {
+    case UserSpeechField::Author:
+        return u.best_name().empty() ? std::nullopt : std::optional(u.best_name());
+    case UserSpeechField::Handle:
+        return u.acct.empty() ? std::nullopt : std::optional("@" + u.acct);
+    case UserSpeechField::Bot:
+        return u.bot ? std::optional<std::string>("Bot") : std::nullopt;
+    case UserSpeechField::Locked:
+        return u.locked ? std::optional<std::string>("Locked") : std::nullopt;
+    case UserSpeechField::Bio: {
+        const std::string bio = one_line(util::strip_html(u.note));
+        return bio.empty() ? std::nullopt : std::optional(bio);
+    }
+    case UserSpeechField::Followers:
+        return std::optional(std::to_string(u.followers_count) + " followers");
+    case UserSpeechField::Following:
+        return std::optional(std::to_string(u.following_count) + " following");
+    case UserSpeechField::Posts:
+        return std::optional(std::to_string(u.statuses_count) + " posts");
+    }
+    return std::nullopt;
+}
+
+const char* notification_action_phrase(Notification::Kind k) {
+    switch (k) {
+    case Notification::Kind::Follow:
+        return "followed you";
+    case Notification::Kind::FollowRequest:
+        return "requested to follow you";
+    case Notification::Kind::Favourite:
+        return "favorited your post";
+    case Notification::Kind::Reblog:
+        return "boosted your post";
+    case Notification::Kind::Mention:
+        return "mentioned you";
+    case Notification::Kind::Poll:
+        return "ran a poll that ended";
+    case Notification::Kind::Status:
+        return "posted";
+    case Notification::Kind::Update:
+        return "edited a post";
+    case Notification::Kind::Unknown:
+        return "sent a notification";
+    }
+    return "sent a notification";
+}
+
+std::optional<std::string> notification_field_string(NotificationSpeechField f, const Notification& n,
+                                                     std::int64_t now) {
+    switch (f) {
+    case NotificationSpeechField::Actor:
+        return n.account.best_name().empty() ? std::nullopt : std::optional(n.account.best_name());
+    case NotificationSpeechField::Action:
+        return std::optional<std::string>(notification_action_phrase(n.type));
+    case NotificationSpeechField::Handle:
+        return n.account.acct.empty() ? std::nullopt : std::optional("@" + n.account.acct);
+    case NotificationSpeechField::Text:
+        return (n.status && !n.status->display_status().text.empty())
+                   ? std::optional(one_line(n.status->display_status().text))
+                   : std::nullopt;
+    case NotificationSpeechField::Time:
+        return util::relative_spoken(n.created_at, now);
+    }
+    return std::nullopt;
+}
+} // namespace
+
+std::string accessibility_label(const User& u) {
+    std::vector<std::string> parts;
+    for (const auto& item : SpeechConfig::current().user) {
+        if (!item.enabled)
+            continue;
+        if (auto str = user_field_string(item.field, u); str && !str->empty())
+            parts.push_back(std::move(*str));
+    }
+    if (parts.empty())
+        parts.push_back(u.best_name()); // never read a blank row
+    return join(parts, ", ");
+}
+
+std::string accessibility_label(const Notification& n, std::int64_t now) {
+    std::vector<std::string> parts;
+    for (const auto& item : SpeechConfig::current().notification) {
+        if (!item.enabled)
+            continue;
+        if (auto str = notification_field_string(item.field, n, now); str && !str->empty())
+            parts.push_back(std::move(*str));
+    }
+    if (parts.empty())
+        parts.push_back(n.account.best_name());
+    return join(parts, ", ");
+}
+
 std::string compact_line(const TimelineItem& item, std::int64_t now) {
     if (const Status* s = std::get_if<Status>(&item.value))
         return compact_line(*s, now);
@@ -162,6 +257,10 @@ std::string compact_line(const TimelineItem& item, std::int64_t now) {
 std::string accessibility_label(const TimelineItem& item, std::int64_t now) {
     if (const Status* s = std::get_if<Status>(&item.value))
         return accessibility_label(*s, now);
+    if (const Notification* n = std::get_if<Notification>(&item.value))
+        return accessibility_label(*n, now);
+    if (const User* u = std::get_if<User>(&item.value))
+        return accessibility_label(*u);
     return compact_line(item, now);
 }
 
