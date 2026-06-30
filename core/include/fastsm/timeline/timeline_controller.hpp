@@ -62,10 +62,16 @@ public:
 
     // Per-timeline selected-row memory (by item id). The UI records the focused
     // row here; on switching back or after a refresh it restores this position
-    // instead of jumping to the top (Mac parity).
-    void note_selection(const std::string& id) { selected_id_ = id; }
+    // instead of jumping to the top (Mac parity). A "jump" (moving more than one
+    // row) is pushed onto the nav history for Go Back.
+    void note_selection(const std::string& id);
     const std::string& selected_id() const { return selected_id_; }
     int visible_index_of(const std::string& id) const;
+
+    // Go Back (Ctrl+Z): pop the nav history to the most recent still-present row,
+    // make it the position, and return its id (empty if nothing to undo). This
+    // restore itself is not recorded.
+    std::string undo_navigation();
 
 private:
     void rebuild_visible();
@@ -81,6 +87,7 @@ private:
     int fetch_limit_;
 
     std::string selected_id_;           // remembered selected row (by id)
+    std::vector<std::string> nav_history_; // prior positions, for Go Back (jumps)
     std::vector<TimelineItem> raw_;     // everything fetched/cached
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     std::optional<PageCursor> scrollback_cursor_;

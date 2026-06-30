@@ -24,6 +24,35 @@ int TimelineController::visible_index_of(const std::string& id) const {
     return -1;
 }
 
+void TimelineController::note_selection(const std::string& id) {
+    // Record a "jump" (move of more than one visible row, or to/from an item not
+    // in the list) so Go Back can return here; single-row steps aren't recorded.
+    if (!selected_id_.empty() && selected_id_ != id) {
+        const int from = visible_index_of(selected_id_);
+        const int to = visible_index_of(id);
+        const int diff = from > to ? from - to : to - from;
+        const bool jump = from < 0 || to < 0 || diff > 1;
+        if (jump && (nav_history_.empty() || nav_history_.back() != selected_id_)) {
+            nav_history_.push_back(selected_id_);
+            if (nav_history_.size() > 20)
+                nav_history_.erase(nav_history_.begin());
+        }
+    }
+    selected_id_ = id;
+}
+
+std::string TimelineController::undo_navigation() {
+    while (!nav_history_.empty()) {
+        const std::string target = nav_history_.back();
+        nav_history_.pop_back();
+        if (visible_index_of(target) >= 0) {
+            selected_id_ = target;
+            return target;
+        }
+    }
+    return {};
+}
+
 void TimelineController::set_filter(std::function<bool(const TimelineItem&)> predicate) {
     filter_ = std::move(predicate);
     rebuild_visible();

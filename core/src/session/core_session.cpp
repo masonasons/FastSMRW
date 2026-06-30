@@ -114,6 +114,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_status(cmd);
     else if (c == "post_info")
         cmd_post_info(cmd);
+    else if (c == "move")
+        cmd_move(cmd);
+    else if (c == "go_back")
+        cmd_go_back();
     else if (c == "get_spawnable")
         cmd_get_spawnable();
     else if (c == "spawn_timeline")
@@ -466,6 +470,43 @@ void CoreSession::cmd_post_info(const json& cmd) {
           {"text", present::post_info(*s, util::now_unix())},
           {"features", features_json(tc->account()->features())},
           {"has_url", !s->url.empty()}});
+}
+
+void CoreSession::cmd_move(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const int idx = tc->visible_index_of(cmd.value("from_id", std::string{}));
+    if (idx < 0)
+        return;
+    const auto& items = tc->items();
+    auto author_of = [](const TimelineItem& it) -> std::string {
+        if (const Status* s = it.actionable_status())
+            return s->account.acct;
+        return {};
+    };
+    const std::string cur = author_of(items[static_cast<size_t>(idx)]);
+    const int step = cmd.value("dir", std::string("next")) == "prev" ? -1 : 1;
+    for (int i = idx + step; i >= 0 && i < static_cast<int>(items.size()); i += step) {
+        if (author_of(items[static_cast<size_t>(i)]) != cur) {
+            const std::string id = items[static_cast<size_t>(i)].id();
+            tc->note_selection(id); // records the jump for Go Back
+            emit({{"event", "select_row"}, {"id", id}});
+            return;
+        }
+    }
+    sound_.play(sound::Earcon::Boundary); // no different-author post that way
+}
+
+void CoreSession::cmd_go_back() {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const std::string id = tc->undo_navigation();
+    if (!id.empty())
+        emit({{"event", "select_row"}, {"id", id}});
+    else
+        sound_.play(sound::Earcon::Boundary);
 }
 
 void CoreSession::cmd_play_earcon(const json& cmd) {

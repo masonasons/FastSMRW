@@ -64,6 +64,8 @@ private:
     void cmd_compose_context(const nlohmann::json& cmd);
     void cmd_open_status(const nlohmann::json& cmd);
     void cmd_post_info(const nlohmann::json& cmd);
+    void cmd_move(const nlohmann::json& cmd);
+    void cmd_go_back();
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
     void cmd_close_timeline();

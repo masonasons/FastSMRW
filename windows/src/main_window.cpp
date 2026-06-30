@@ -44,6 +44,8 @@ enum {
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
     ID_GO_BACK,
+    ID_MOVE_PREV,
+    ID_MOVE_NEXT,
     ID_PREV_ACCOUNT,
     ID_NEXT_ACCOUNT,
     ID_ADD_ACCOUNT,
@@ -147,7 +149,7 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"&Clear Timeline\tCtrl+Backspace");
     AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_CLEAR_ALL, L"Clear &All Timelines");
-    AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_GO_BACK, L"Go &Back\tCtrl+Z");
+    AppendMenuW(timeline, MF_STRING, ID_GO_BACK, L"Go &Back\tCtrl+Z");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     for (int i = 1; i <= 9; ++i) {
         wchar_t label[40];
@@ -209,6 +211,9 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
+        {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
+        {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_PREV},   // jump to prev author
+        {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_NEXT}, // jump to next author
     };
     for (int i = 0; i < 9; ++i)
         accels.push_back({FVIRTKEY | FCONTROL, static_cast<WORD>('1' + i),
@@ -648,6 +653,18 @@ void MainWindow::handle_command(int id) {
     case ID_ADD_ACCOUNT:
         do_add_account();
         break;
+    case ID_GO_BACK:
+        dispatch_cmd({{"cmd", "go_back"}});
+        break;
+    case ID_MOVE_PREV:
+    case ID_MOVE_NEXT: {
+        const std::string from = selected_id();
+        if (!from.empty())
+            dispatch_cmd({{"cmd", "move"},
+                          {"from_id", from},
+                          {"dir", id == ID_MOVE_PREV ? "prev" : "next"}});
+        break;
+    }
     default:
         break;
     }
@@ -677,6 +694,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_spawnable(e);
     else if (ev == "post_info")
         ev_post_info(e);
+    else if (ev == "select_row")
+        restore_selection(e.value("id", std::string{}));
     else if (ev == "open_url")
         ShellExecuteW(nullptr, L"open", to_wide(e.value("url", std::string{})).c_str(), nullptr,
                       nullptr, SW_SHOW);
