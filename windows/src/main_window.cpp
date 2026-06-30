@@ -92,16 +92,8 @@ HMENU build_menu() {
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(app, MF_STRING, ID_CLOSE, L"&Close\tCtrl+W");
     AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
-
-    HMENU edit = CreatePopupMenu();
-    AppendMenuW(edit, MF_STRING, ID_CUT, L"Cu&t\tCtrl+X");
-    AppendMenuW(edit, MF_STRING, ID_COPY, L"&Copy\tCtrl+C");
-    AppendMenuW(edit, MF_STRING, ID_PASTE, L"&Paste\tCtrl+V");
-    AppendMenuW(edit, MF_STRING, ID_SELECT_ALL, L"Select &All\tCtrl+A");
-    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(edit), L"&Edit");
 
     HMENU status = CreatePopupMenu();
     AppendMenuW(status, MF_STRING, ID_REPLY, L"&Reply\tR");
@@ -166,7 +158,6 @@ bool MainWindow::create() {
     std::vector<ACCEL> accels = {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
-        {FVIRTKEY | FCONTROL, 'W', ID_CLOSE},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
         {FVIRTKEY | FCONTROL, 'I', ID_POST_INFO},
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
@@ -488,7 +479,6 @@ void MainWindow::handle_command(int id) {
         if (app_ && app_->current())
             app_->current()->refresh();
         break;
-    case ID_CLOSE:
     case ID_QUIT:
         DestroyWindow(hwnd_);
         break;
@@ -524,18 +514,6 @@ void MainWindow::handle_command(int id) {
     case ID_NEXT_ACCOUNT:
         if (app_)
             app_->next_account();
-        break;
-    case ID_CUT:
-        SendMessageW(GetFocus(), WM_CUT, 0, 0);
-        break;
-    case ID_COPY:
-        SendMessageW(GetFocus(), WM_COPY, 0, 0);
-        break;
-    case ID_PASTE:
-        SendMessageW(GetFocus(), WM_PASTE, 0, 0);
-        break;
-    case ID_SELECT_ALL:
-        SendMessageW(GetFocus(), EM_SETSEL, 0, static_cast<LPARAM>(-1));
         break;
     default:
         break;

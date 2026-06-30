@@ -105,10 +105,43 @@ void TimelineController::refresh() {
     if (loading_)
         return;
     loading_ = true;
-    worker_->post([this] {
-        TimelinePage page = account_->items(source_, fetch_limit_, PageCursor::start());
-        main_->post([this, page = std::move(page)]() mutable {
-            merge_fresh(std::move(page.items), page.next_cursor);
+
+    // Snapshot the ids we already have (from cache or a prior load) so the
+    // worker can page forward through ALL new posts and stop as soon as it
+    // reaches one we know — this fills the gap instead of grabbing only the
+    // newest page. Bounded so a first load (nothing known) can't run away.
+    constexpr int kMaxRefreshPages = 5;
+    std::unordered_set<std::string> known;
+    known.reserve(raw_.size());
+    for (const auto& it : raw_)
+        known.insert(it.id());
+    const bool was_empty = raw_.empty();
+
+    worker_->post([this, known = std::move(known), was_empty]() mutable {
+        std::vector<TimelineItem> fresh;
+        std::optional<PageCursor> tail; // cursor just past the fetched region
+        PageCursor cursor = PageCursor::start();
+        for (int page = 0; page < kMaxRefreshPages; ++page) {
+            TimelinePage p = account_->items(source_, fetch_limit_, cursor);
+            tail = p.next_cursor;
+            if (p.items.empty())
+                break;
+            bool hit_known = false;
+            for (auto& it : p.items) {
+                if (known.find(it.id()) != known.end()) {
+                    hit_known = true; // reached posts we already have
+                    break;
+                }
+                fresh.push_back(std::move(it));
+            }
+            if (hit_known || !p.next_cursor || static_cast<int>(p.items.size()) < fetch_limit_)
+                break;
+            cursor = *p.next_cursor;
+        }
+        main_->post([this, fresh = std::move(fresh), tail, was_empty]() mutable {
+            // On a first load (nothing known) seed the scrollback cursor; on a
+            // refresh keep the existing one (it points below the current bottom).
+            merge_fresh(std::move(fresh), was_empty ? tail : scrollback_cursor_);
             loading_ = false;
             if (on_change)
                 on_change();
