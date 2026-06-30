@@ -119,10 +119,13 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
 void TimelineController::persist() {
     if (!source_.is_cacheable())
         return;
-    // Snapshot on the main thread, write on the worker thread.
+    // Snapshot on the main thread, write on the worker thread. The scrollback
+    // cursor rides along so loading older posts resumes after a cache load.
     auto snapshot = raw_;
+    const auto cursor = scrollback_cursor_;
     const std::string key = cache_key();
-    worker_->post([this, key, snapshot = std::move(snapshot)] { cache_->save(key, snapshot); });
+    worker_->post(
+        [this, key, snapshot = std::move(snapshot), cursor] { cache_->save(key, snapshot, cursor); });
 }
 
 void TimelineController::load_cached() {
@@ -132,15 +135,19 @@ void TimelineController::load_cached() {
     // post) instead of a cold full refetch on every launch.
     if (!raw_.empty())
         return;
-    auto cached = cache_->load(cache_key());
-    if (cached.empty())
+    store::LoadedTimeline cached = cache_->load(cache_key());
+    if (cached.items.empty())
         return;
-    raw_ = std::move(cached);
-    // Seed the scrollback cursor so "load older" works after a cache load. Only
-    // possible where pagination is by item id (Mastodon); other feeds use an
-    // opaque cursor we can't reconstruct from the cached rows.
-    if (!scrollback_cursor_ && !raw_.empty() && account_ &&
-        account_->platform() == Platform::Mastodon && source_.paginates_by_item_id())
+    raw_ = std::move(cached.items);
+    // Restore scrollback so "load older" works after a cache load. If the cache
+    // wasn't truncated, the persisted cursor is exact (works for every platform).
+    // If it was truncated, the persisted cursor points below un-cached posts, so
+    // re-derive for Mastodon (max_id) and otherwise drop it (Bluesky's opaque
+    // cursor can't be rebuilt from the rows).
+    if (!cached.truncated && cached.scrollback)
+        scrollback_cursor_ = cached.scrollback;
+    else if (account_ && account_->platform() == Platform::Mastodon &&
+             source_.paginates_by_item_id() && !raw_.empty())
         scrollback_cursor_ = PageCursor::max_id(raw_.back().pagination_id());
     rebuild_visible();
     if (on_change)

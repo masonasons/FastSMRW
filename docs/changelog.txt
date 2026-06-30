@@ -4,6 +4,13 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- The scroll position for loading older posts is now saved in the cache, so
+  scrolling down to load more keeps working after you restart the app or switch
+  accounts (previously it only worked in the session where you first loaded the
+  timeline). Note: this needs the cache to hold the posts you'd loaded - if you
+  set a high "API calls per timeline load" but a low "Maximum posts to cache",
+  raise the cache so the two match.
+
 - Timelines now load older posts automatically as you reach the bottom (seamless
   infinite scroll), in every timeline that supports it - this previously did not
   happen at all, so you were stuck at the first batch. Each load pulls as many

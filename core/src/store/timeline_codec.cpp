@@ -9,7 +9,7 @@ namespace {
 // Bump this whenever the on-disk layout changes so older caches are rejected
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url.
-constexpr char kMagic[4] = {'F', 'S', 'C', '2'};
+constexpr char kMagic[4] = {'F', 'S', 'C', '3'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -367,31 +367,48 @@ TimelineItem read_item(Reader& r) {
 
 } // namespace
 
-std::string encode_items(const std::vector<TimelineItem>& items) {
+std::string encode_cache(const std::vector<TimelineItem>& items, bool truncated, int cursor_kind,
+                         const std::string& cursor_value) {
     Writer w;
     w.buf.append(kMagic, sizeof(kMagic));
     w.u32(static_cast<std::uint32_t>(items.size()));
     for (const auto& item : items)
         write_item(w, item);
+    w.boolean(truncated);
+    w.u8(static_cast<std::uint8_t>(cursor_kind));
+    w.str(cursor_value);
+    w.u32(0); // reserved: middle-gap count (none written yet)
     return std::move(w.buf);
 }
 
-std::vector<TimelineItem> decode_items(std::string_view data) {
-    std::vector<TimelineItem> items;
+std::string encode_items(const std::vector<TimelineItem>& items) {
+    return encode_cache(items, false, 0, "");
+}
+
+CachedTimeline decode_cache(std::string_view data) {
+    CachedTimeline out;
     if (data.size() < 8 || data.compare(0, 4, kMagic, 4) != 0)
-        return items;
+        return out;
     Reader r;
     r.d = data;
     r.pos = 4;
     const std::uint32_t count = r.u32();
-    items.reserve(count);
+    out.items.reserve(count);
     for (std::uint32_t i = 0; i < count; ++i) {
         TimelineItem item = read_item(r);
         if (!r.ok)
             return {}; // truncated/corrupt -> treat as a miss
-        items.push_back(std::move(item));
+        out.items.push_back(std::move(item));
     }
-    return items;
+    out.truncated = r.u8() != 0;
+    out.cursor_kind = r.u8();
+    out.cursor_value = r.str();
+    (void)r.u32(); // reserved gap count
+    if (!r.ok)
+        return {}; // malformed trailer -> miss
+    return out;
 }
+
+std::vector<TimelineItem> decode_items(std::string_view data) { return decode_cache(data).items; }
 
 } // namespace fastsm::store

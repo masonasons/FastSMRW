@@ -1,12 +1,22 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "fastsm/models/timeline_item.hpp"
+#include "fastsm/platform/social_account.hpp" // PageCursor
 
 namespace fastsm::store {
+
+// What a cache load returns: the rows plus the scrollback cursor and whether the
+// rows were truncated to the cap (so the cursor may point below un-cached posts).
+struct LoadedTimeline {
+    std::vector<TimelineItem> items;
+    std::optional<PageCursor> scrollback;
+    bool truncated = false;
+};
 
 // On-disk cache of timeline rows, one compact BINARY file (.fsc) per
 // (account:source) key — see timeline_codec. Capped to maxEntries. Reads/writes
@@ -17,8 +27,9 @@ class TimelineCache {
 public:
     explicit TimelineCache(std::filesystem::path dir, int max_entries = 200);
 
-    std::vector<TimelineItem> load(const std::string& key) const;
-    void save(const std::string& key, const std::vector<TimelineItem>& items) const;
+    LoadedTimeline load(const std::string& key) const;
+    void save(const std::string& key, const std::vector<TimelineItem>& items,
+              const std::optional<PageCursor>& scrollback) const;
     void remove(const std::string& key) const;
 
     void set_max_entries(int n) { max_entries_ = n; }

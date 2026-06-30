@@ -32,20 +32,37 @@ std::filesystem::path TimelineCache::file_for(const std::string& key) const {
     return dir_ / (sanitize(key) + ".fsc"); // FastSM cache, binary
 }
 
-std::vector<TimelineItem> TimelineCache::load(const std::string& key) const {
+LoadedTimeline TimelineCache::load(const std::string& key) const {
     std::ifstream in(file_for(key), std::ios::binary);
     if (!in)
         return {};
     std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return decode_items(data);
+    CachedTimeline c = decode_cache(data);
+    LoadedTimeline out;
+    out.items = std::move(c.items);
+    out.truncated = c.truncated;
+    if (c.cursor_kind == 1)
+        out.scrollback = PageCursor::max_id(c.cursor_value);
+    else if (c.cursor_kind == 2)
+        out.scrollback = PageCursor::token(c.cursor_value);
+    return out;
 }
 
-void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>& items) const {
+void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>& items,
+                         const std::optional<PageCursor>& scrollback) const {
     const size_t cap = static_cast<size_t>(max_entries_ < 0 ? 0 : max_entries_);
+    const bool truncated = items.size() > cap;
     std::vector<TimelineItem> capped;
-    if (items.size() > cap)
+    if (truncated)
         capped.assign(items.begin(), items.begin() + cap);
-    const std::string blob = encode_items(items.size() > cap ? capped : items);
+    int kind = 0;
+    std::string value;
+    if (scrollback) {
+        kind = scrollback->kind == CursorKind::MaxID ? 1 : scrollback->kind == CursorKind::Token ? 2
+                                                                                                  : 0;
+        value = scrollback->value;
+    }
+    const std::string blob = encode_cache(truncated ? capped : items, truncated, kind, value);
 
     const std::filesystem::path path = file_for(key);
     const std::filesystem::path tmp = path.string() + ".tmp";

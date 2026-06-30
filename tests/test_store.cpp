@@ -44,15 +44,17 @@ void test_timeline_cache() {
         items.push_back(TimelineItem{std::move(s)});
     }
 
-    cache.save(key, items);
-    const std::vector<TimelineItem> loaded = cache.load(key);
-    CHECK_EQ(loaded.size(), size_t(2));
-    CHECK_EQ(loaded[0].id(), std::string("s:a1"));
-    CHECK(loaded[1].status() != nullptr);
-    CHECK_EQ(loaded[1].status()->text, std::string("second"));
+    cache.save(key, items, fastsm::PageCursor::max_id("a2"));
+    const store::LoadedTimeline loaded = cache.load(key);
+    CHECK_EQ(loaded.items.size(), size_t(2));
+    CHECK_EQ(loaded.items[0].id(), std::string("s:a1"));
+    CHECK(loaded.items[1].status() != nullptr);
+    CHECK_EQ(loaded.items[1].status()->text, std::string("second"));
+    CHECK(loaded.scrollback.has_value()); // cursor round-trips
+    CHECK_EQ(loaded.scrollback->value, std::string("a2"));
 
     cache.remove(key);
-    CHECK_EQ(cache.load(key).size(), size_t(0));
+    CHECK_EQ(cache.load(key).items.size(), size_t(0));
 
     std::filesystem::remove_all(dir, ec);
 }
