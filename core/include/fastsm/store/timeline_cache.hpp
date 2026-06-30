@@ -8,10 +8,11 @@
 
 namespace fastsm::store {
 
-// On-disk cache of timeline rows, one compact-JSON file per (account:source)
-// key. Capped to maxEntries. Reads/writes are synchronous and intended to run
-// on the worker thread (the controller never touches it from the UI thread).
-// (Debounced/coalesced writes and compression are a later refinement.)
+// On-disk cache of timeline rows, one compact BINARY file (.fsc) per
+// (account:source) key — see timeline_codec. Capped to maxEntries. Reads/writes
+// are synchronous and intended to run on the worker thread (the controller never
+// touches it from the UI thread). (Debounced/coalesced writes are a later
+// refinement.)
 class TimelineCache {
 public:
     explicit TimelineCache(std::filesystem::path dir, int max_entries = 200);

@@ -50,7 +50,6 @@ enum {
     ID_PREV_ACCOUNT,
     ID_NEXT_ACCOUNT,
     ID_ADD_ACCOUNT,
-    ID_MINIMIZE,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -90,16 +89,12 @@ HMENU build_menu() {
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING | MF_GRAYED, ID_SETTINGS, L"&Settings…\tCtrl+,");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
+    AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
+    AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(app, MF_STRING, ID_CLOSE, L"&Close\tCtrl+W");
     AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
-
-    HMENU file = CreatePopupMenu();
-    AppendMenuW(file, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
-    AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(file, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
-    AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(file, MF_STRING, ID_CLOSE, L"&Close\tCtrl+W");
-    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(file), L"&File");
 
     HMENU edit = CreatePopupMenu();
     AppendMenuW(edit, MF_STRING, ID_CUT, L"Cu&t\tCtrl+X");
@@ -143,10 +138,6 @@ HMENU build_menu() {
     AppendMenuW(account, MF_STRING, ID_NEXT_ACCOUNT, L"&Next Account\tCtrl+]");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(account), L"A&ccount");
 
-    HMENU window = CreatePopupMenu();
-    AppendMenuW(window, MF_STRING, ID_MINIMIZE, L"&Minimize\tCtrl+M");
-    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(window), L"&Window");
-
     return bar;
 }
 
@@ -178,7 +169,6 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'W', ID_CLOSE},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
         {FVIRTKEY | FCONTROL, 'I', ID_POST_INFO},
-        {FVIRTKEY | FCONTROL, 'M', ID_MINIMIZE},
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
         {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
         {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
@@ -534,9 +524,6 @@ void MainWindow::handle_command(int id) {
     case ID_NEXT_ACCOUNT:
         if (app_)
             app_->next_account();
-        break;
-    case ID_MINIMIZE:
-        ShowWindow(hwnd_, SW_MINIMIZE);
         break;
     case ID_CUT:
         SendMessageW(GetFocus(), WM_CUT, 0, 0);

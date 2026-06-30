@@ -1,13 +1,10 @@
 #include "fastsm/store/timeline_cache.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <fstream>
+#include <iterator>
 #include <system_error>
 
-#include "fastsm/models/serialization.hpp"
-
-using nlohmann::json;
+#include "fastsm/store/timeline_codec.hpp"
 
 namespace fastsm::store {
 namespace {
@@ -32,22 +29,15 @@ TimelineCache::TimelineCache(std::filesystem::path dir, int max_entries)
     : dir_(std::move(dir)), max_entries_(max_entries) {}
 
 std::filesystem::path TimelineCache::file_for(const std::string& key) const {
-    return dir_ / (sanitize(key) + ".json");
+    return dir_ / (sanitize(key) + ".fsc"); // FastSM cache, binary
 }
 
 std::vector<TimelineItem> TimelineCache::load(const std::string& key) const {
     std::ifstream in(file_for(key), std::ios::binary);
     if (!in)
         return {};
-    try {
-        json j;
-        in >> j;
-        if (!j.is_array())
-            return {};
-        return j.get<std::vector<TimelineItem>>();
-    } catch (...) {
-        return {};
-    }
+    std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return decode_items(data);
 }
 
 void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>& items) const {
@@ -55,25 +45,20 @@ void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>
     std::vector<TimelineItem> capped;
     if (items.size() > cap)
         capped.assign(items.begin(), items.begin() + cap);
-    const std::vector<TimelineItem>& to_write = items.size() > cap ? capped : items;
+    const std::string blob = encode_items(items.size() > cap ? capped : items);
 
-    try {
-        const json j = to_write;
-        const std::filesystem::path path = file_for(key);
-        const std::filesystem::path tmp = path.string() + ".tmp";
-        {
-            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-            if (!out)
-                return;
-            out << j.dump(); // compact
-        }
-        std::error_code ec;
-        std::filesystem::rename(tmp, path, ec); // atomic-ish replace
-        if (ec)
-            std::filesystem::remove(tmp, ec);
-    } catch (...) {
-        // Best-effort cache; ignore failures.
+    const std::filesystem::path path = file_for(key);
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+        out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
     }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec); // atomic-ish replace
+    if (ec)
+        std::filesystem::remove(tmp, ec);
 }
 
 void TimelineCache::remove(const std::string& key) const {

@@ -26,7 +26,9 @@ std::filesystem::path config_dir() {
 }
 
 std::filesystem::path cache_dir() {
-    return ensure(env_dir(L"LOCALAPPDATA", L".") / L"FastSMRW" / L"timelines");
+    // Kept inside the single FastSM data folder (alongside config), not a
+    // separate %LOCALAPPDATA% location.
+    return ensure(config_dir() / L"cache");
 }
 
 } // namespace fastsm::store

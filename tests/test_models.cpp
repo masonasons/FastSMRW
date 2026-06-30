@@ -1,14 +1,14 @@
 #include "check.hpp"
 
-#include "fastsm/models/serialization.hpp"
+#include "fastsm/store/timeline_codec.hpp"
 
 #include <memory>
 
 using namespace fastsm;
 
 // Build a representative status: a boost of a post that has a CW, media, a
-// quote, a poll, and a reply target — exercising optionals, the recursive
-// shared_ptr, and the variant.
+// quote, a poll, a reply target, and Bluesky strong-ref fields — exercising
+// optionals, the recursive shared_ptr, and the variant through the binary codec.
 static Status sample_inner() {
     Status s;
     s.id = "100";
@@ -26,6 +26,8 @@ static Status sample_inner() {
     s.visibility = Visibility::Unlisted;
     s.favourited = true;
     s.application_name = "FastSMRW";
+    s.cid = "bafyabc";
+    s.like_uri = "at://like/1";
     s.platform = Platform::Mastodon;
 
     MediaAttachment m;
@@ -57,8 +59,12 @@ void test_status_roundtrip() {
     boost.created_at = 1719600100;
     boost.reblog = std::make_shared<Status>(sample_inner());
 
-    nlohmann::json j = boost;
-    Status back = j.get<Status>();
+    const std::string blob = store::encode_items({TimelineItem{boost}});
+    const std::vector<TimelineItem> back_items = store::decode_items(blob);
+    CHECK_EQ(back_items.size(), size_t(1));
+    const Status* bp = back_items[0].status();
+    CHECK(bp != nullptr);
+    const Status& back = *bp;
 
     CHECK_EQ(back.id, std::string("200"));
     CHECK(back.is_boost());
@@ -66,7 +72,6 @@ void test_status_roundtrip() {
     CHECK_EQ(back.reblog->text, std::string("hello & welcome"));
     CHECK(back.reblog->spoiler_text.has_value());
     CHECK_EQ(back.reblog->spoiler_text.value(), std::string("cw"));
-    CHECK(back.reblog->visibility.has_value());
     CHECK(back.reblog->visibility.value() == Visibility::Unlisted);
     CHECK_EQ(back.reblog->media_attachments.size(), size_t(1));
     CHECK(back.reblog->media_attachments[0].type == MediaAttachment::Kind::Image);
@@ -75,41 +80,48 @@ void test_status_roundtrip() {
     CHECK_EQ(back.reblog->poll->options[1].votes_count, 1);
     CHECK(back.reblog->quote != nullptr);
     CHECK_EQ(back.reblog->quote->id, std::string("50"));
-    CHECK(back.reblog->application_name.has_value());
     CHECK_EQ(back.reblog->application_name.value(), std::string("FastSMRW"));
+    CHECK_EQ(back.reblog->cid.value(), std::string("bafyabc"));
+    CHECK_EQ(back.reblog->like_uri.value(), std::string("at://like/1"));
 }
 
 void test_timeline_item_roundtrip() {
-    // Status row
-    TimelineItem si{sample_inner()};
-    nlohmann::json j1 = si;
-    TimelineItem b1 = j1.get<TimelineItem>();
-    CHECK(b1.is_status());
-    CHECK_EQ(b1.id(), std::string("s:100"));
-    CHECK(b1.status() != nullptr);
+    std::vector<TimelineItem> items;
+    items.push_back(TimelineItem{sample_inner()}); // status row
 
-    // Notification row carrying a status
     Notification n;
     n.id = "300";
     n.type = Notification::Kind::Favourite;
     n.account.acct = "dave";
     n.created_at = 1719600200;
     n.status = std::make_shared<Status>(sample_inner());
-    TimelineItem ni{n};
-    nlohmann::json j2 = ni;
-    TimelineItem b2 = j2.get<TimelineItem>();
-    CHECK(b2.is_notification());
-    CHECK_EQ(b2.id(), std::string("n:300"));
-    CHECK(b2.status() != nullptr); // resolved from the notification's post
-    CHECK_EQ(b2.sort_date(), std::int64_t(1719600200));
+    items.push_back(TimelineItem{n}); // notification row
 
-    // User row
     User u;
     u.id = "u9";
     u.acct = "erin";
-    TimelineItem ui{u};
-    nlohmann::json j3 = ui;
-    TimelineItem b3 = j3.get<TimelineItem>();
-    CHECK(b3.is_user());
-    CHECK_EQ(b3.id(), std::string("u:u9"));
+    items.push_back(TimelineItem{u}); // user row
+
+    const std::vector<TimelineItem> back = store::decode_items(store::encode_items(items));
+    CHECK_EQ(back.size(), size_t(3));
+
+    CHECK(back[0].is_status());
+    CHECK_EQ(back[0].id(), std::string("s:100"));
+
+    CHECK(back[1].is_notification());
+    CHECK_EQ(back[1].id(), std::string("n:300"));
+    CHECK(back[1].status() != nullptr); // resolved from the notification's post
+    CHECK_EQ(back[1].sort_date(), std::int64_t(1719600200));
+
+    CHECK(back[2].is_user());
+    CHECK_EQ(back[2].id(), std::string("u:u9"));
+}
+
+void test_codec_corrupt_is_miss() {
+    CHECK_EQ(store::decode_items("not a cache").size(), size_t(0));
+    CHECK_EQ(store::decode_items("").size(), size_t(0));
+    // Right magic but truncated body -> treated as a miss.
+    std::string blob = store::encode_items({TimelineItem{sample_inner()}});
+    blob.resize(blob.size() - 5);
+    CHECK_EQ(store::decode_items(blob).size(), size_t(0));
 }

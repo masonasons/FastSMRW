@@ -11,6 +11,7 @@
 // From test_models.cpp
 void test_status_roundtrip();
 void test_timeline_item_roundtrip();
+void test_codec_corrupt_is_miss();
 
 // From test_util.cpp
 void test_html_stripping();
@@ -67,6 +68,7 @@ int main() {
     test_http_header_lookup();
     test_status_roundtrip();
     test_timeline_item_roundtrip();
+    test_codec_corrupt_is_miss();
     test_html_stripping();
     test_entity_decoding();
     test_date_parsing();
