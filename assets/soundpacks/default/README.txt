@@ -1,9 +1,10 @@
 FastSMRW default soundpack
 ==========================
 
-A soundpack is a folder of short audio files named by event. Drop OGG Vorbis
-(.ogg) files here to enable earcons (WAV and MP3 also work; OGG is preferred and
-matches the original FastSM soundpacks). Filenames below, without extension:
+This is the bundled default soundpack (the original FastSM "default" pack, OGG
+Vorbis). A soundpack is a folder of short audio files named by event; replace
+these or add your own pack under %APPDATA%\FastSMRW\soundpacks\<PackName>\ (WAV
+and MP3 also work; OGG is preferred). Event filenames, without extension:
 
   boundary      hit the top/bottom of a list
   send_post     a post was sent
