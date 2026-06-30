@@ -76,8 +76,8 @@ BEGIN
     EDITTEXT   IDC_SET_CACHELIMIT, 180, 11, 42, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL    "", IDC_SET_CACHELIMIT_SPIN, "msctls_updown32",
                UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
-    LTEXT      "Posts kept on disk per timeline for instant startup (100-20000).",
-               -1, 10, 30, 220, 18
+    LTEXT      "How many posts to keep saved per timeline for instant startup (100-20000). This is storage, not how many load at once - see Advanced.",
+               -1, 10, 30, 224, 26
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 160
@@ -115,8 +115,8 @@ BEGIN
     EDITTEXT   IDC_SET_FETCHPAGES, 162, 11, 42, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL    "", IDC_SET_FETCHPAGES_SPIN, "msctls_updown32",
                UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
-    LTEXT      "Each call fetches about 40 posts. Applies to refresh and scrollback.",
-               -1, 10, 30, 220, 18
+    LTEXT      "Posts loaded per refresh is about 40 x this number. Raise it to load more at once (slower). Applies to refresh and scrollback.",
+               -1, 10, 30, 224, 26
 END
 
 IDD_SET_CONFIRM DIALOGEX 0, 0, 240, 160
