@@ -380,7 +380,7 @@ void MainWindow::populate_timelines_list() {
     updating_selection_ = false;
 }
 
-void MainWindow::bind_current_to_view() {
+void MainWindow::bind_current_to_view(bool force) {
     Timeline* tc = current();
     std::vector<std::string> ids;
     if (tc) {
@@ -388,7 +388,11 @@ void MainWindow::bind_current_to_view() {
         for (const auto& r : tc->rows)
             ids.push_back(r.id);
     }
-    if (ids == rendered_ids_)
+    // The guard avoids disturbing selection on no-op data updates, but a timeline
+    // *switch* must always rebind — otherwise switching to an empty timeline (ids
+    // == the cleared rendered_ids_) would leave the previous timeline's row count
+    // in place, showing blank rows.
+    if (!force && ids == rendered_ids_)
         return;
     rendered_ids_ = ids;
 
@@ -742,8 +746,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
     if (current_ < 0 || current_ >= static_cast<int>(timelines_.size()))
         current_ = 0;
     populate_timelines_list();
-    rendered_ids_.clear(); // force a rebind for the (possibly switched) current timeline
-    bind_current_to_view();
+    bind_current_to_view(/*force=*/true); // a switch always rebinds (even to an empty timeline)
 }
 
 void MainWindow::ev_timeline_updated(const json& e) {

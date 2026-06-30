@@ -55,7 +55,7 @@ private:
     void create_children();
     void layout();
     void populate_timelines_list();
-    void bind_current_to_view();
+    void bind_current_to_view(bool force = false);
     Timeline* current();
     int index_of_id(const Timeline& tl, const std::string& id) const;
     int selected_row() const;

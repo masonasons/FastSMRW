@@ -339,10 +339,16 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
 }
 
 void CoreSession::cmd_open_thread(const json& cmd) {
-    const std::string id = cmd.value("id", std::string{});
-    if (!accounts_.selected() || id.empty())
+    TimelineController* tc = current();
+    const std::string row_id = cmd.value("id", std::string{});
+    if (!accounts_.selected() || !tc || row_id.empty())
         return;
-    spawn_source(TimelineSource::thread(id));
+    // Use the underlying post (for a boost, the original) as the thread root.
+    std::string status_id = row_id;
+    if (const TimelineItem* item = find_item(tc, row_id))
+        if (const Status* s = item->actionable_status())
+            status_id = s->id;
+    spawn_source(TimelineSource::thread(status_id));
 }
 
 void CoreSession::cmd_close_timeline() {
