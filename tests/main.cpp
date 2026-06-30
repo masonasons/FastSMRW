@@ -34,6 +34,11 @@ void test_instance_normalization();
 void test_base64();
 void test_timeline_cache();
 
+// From test_presentation.cpp
+void test_presenter_compact();
+void test_presenter_boost_compact();
+void test_presenter_accessibility();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -68,6 +73,9 @@ int main() {
     test_instance_normalization();
     test_base64();
     test_timeline_cache();
+    test_presenter_compact();
+    test_presenter_boost_compact();
+    test_presenter_accessibility();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

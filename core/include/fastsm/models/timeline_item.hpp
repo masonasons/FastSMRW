@@ -46,6 +46,19 @@ struct TimelineItem {
 
     const User* user() const { return std::get_if<User>(&value); }
 
+    // Mutable access for optimistic UI updates (boost/favorite toggles).
+    Status* mutable_status() {
+        if (auto* s = std::get_if<Status>(&value))
+            return s;
+        if (auto* n = std::get_if<Notification>(&value))
+            return n->status.get();
+        return nullptr;
+    }
+    Status* mutable_actionable_status() {
+        Status* s = mutable_status();
+        return s ? &s->display_status() : nullptr;
+    }
+
     // Sort key (unix seconds); 0 for users (which are not time-ordered).
     std::int64_t sort_date() const {
         if (const auto* s = std::get_if<Status>(&value))
