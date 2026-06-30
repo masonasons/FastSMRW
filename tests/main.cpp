@@ -46,6 +46,11 @@ void test_speech_defaults();
 void test_speech_normalized();
 void test_settings_roundtrip();
 
+// From test_sse.cpp
+void test_sse_basic();
+void test_sse_split_across_feeds();
+void test_sse_multiline_crlf_comments();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -88,6 +93,9 @@ int main() {
     test_speech_defaults();
     test_speech_normalized();
     test_settings_roundtrip();
+    test_sse_basic();
+    test_sse_split_across_feeds();
+    test_sse_multiline_crlf_comments();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;
