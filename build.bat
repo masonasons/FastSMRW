@@ -94,6 +94,7 @@ set "CORE_SRC=%CORE_SRC% core\src\runtime\worker_queue.cpp core\src\timeline\tim
 set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\presentation\speech_settings.cpp core\src\presentation\reply_helper.cpp core\src\sound\sound_manager.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\languages.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\store\app_settings.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\session\core_session.cpp core\src\capi\fastsm_core.cpp"
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
 if errorlevel 1 goto error
@@ -135,7 +136,7 @@ if exist "deps\UniversalSpeech\bin-x64\*.dll" copy /y deps\UniversalSpeech\bin-x
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"
