@@ -1,39 +1,54 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include <windows.h>
 
+#include <nlohmann/json.hpp>
+
+#include "fastsm/capi/fastsm_core.h"
 #include "fastsm/speech/speaker.hpp"
 
-#include "app_controller.hpp"
 #include "compose_dialog.hpp"
-#include "win_executor.hpp"
 
 namespace fastsmui {
 
 // The main application window: a left "Timelines" list and a right virtual
-// "Timeline" posts list. Implements AppView so the controller can push updates.
-class MainWindow : public AppView {
+// "Timeline" posts list. It is a pure client of the core's C ABI: it dispatches
+// JSON commands and renders JSON events; it holds no engine logic, only a cache
+// of what to draw (so a Swift/Kotlin UI would mirror this exactly).
+class MainWindow {
 public:
-    MainWindow(HINSTANCE inst, WinExecutor* exec);
+    explicit MainWindow(HINSTANCE inst);
 
     bool create();
     HWND hwnd() const { return hwnd_; }
     HACCEL accel() const { return accel_; }
-    void set_app(AppController* app) { app_ = app; }
+    void set_core(fastsm_core* core) { core_ = core; }
     void set_speaker(fastsm::speech::Speaker* speaker) { speaker_ = speaker; }
-    void update_auto_refresh_timer(); // (re)arm the auto-refresh timer from settings
     void cycle_focus(); // Tab between the two panes
 
-    // AppView
-    void timelines_rebuilt() override;
-    void current_timeline_changed() override;
-    void timeline_updated(fastsm::TimelineController* tc) override;
-    void announce(const std::string& message) override;
-    void refresh_display() override;
+    // Event sink registered with the core (called on the core thread); marshals
+    // the JSON onto the UI thread via WM_APP_EVENT.
+    static void event_sink(void* user, const char* event_json, size_t len);
 
 private:
+    // A cached, render-ready row (the text is the core-composed speech label).
+    struct Row {
+        std::string id;
+        std::wstring text;
+        bool favorited = false;
+        bool boosted = false;
+    };
+    struct Timeline {
+        std::wstring title;
+        std::string kind;
+        bool dismissable = false;
+        std::vector<Row> rows;
+        std::string selected_id; // UI-authoritative remembered position
+    };
+
     static LRESULT CALLBACK WndProcStatic(HWND, UINT, WPARAM, LPARAM);
     LRESULT WndProc(UINT, WPARAM, LPARAM);
 
@@ -41,36 +56,50 @@ private:
     void layout();
     void populate_timelines_list();
     void bind_current_to_view();
+    Timeline* current();
+    int index_of_id(const Timeline& tl, const std::string& id) const;
     int selected_row() const;
-    const fastsm::Status* selected_status() const; // actionable status of selected row
-    void restore_selection(const std::string& id);  // re-assert the row for an item id
+    std::string selected_id();
+    void restore_selection(const std::string& id);
     void on_view_keydown(int vk);
     void handle_command(int id);
+    void announce(const std::string& message);
+
+    // Commands.
+    void dispatch_cmd(const nlohmann::json& cmd);
     void do_boost();
     void do_favorite();
-    void do_reply();
-    void do_quote();
-    void do_edit();
-    void do_new_post();
+    void compose(const char* mode); // dispatch compose_context for the selection
     void do_post_info();
     void do_new_timeline();
     void do_add_account();
     void do_settings();
     void about();
-    // Builds the compose request for a mode and posts/edits the result.
-    void present_compose(ComposeMode mode, const fastsm::Status* target);
+
+    // Events.
+    void on_event(const std::string& json);
+    void ev_timelines_changed(const nlohmann::json& e);
+    void ev_timeline_updated(const nlohmann::json& e);
+    void ev_settings(const nlohmann::json& e);
+    void ev_compose_context(const nlohmann::json& e);
+    void ev_spawnable(const nlohmann::json& e);
 
     HINSTANCE inst_;
-    WinExecutor* exec_;
-    AppController* app_ = nullptr;
+    fastsm_core* core_ = nullptr;
     fastsm::speech::Speaker* speaker_ = nullptr;
     HWND hwnd_ = nullptr;
     HWND timelines_list_ = nullptr;
     HWND timeline_view_ = nullptr;
     HACCEL accel_ = nullptr;
-    std::wstring scratch_;             // backing store for virtual-list item text
-    std::vector<std::string> rendered_ids_; // last rendered row ids (reload guard)
+    std::wstring scratch_;                   // backing store for virtual-list item text
+    std::vector<std::string> rendered_ids_;  // last rendered row ids (reload guard)
     bool updating_selection_ = false;
+
+    std::vector<Timeline> timelines_;
+    int current_ = 0;
+    nlohmann::json settings_ = nlohmann::json::object(); // cached settings object
+    std::vector<std::string> soundpacks_;
+    std::vector<std::string> spawnable_kinds_; // parallels the New Timeline dialog
 };
 
 } // namespace fastsmui

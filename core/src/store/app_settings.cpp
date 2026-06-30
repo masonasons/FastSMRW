@@ -2,7 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "settings_serde.hpp"
+#include "fastsm/store/settings_json.hpp"
 
 using nlohmann::json;
 using namespace fastsm::present;

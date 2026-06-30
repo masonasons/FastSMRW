@@ -1,7 +1,8 @@
 #pragma once
 
-// Internal: AppSettings <-> JSON, shared by SettingsStore (legacy settings.json)
-// and AppConfigStore (the unified config.json). Not part of the public API.
+// AppSettings <-> JSON. Used by the config store, the C ABI session, and front
+// ends that translate the "settings" event / "update_settings" command to and
+// from the AppSettings struct.
 
 #include <nlohmann/json.hpp>
 

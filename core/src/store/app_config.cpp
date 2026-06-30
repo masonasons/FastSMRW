@@ -9,7 +9,7 @@
 #include "fastsm/store/dpapi.hpp"
 #include "fastsm/store/paths.hpp"
 #include "fastsm/util/base64.hpp"
-#include "settings_serde.hpp"
+#include "fastsm/store/settings_json.hpp"
 
 using nlohmann::json;
 

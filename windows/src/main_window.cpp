@@ -1,21 +1,20 @@
 #include "main_window.hpp"
 
 #include <commctrl.h>
+#include <shellapi.h>
 
 #include "../resources/resource.h"
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
-#include "compose_dialog.hpp"
 #include "new_timeline_dialog.hpp"
 #include "settings_dialog.hpp"
 #include "utf.hpp"
 
 #include "fastsm/fastsm.hpp"
-#include "fastsm/presentation/reply_helper.hpp"
-#include "fastsm/presentation/status_presenter.hpp"
-#include "fastsm/util/date_parsing.hpp"
+#include "fastsm/store/settings_json.hpp"
 
 using namespace fastsm;
+using nlohmann::json;
 
 namespace fastsmui {
 namespace {
@@ -24,20 +23,13 @@ constexpr wchar_t kClassName[] = L"FastSMRWMain";
 constexpr int kTimelinesPaneWidth = 220;
 constexpr int kMinWidth = 920;
 constexpr int kMinHeight = 720;
-constexpr UINT_PTR kAutoRefreshTimer = 1;
 
-// Command ids.
 enum {
     ID_ABOUT = 40010,
     ID_SETTINGS,
     ID_QUIT,
     ID_NEW_POST,
     ID_REFRESH,
-    ID_CLOSE,
-    ID_CUT,
-    ID_COPY,
-    ID_PASTE,
-    ID_SELECT_ALL,
     ID_REPLY,
     ID_BOOST,
     ID_FAVORITE,
@@ -57,9 +49,6 @@ enum {
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
-// GetDpiForWindow is Windows 10 (1607)+. Load it dynamically so the app still
-// launches on Windows 7/8 (where the static import would fail with "entry point
-// not found"); there we fall back to the system DPI.
 int window_dpi(HWND hwnd) {
     using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
     static GetDpiForWindowFn get_dpi = reinterpret_cast<GetDpiForWindowFn>(
@@ -73,9 +62,7 @@ int window_dpi(HWND hwnd) {
     return dpi > 0 ? dpi : 96;
 }
 
-int dpi_scale(HWND hwnd, int value) {
-    return MulDiv(value, window_dpi(hwnd), 96);
-}
+int dpi_scale(HWND hwnd, int value) { return MulDiv(value, window_dpi(hwnd), 96); }
 
 HWND make_listview(HWND parent, int id) {
     HWND list = CreateWindowExW(
@@ -102,9 +89,30 @@ bool confirm(HWND owner, const wchar_t* message, const wchar_t* title) {
     return MessageBoxW(owner, message, title, MB_YESNO | MB_ICONQUESTION) == IDYES;
 }
 
-// Mirrors the Mac main menu (MainMenu.swift). The "App menu" is renamed
-// "Application". Items for features not yet implemented are present but grayed,
-// so the structure matches and stays discoverable.
+json draft_to_json(const PostDraft& d) {
+    json j;
+    j["text"] = d.text;
+    if (d.spoiler_text)
+        j["spoiler_text"] = *d.spoiler_text;
+    if (d.visibility)
+        j["visibility"] = static_cast<int>(*d.visibility);
+    if (d.language)
+        j["language"] = *d.language;
+    if (d.scheduled_at)
+        j["scheduled_at"] = *d.scheduled_at;
+    if (d.poll) {
+        json p;
+        p["options"] = json::array();
+        for (const auto& o : d.poll->options)
+            p["options"].push_back(o);
+        p["multiple"] = d.poll->multiple;
+        p["expires_in_seconds"] = d.poll->expires_in_seconds;
+        j["poll"] = std::move(p);
+    }
+    return j;
+}
+
+// Mirrors the Mac main menu (MainMenu.swift); the App menu is "Application".
 HMENU build_menu() {
     HMENU bar = CreateMenu();
 
@@ -159,7 +167,15 @@ HMENU build_menu() {
 
 } // namespace
 
-MainWindow::MainWindow(HINSTANCE inst, WinExecutor* exec) : inst_(inst), exec_(exec) {}
+MainWindow::MainWindow(HINSTANCE inst) : inst_(inst) {}
+
+void MainWindow::event_sink(void* user, const char* event_json, size_t len) {
+    auto* self = static_cast<MainWindow*>(user);
+    auto* copy = new std::string(event_json, len);
+    if (!self || !self->hwnd_ || !PostMessageW(self->hwnd_, WM_APP_EVENT, 0,
+                                               reinterpret_cast<LPARAM>(copy)))
+        delete copy;
+}
 
 bool MainWindow::create() {
     WNDCLASSEXW wc{};
@@ -233,18 +249,15 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
-    case WM_APP_DISPATCH:
-        if (exec_)
-            exec_->drain();
+    case WM_APP_EVENT: {
+        std::unique_ptr<std::string> s(reinterpret_cast<std::string*>(lp));
+        if (s)
+            on_event(*s);
         return 0;
+    }
 
     case WM_SETFOCUS:
         SetFocus(timeline_view_);
-        return 0;
-
-    case WM_TIMER:
-        if (wp == kAutoRefreshTimer && app_)
-            app_->refresh_open_timelines();
         return 0;
 
     case WM_COMMAND:
@@ -259,42 +272,32 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         if (hdr->hwndFrom == timeline_view_) {
             if (hdr->code == LVN_GETDISPINFOW) {
                 auto* di = reinterpret_cast<NMLVDISPINFOW*>(lp);
-                TimelineController* tc = app_ ? app_->current() : nullptr;
+                Timeline* tc = current();
                 if (tc && (di->item.mask & LVIF_TEXT)) {
-                    const auto& items = tc->items();
                     const int idx = di->item.iItem;
-                    if (idx >= 0 && idx < static_cast<int>(items.size())) {
-                        // The displayed/spoken post text follows the configurable
-                        // speech template (default order matches the Mac).
-                        scratch_ = to_wide(present::accessibility_label(
-                            items[static_cast<size_t>(idx)], util::now_unix()));
+                    if (idx >= 0 && idx < static_cast<int>(tc->rows.size())) {
+                        scratch_ = tc->rows[static_cast<size_t>(idx)].text;
                         di->item.pszText = scratch_.data();
                     }
                 }
             } else if (hdr->code == LVN_KEYDOWN) {
-                auto* kd = reinterpret_cast<NMLVKEYDOWN*>(lp);
-                on_view_keydown(kd->wVKey);
+                on_view_keydown(reinterpret_cast<NMLVKEYDOWN*>(lp)->wVKey);
             } else if (hdr->code == LVN_ITEMCHANGED || hdr->code == LVN_ODSTATECHANGED) {
-                // Remember the focused row per-timeline (position memory). A
-                // virtual list reports focus via either notification, so query
-                // the focused item rather than trust the struct. (No per-row
-                // earcon: like the Mac app, row movement is conveyed by the
-                // screen reader, not a "navigate" sound, which is silent.)
-                if (!updating_selection_ && app_ && app_->current()) {
+                if (!updating_selection_) {
+                    Timeline* tc = current();
                     const int focused = ListView_GetNextItem(timeline_view_, -1, LVNI_FOCUSED);
-                    const auto& items = app_->current()->items();
-                    if (focused >= 0 && focused < static_cast<int>(items.size()))
-                        app_->current()->note_selection(items[static_cast<size_t>(focused)].id());
+                    if (tc && focused >= 0 && focused < static_cast<int>(tc->rows.size())) {
+                        tc->selected_id = tc->rows[static_cast<size_t>(focused)].id;
+                        dispatch_cmd({{"cmd", "note_selection"}, {"id", tc->selected_id}});
+                    }
                 }
             }
         } else if (hdr->hwndFrom == timelines_list_) {
             if (hdr->code == LVN_ITEMCHANGED && !updating_selection_) {
                 auto* nm = reinterpret_cast<NMLISTVIEW*>(lp);
                 if ((nm->uChanged & LVIF_STATE) && (nm->uNewState & LVIS_SELECTED) &&
-                    !(nm->uOldState & LVIS_SELECTED)) {
-                    if (app_)
-                        app_->select_timeline(nm->iItem);
-                }
+                    !(nm->uOldState & LVIS_SELECTED))
+                    dispatch_cmd({{"cmd", "select_timeline"}, {"index", nm->iItem}});
             }
         }
         return 0;
@@ -337,39 +340,44 @@ void MainWindow::layout() {
     ListView_SetColumnWidth(timeline_view_, 0, total - pane - dpi_scale(hwnd_, 24));
 }
 
+MainWindow::Timeline* MainWindow::current() {
+    if (current_ < 0 || current_ >= static_cast<int>(timelines_.size()))
+        return nullptr;
+    return &timelines_[static_cast<size_t>(current_)];
+}
+
+int MainWindow::index_of_id(const Timeline& tl, const std::string& id) const {
+    if (id.empty())
+        return -1;
+    for (size_t i = 0; i < tl.rows.size(); ++i)
+        if (tl.rows[i].id == id)
+            return static_cast<int>(i);
+    return -1;
+}
+
 void MainWindow::populate_timelines_list() {
     updating_selection_ = true;
     ListView_DeleteAllItems(timelines_list_);
-    if (app_) {
-        const auto timelines = app_->timelines();
-        for (size_t i = 0; i < timelines.size(); ++i) {
-            const std::wstring title = to_wide(timelines[i]->source().title());
-            LVITEMW item{};
-            item.mask = LVIF_TEXT;
-            item.iItem = static_cast<int>(i);
-            item.pszText = const_cast<wchar_t*>(title.c_str());
-            ListView_InsertItem(timelines_list_, &item);
-        }
-        const int cur = app_->current_index();
-        if (cur >= 0 && cur < static_cast<int>(timelines.size()))
-            ListView_SetItemState(timelines_list_, cur, LVIS_SELECTED | LVIS_FOCUSED,
-                                  LVIS_SELECTED | LVIS_FOCUSED);
+    for (size_t i = 0; i < timelines_.size(); ++i) {
+        LVITEMW item{};
+        item.mask = LVIF_TEXT;
+        item.iItem = static_cast<int>(i);
+        item.pszText = const_cast<wchar_t*>(timelines_[i].title.c_str());
+        ListView_InsertItem(timelines_list_, &item);
     }
+    if (current_ >= 0 && current_ < static_cast<int>(timelines_.size()))
+        ListView_SetItemState(timelines_list_, current_, LVIS_SELECTED | LVIS_FOCUSED,
+                              LVIS_SELECTED | LVIS_FOCUSED);
     updating_selection_ = false;
 }
 
 void MainWindow::bind_current_to_view() {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
-
-    // Build the current row-id list and only reload when it actually changes
-    // (the Mac reloads on `ids != renderedIDs`). This stops non-structural
-    // updates (e.g. a favorite toggle) from disturbing the selection/scroll.
+    Timeline* tc = current();
     std::vector<std::string> ids;
     if (tc) {
-        const auto& items = tc->items();
-        ids.reserve(items.size());
-        for (const auto& it : items)
-            ids.push_back(it.id());
+        ids.reserve(tc->rows.size());
+        for (const auto& r : tc->rows)
+            ids.push_back(r.id);
     }
     if (ids == rendered_ids_)
         return;
@@ -379,21 +387,11 @@ void MainWindow::bind_current_to_view() {
     updating_selection_ = true;
     ListView_SetItemCountEx(timeline_view_, count, LVSICF_NOSCROLL);
     if (tc && count > 0) {
-        // Restore to the remembered post; if it's gone (or none yet), adopt the
-        // top row as the position so future incoming posts track it instead of
-        // a fixed index.
-        int idx = tc->visible_index_of(tc->selected_id());
+        int idx = index_of_id(*tc, tc->selected_id);
         if (idx < 0) {
             idx = 0;
-            tc->note_selection(tc->items()[0].id());
+            tc->selected_id = tc->rows[0].id; // adopt the top as the position
         }
-        // Re-assert selection unless the target row is already fully
-        // selected+focused (which would make this a redundant screen-reader
-        // re-announcement). Keying off the row's actual state — not the focused
-        // index — matters on a timeline switch: SetItemCountEx can drop the
-        // selection while leaving the previous timeline's focus index intact, so
-        // an index check alone would leave the restored row focused-but-unselected
-        // (a lost position to a screen reader).
         const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
         if ((ListView_GetItemState(timeline_view_, idx, want) & want) != want)
             ListView_SetItemState(timeline_view_, idx, want, want);
@@ -407,32 +405,58 @@ int MainWindow::selected_row() const {
     return ListView_GetNextItem(timeline_view_, -1, LVNI_FOCUSED);
 }
 
+std::string MainWindow::selected_id() {
+    Timeline* tc = current();
+    const int row = selected_row();
+    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
+        return {};
+    return tc->rows[static_cast<size_t>(row)].id;
+}
+
+void MainWindow::restore_selection(const std::string& id) {
+    Timeline* tc = current();
+    if (!tc || id.empty())
+        return;
+    const int idx = index_of_id(*tc, id);
+    if (idx < 0)
+        return;
+    tc->selected_id = id;
+    const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
+    updating_selection_ = true;
+    ListView_SetItemState(timeline_view_, idx, want, want);
+    ListView_EnsureVisible(timeline_view_, idx, FALSE);
+    updating_selection_ = false;
+}
+
 void MainWindow::cycle_focus() {
     HWND focus = GetFocus();
     SetFocus(focus == timeline_view_ ? timelines_list_ : timeline_view_);
+}
+
+void MainWindow::dispatch_cmd(const json& cmd) {
+    if (!core_)
+        return;
+    const std::string s = cmd.dump();
+    fastsm_core_dispatch(core_, s.c_str(), s.size());
 }
 
 void MainWindow::on_view_keydown(int vk) {
     switch (vk) {
     case VK_UP:
     case VK_DOWN: {
-        // Boundary earcon when trying to move past the top/bottom (the native
-        // list won't move; the screen reader stays silent otherwise).
-        TimelineController* tc = app_ ? app_->current() : nullptr;
-        const int count = tc ? static_cast<int>(tc->items().size()) : 0;
+        Timeline* tc = current();
+        const int count = tc ? static_cast<int>(tc->rows.size()) : 0;
         const int row = selected_row();
         const bool at_edge = (vk == VK_UP && row <= 0) || (vk == VK_DOWN && row >= count - 1);
-        if (at_edge && count > 0 && app_ && app_->sound())
-            app_->sound()->play(sound::Earcon::Boundary);
+        if (at_edge && count > 0)
+            dispatch_cmd({{"cmd", "play_earcon"}, {"name", "boundary"}});
         break;
     }
     case VK_LEFT:
-        if (app_)
-            app_->previous_timeline();
+        dispatch_cmd({{"cmd", "select_timeline"}, {"dir", "prev"}});
         break;
     case VK_RIGHT:
-        if (app_)
-            app_->next_timeline();
+        dispatch_cmd({{"cmd", "select_timeline"}, {"dir", "next"}});
         break;
     case 'B':
         do_boost();
@@ -441,18 +465,16 @@ void MainWindow::on_view_keydown(int vk) {
         do_favorite();
         break;
     case 'R':
-        do_reply();
+        compose("reply");
         break;
     case 'Q':
-        do_quote();
+        compose("quote");
         break;
     case 'E':
-        do_edit();
+        compose("edit");
         break;
     case VK_DELETE:
-        // Close a spawned (dismissable) timeline.
-        if (app_ && app_->close_current_timeline() && app_->sound())
-            app_->sound()->play(sound::Earcon::Close);
+        dispatch_cmd({{"cmd", "close_timeline"}});
         break;
     default:
         break;
@@ -460,237 +482,106 @@ void MainWindow::on_view_keydown(int vk) {
 }
 
 void MainWindow::do_boost() {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
+    Timeline* tc = current();
     const int row = selected_row();
-    if (!tc || row < 0)
+    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
         return;
-    const Status* s = selected_status();
-    const bool boosting = s ? !s->boosted : true;
-    if (boosting && app_->settings().confirm_boost && !confirm(hwnd_, L"Boost this post?", L"Boost"))
+    const Row& r = tc->rows[static_cast<size_t>(row)];
+    const bool boosting = !r.boosted;
+    if (boosting && settings_.value("confirm_boost", false) &&
+        !confirm(hwnd_, L"Boost this post?", L"Boost"))
         return;
-    const bool now_boosted = tc->toggle_boost(row);
-    if (now_boosted && app_->sound())
-        app_->sound()->play(sound::Earcon::Boost);
+    dispatch_cmd({{"cmd", "toggle_boost"}, {"id", r.id}});
 }
 
 void MainWindow::do_favorite() {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
+    Timeline* tc = current();
     const int row = selected_row();
-    if (!tc || row < 0)
+    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
         return;
-    const Status* s = selected_status();
-    const bool favoriting = s ? !s->favourited : true;
-    if (favoriting && app_->settings().confirm_favorite &&
+    const Row& r = tc->rows[static_cast<size_t>(row)];
+    const bool favoriting = !r.favorited;
+    if (favoriting && settings_.value("confirm_favorite", false) &&
         !confirm(hwnd_, L"Favorite this post?", L"Favorite"))
         return;
-    const bool now_fav = tc->toggle_favorite(row);
-    if (app_->sound())
-        app_->sound()->play(now_fav ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+    dispatch_cmd({{"cmd", "toggle_favorite"}, {"id", r.id}});
 }
 
-const Status* MainWindow::selected_status() const {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
-    const int row = selected_row();
-    if (!tc || row < 0)
-        return nullptr;
-    const auto& items = tc->items();
-    if (row >= static_cast<int>(items.size()))
-        return nullptr;
-    return items[static_cast<size_t>(row)].actionable_status();
-}
-
-void MainWindow::restore_selection(const std::string& id) {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
-    if (!tc || id.empty())
-        return;
-    const int idx = tc->visible_index_of(id);
-    if (idx < 0)
-        return;
-    tc->note_selection(id); // undo any spurious selection captured during the modal
-    const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
-    updating_selection_ = true;
-    ListView_SetItemState(timeline_view_, idx, want, want);
-    ListView_EnsureVisible(timeline_view_, idx, FALSE);
-    updating_selection_ = false;
-}
-
-void MainWindow::present_compose(ComposeMode mode, const Status* target) {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
-    if (!tc || !tc->account()) {
-        announce("Add an account before posting.");
-        return;
-    }
-    SocialAccount* account = tc->account();
-
-    ComposeRequest req;
-    req.mode = mode;
-    req.features = account->features();
-    req.max_chars = account->max_chars();
-    req.enter_to_send = app_->settings().enter_to_send;
-
-    std::string reply_to_id, quoted_status_id, edit_id;
-    if (mode == ComposeMode::Reply && target) {
-        req.title = L"Reply";
-        req.context_label = "Replying to " + target->account.best_name() + ": " + target->text;
-        if (account->platform() == Platform::Mastodon)
-            req.prefill_text = present::mention_prefix(*target, account->me());
-        // Inherit the original post's attributes: visibility + content warning.
-        req.default_visibility = target->visibility;
-        if (target->spoiler_text)
-            req.prefill_cw = *target->spoiler_text;
-        reply_to_id = target->id;
-    } else if (mode == ComposeMode::Quote && target) {
-        req.title = L"Quote Post";
-        req.context_label = "Quoting " + target->account.best_name() + ": " + target->text;
-        quoted_status_id = target->id;
-    } else if (mode == ComposeMode::Edit && target) {
-        req.title = L"Edit Post";
-        req.prefill_text = target->text;
-        if (target->spoiler_text)
-            req.prefill_cw = *target->spoiler_text;
-        edit_id = target->id;
-    } else {
-        req.title = L"New Post";
-    }
-
-    // Remember where we are; closing the modal dialog hands focus back to the
-    // list, which can reset its focused row (and our position) to the top.
-    const std::string keep_id = tc->selected_id();
-    auto result = show_compose_dialog(hwnd_, inst_, req);
-    restore_selection(keep_id);
-    if (!result)
-        return;
-    PostDraft draft = std::move(result->draft);
-    if (!reply_to_id.empty())
-        draft.reply_to_id = reply_to_id;
-    if (!quoted_status_id.empty())
-        draft.quoted_status_id = quoted_status_id;
-
-    auto done = [this](bool ok) {
-        if (app_ && app_->sound())
-            app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
-    };
-    if (mode == ComposeMode::Edit && !edit_id.empty())
-        tc->edit_post(edit_id, draft, done);
-    else
-        tc->post(draft, done);
-}
-
-void MainWindow::do_new_post() { present_compose(ComposeMode::New, nullptr); }
-
-void MainWindow::do_reply() {
-    if (const Status* s = selected_status())
-        present_compose(ComposeMode::Reply, s);
-}
-
-void MainWindow::do_quote() {
-    if (const Status* s = selected_status())
-        present_compose(ComposeMode::Quote, s);
-}
-
-void MainWindow::do_edit() {
-    const Status* s = selected_status();
-    TimelineController* tc = app_ ? app_->current() : nullptr;
-    if (!s || !tc || !tc->account())
-        return;
-    if (s->account.id != tc->account()->me().id) {
-        announce("You can only edit your own posts.");
-        return;
-    }
-    present_compose(ComposeMode::Edit, s);
-}
-
-void MainWindow::do_new_timeline() {
-    if (!app_)
-        return;
-    const auto sources = app_->spawnable_timelines();
-    if (sources.empty()) {
-        announce("No more timelines to add for this account.");
-        return;
-    }
-    std::vector<std::wstring> titles;
-    titles.reserve(sources.size());
-    for (const auto& s : sources)
-        titles.push_back(to_wide(s.title()));
-    if (auto choice = show_new_timeline_dialog(hwnd_, inst_, titles))
-        if (*choice >= 0 && *choice < static_cast<int>(sources.size()))
-            app_->spawn_timeline(sources[static_cast<size_t>(*choice)]);
-}
-
-void MainWindow::do_settings() {
-    if (!app_)
-        return;
-    std::vector<std::string> packs{"Default"};
-    if (app_->sound())
-        packs = app_->sound()->list_soundpacks();
-    if (auto result = show_settings_dialog(hwnd_, inst_, app_->settings(), packs)) {
-        app_->update_settings(*result);
-        update_auto_refresh_timer(); // interval may have changed
-    }
-}
-
-void MainWindow::do_add_account() {
-    auto data = show_add_account_dialog(hwnd_, inst_);
-    if (!data || !app_)
-        return;
-    auto done = [this](bool ok, std::string err) {
-        announce(ok ? "Account added." : ("Add account failed: " + err));
-    };
-    if (data->platform == 0)
-        app_->add_mastodon(data->service, done);
-    else
-        app_->add_bluesky(data->service, data->handle, data->app_password, done);
-    announce(data->platform == 0 ? "Authorizing in your browser..." : "Signing in...");
-}
-
-void MainWindow::about() {
-    std::wstring text = L"FastSMRW\r\nA fast, accessible Mastodon/Bluesky client.\r\nVersion ";
-    for (const char* p = fastsm::version(); *p; ++p)
-        text.push_back(static_cast<wchar_t>(*p));
-    MessageBoxW(hwnd_, text.c_str(), L"About FastSMRW", MB_OK | MB_ICONINFORMATION);
+void MainWindow::compose(const char* mode) {
+    json cmd = {{"cmd", "compose_context"}, {"mode", mode}};
+    const std::string id = selected_id();
+    if (!id.empty())
+        cmd["id"] = id;
+    dispatch_cmd(cmd);
 }
 
 void MainWindow::do_post_info() {
-    TimelineController* tc = app_ ? app_->current() : nullptr;
+    Timeline* tc = current();
     const int row = selected_row();
-    if (!tc || row < 0)
+    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
         return;
-    const auto& items = tc->items();
-    if (row >= static_cast<int>(items.size()))
+    MessageBoxW(hwnd_, tc->rows[static_cast<size_t>(row)].text.c_str(), L"Post Info",
+                MB_OK | MB_ICONINFORMATION);
+}
+
+void MainWindow::do_new_timeline() { dispatch_cmd({{"cmd", "get_spawnable"}}); }
+
+void MainWindow::do_add_account() {
+    auto data = show_add_account_dialog(hwnd_, inst_);
+    if (!data)
         return;
-    const std::wstring label =
-        to_wide(present::accessibility_label(items[static_cast<size_t>(row)], util::now_unix()));
-    MessageBoxW(hwnd_, label.c_str(), L"Post Info", MB_OK);
+    json cmd = {{"cmd", "add_account"}};
+    if (data->platform == 0) {
+        cmd["platform"] = "mastodon";
+        cmd["instance"] = data->service;
+    } else {
+        cmd["platform"] = "bluesky";
+        cmd["service"] = data->service;
+        cmd["handle"] = data->handle;
+        cmd["app_password"] = data->app_password;
+    }
+    dispatch_cmd(cmd);
+}
+
+void MainWindow::do_settings() {
+    store::AppSettings s = store::settings_from_json(settings_);
+    std::vector<std::string> packs = soundpacks_.empty()
+                                         ? std::vector<std::string>{"Default"}
+                                         : soundpacks_;
+    if (auto result = show_settings_dialog(hwnd_, inst_, s, packs))
+        dispatch_cmd({{"cmd", "update_settings"}, {"settings", store::settings_to_json(*result)}});
+}
+
+void MainWindow::about() {
+    std::wstring text = L"FastSMRW\nVersion ";
+    text += to_wide(fastsm::version());
+    text += L"\n\nA fast, accessible Mastodon/Bluesky client.";
+    MessageBoxW(hwnd_, text.c_str(), L"About FastSMRW", MB_OK | MB_ICONINFORMATION);
 }
 
 void MainWindow::handle_command(int id) {
     if (id >= ID_GOTO_TIMELINE_1 && id <= ID_GOTO_TIMELINE_1 + 8) {
-        if (app_)
-            app_->select_timeline(id - ID_GOTO_TIMELINE_1);
+        dispatch_cmd({{"cmd", "select_timeline"}, {"number", id - ID_GOTO_TIMELINE_1 + 1}});
         return;
     }
     switch (id) {
-    case ID_NEW_POST:
-        do_new_post();
-        break;
-    case ID_REFRESH:
-        if (app_ && app_->current())
-            app_->current()->refresh();
-        break;
-    case ID_QUIT:
-        DestroyWindow(hwnd_);
-        break;
     case ID_ABOUT:
         about();
         break;
     case ID_SETTINGS:
         do_settings();
         break;
-    case ID_ADD_ACCOUNT:
-        do_add_account();
+    case ID_QUIT:
+        DestroyWindow(hwnd_);
+        break;
+    case ID_NEW_POST:
+        compose("new");
+        break;
+    case ID_REFRESH:
+        dispatch_cmd({{"cmd", "refresh"}});
         break;
     case ID_REPLY:
-        do_reply();
+        compose("reply");
         break;
     case ID_BOOST:
         do_boost();
@@ -699,7 +590,7 @@ void MainWindow::handle_command(int id) {
         do_favorite();
         break;
     case ID_QUOTE:
-        do_quote();
+        compose("quote");
         break;
     case ID_POST_INFO:
         do_post_info();
@@ -708,72 +599,171 @@ void MainWindow::handle_command(int id) {
         do_new_timeline();
         break;
     case ID_CLEAR_TIMELINE:
-        if (app_ && app_->current()) {
-            if (!app_->settings().confirm_clear_timeline ||
-                confirm(hwnd_, L"Clear this timeline? This removes the loaded posts and its cache.",
-                        L"Clear Timeline")) {
-                app_->current()->clear();
-                if (app_->sound())
-                    app_->sound()->play(sound::Earcon::Delete);
-            }
-        }
+        if (!settings_.value("confirm_clear_timeline", true) ||
+            confirm(hwnd_, L"Clear this timeline? This removes the loaded posts and its cache.",
+                    L"Clear Timeline"))
+            dispatch_cmd({{"cmd", "clear_timeline"}});
         break;
     case ID_PREV_ACCOUNT:
-        if (app_)
-            app_->previous_account();
+        dispatch_cmd({{"cmd", "select_account"}, {"dir", "prev"}});
         break;
     case ID_NEXT_ACCOUNT:
-        if (app_)
-            app_->next_account();
+        dispatch_cmd({{"cmd", "select_account"}, {"dir", "next"}});
+        break;
+    case ID_ADD_ACCOUNT:
+        do_add_account();
         break;
     default:
         break;
     }
 }
 
-// --- AppView ---
+// --- events ---
 
-void MainWindow::timelines_rebuilt() {
+void MainWindow::on_event(const std::string& js) {
+    json e;
+    try {
+        e = json::parse(js);
+    } catch (...) {
+        return;
+    }
+    const std::string ev = e.value("event", std::string{});
+    if (ev == "timelines_changed")
+        ev_timelines_changed(e);
+    else if (ev == "timeline_updated")
+        ev_timeline_updated(e);
+    else if (ev == "announce")
+        announce(e.value("message", std::string{}));
+    else if (ev == "settings")
+        ev_settings(e);
+    else if (ev == "compose_context")
+        ev_compose_context(e);
+    else if (ev == "spawnable_timelines")
+        ev_spawnable(e);
+    else if (ev == "open_url")
+        ShellExecuteW(nullptr, L"open", to_wide(e.value("url", std::string{})).c_str(), nullptr,
+                      nullptr, SW_SHOW);
+    // accounts_changed / auth_result / post_result: nothing extra (sounds + any
+    // announce come from the core).
+}
+
+void MainWindow::ev_timelines_changed(const json& e) {
+    std::vector<Timeline> next;
+    for (const auto& t : e.value("timelines", json::array())) {
+        Timeline tl;
+        tl.title = to_wide(t.value("title", std::string{}));
+        tl.kind = t.value("kind", std::string{});
+        tl.dismissable = t.value("dismissable", false);
+        for (const auto& old : timelines_) // carry rows/position for the same timeline
+            if (old.kind == tl.kind) {
+                tl.rows = old.rows;
+                tl.selected_id = old.selected_id;
+                break;
+            }
+        next.push_back(std::move(tl));
+    }
+    timelines_ = std::move(next);
+    current_ = e.value("current", 0);
+    if (current_ < 0 || current_ >= static_cast<int>(timelines_.size()))
+        current_ = 0;
     populate_timelines_list();
+    rendered_ids_.clear(); // force a rebind for the (possibly switched) current timeline
     bind_current_to_view();
 }
 
-void MainWindow::current_timeline_changed() {
-    updating_selection_ = true;
-    const int cur = app_ ? app_->current_index() : -1;
-    if (cur >= 0)
-        ListView_SetItemState(timelines_list_, cur, LVIS_SELECTED | LVIS_FOCUSED,
-                              LVIS_SELECTED | LVIS_FOCUSED);
-    updating_selection_ = false;
-    bind_current_to_view();
-    if (TimelineController* tc = app_ ? app_->current() : nullptr)
-        announce(tc->source().title());
-}
-
-void MainWindow::timeline_updated(TimelineController* tc) {
-    if (app_ && tc == app_->current())
+void MainWindow::ev_timeline_updated(const json& e) {
+    const int index = e.value("index", -1);
+    if (index < 0 || index >= static_cast<int>(timelines_.size()))
+        return;
+    Timeline& tl = timelines_[static_cast<size_t>(index)];
+    tl.rows.clear();
+    for (const auto& r : e.value("rows", json::array())) {
+        Row row;
+        row.id = r.value("id", std::string{});
+        row.text = to_wide(r.value("text", std::string{}));
+        row.favorited = r.value("favorited", false);
+        row.boosted = r.value("boosted", false);
+        tl.rows.push_back(std::move(row));
+    }
+    if (tl.selected_id.empty()) // first load: adopt the core's remembered position
+        tl.selected_id = e.value("selected_id", std::string{});
+    if (index == current_)
         bind_current_to_view();
 }
 
-void MainWindow::refresh_display() {
-    // Force the posts list to re-query its text (e.g. after a speech-order change).
-    InvalidateRect(timeline_view_, nullptr, FALSE);
+void MainWindow::ev_settings(const json& e) {
+    settings_ = e.value("settings", json::object());
+    soundpacks_.clear();
+    for (const auto& p : e.value("soundpacks", json::array()))
+        soundpacks_.push_back(p.get<std::string>());
 }
 
-void MainWindow::update_auto_refresh_timer() {
-    KillTimer(hwnd_, kAutoRefreshTimer);
-    const int secs = app_ ? app_->settings().auto_refresh_seconds : 0;
-    if (secs > 0)
-        SetTimer(hwnd_, kAutoRefreshTimer, static_cast<UINT>(secs) * 1000, nullptr);
+void MainWindow::ev_compose_context(const json& e) {
+    const std::string keep_id = selected_id();
+    ComposeRequest req;
+    const std::string mode = e.value("mode", std::string("new"));
+    req.mode = mode == "reply"  ? ComposeMode::Reply
+               : mode == "quote" ? ComposeMode::Quote
+               : mode == "edit"  ? ComposeMode::Edit
+                                 : ComposeMode::New;
+    req.title = to_wide(e.value("title", std::string("New Post")));
+    req.context_label = e.value("context_label", std::string{});
+    req.prefill_text = e.value("prefill_text", std::string{});
+    req.prefill_cw = e.value("prefill_cw", std::string{});
+    req.max_chars = e.value("max_chars", 500);
+    req.enter_to_send = e.value("enter_to_send", false);
+    if (e.contains("default_visibility"))
+        req.default_visibility = static_cast<Visibility>(e["default_visibility"].get<int>());
+    if (auto f = e.find("features"); f != e.end() && f->is_object()) {
+        req.features.visibility = f->value("visibility", false);
+        req.features.content_warning = f->value("content_warning", false);
+        req.features.quote_posts = f->value("quote_posts", false);
+        req.features.polls = f->value("polls", false);
+        req.features.editing = f->value("editing", false);
+        req.features.scheduling = f->value("scheduling", false);
+    }
+
+    auto result = show_compose_dialog(hwnd_, inst_, req);
+    restore_selection(keep_id);
+    if (!result)
+        return;
+
+    json draft = draft_to_json(result->draft);
+    if (e.contains("reply_to_id"))
+        draft["reply_to_id"] = e["reply_to_id"];
+    if (e.contains("quoted_status_id"))
+        draft["quoted_status_id"] = e["quoted_status_id"];
+    json cmd = {{"cmd", "post"}, {"draft", draft}};
+    if (e.contains("edit_id"))
+        cmd["edit_id"] = e["edit_id"];
+    dispatch_cmd(cmd);
+}
+
+void MainWindow::ev_spawnable(const json& e) {
+    spawnable_kinds_.clear();
+    std::vector<std::wstring> titles;
+    for (const auto& t : e.value("timelines", json::array())) {
+        spawnable_kinds_.push_back(t.value("kind", std::string{}));
+        titles.push_back(to_wide(t.value("title", std::string{})));
+    }
+    if (titles.empty()) {
+        announce("No more timelines to add for this account.");
+        return;
+    }
+    auto idx = show_new_timeline_dialog(hwnd_, inst_, titles);
+    if (idx && *idx >= 0 && *idx < static_cast<int>(spawnable_kinds_.size()))
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", spawnable_kinds_[static_cast<size_t>(*idx)]}});
 }
 
 void MainWindow::announce(const std::string& message) {
     std::wstring title = L"FastSMRW";
-    if (!message.empty())
-        title += L" \x2014 " + to_wide(message);
+    if (!message.empty()) {
+        title += L" — ";
+        title += to_wide(message);
+    }
     SetWindowTextW(hwnd_, title.c_str());
     if (speaker_ && !message.empty())
-        speaker_->speak(message, true); // spoken when a speech backend is present
+        speaker_->speak(message, true);
 }
 
 } // namespace fastsmui

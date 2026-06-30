@@ -1,4 +1,4 @@
-// FastSMRW — Win32 front end entry point.
+// FastSMRW — Win32 front end entry point. A pure client of the core's C ABI.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -7,17 +7,16 @@
 #include <commctrl.h>
 
 #include <filesystem>
+#include <string>
 
-#include "app_controller.hpp"
-#include "app_messages.hpp"
-#include "main_window.hpp"
-#include "win_executor.hpp"
-#include "win_speech.hpp"
+#include <nlohmann/json.hpp>
 
-#include "fastsm/presentation/speech_settings.hpp"
-#include "fastsm/sound/sound_manager.hpp"
-#include "fastsm/store/app_settings.hpp"
+#include "fastsm/capi/fastsm_core.h"
 #include "fastsm/store/paths.hpp"
+
+#include "main_window.hpp"
+#include "utf.hpp"
+#include "win_speech.hpp"
 
 #pragma comment(lib, "comctl32.lib")
 
@@ -37,32 +36,32 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
                                               ICC_UPDOWN_CLASS};
     InitCommonControlsEx(&icc);
 
-    WinExecutor executor;
-
-    fastsm::sound::SoundManager sound;
-    // Bundled packs ship next to the exe (dist/soundpacks); user packs live in
-    // %APPDATA%\FastSMRW\soundpacks. AppController applies the saved sound
-    // settings (enabled/soundpack) and SpeechConfig once it loads preferences.
-    sound.set_bundled_packs_dir(exe_dir() / "soundpacks");
-    sound.set_user_packs_dir(fastsm::store::config_dir() / "soundpacks");
-
     WinSpeaker speaker; // UniversalSpeech-backed when the dep is present, else no-op
 
-    MainWindow window(hInstance, &executor);
+    MainWindow window(hInstance);
     if (!window.create())
         return 1;
     window.set_speaker(&speaker);
-    executor.bind(window.hwnd(), WM_APP_DISPATCH);
 
-    AppController app(&executor, &sound);
-    window.set_app(&app);
-    app.set_view(&window);
+    // Build the core: it gets the data folder (config.json + cache + user
+    // soundpacks) and where the bundled soundpacks ship (next to the exe).
+    nlohmann::json cfg;
+    cfg["config_dir"] = to_utf8(fastsm::store::config_dir().wstring());
+    cfg["soundpacks_dir"] = to_utf8((exe_dir() / L"soundpacks").wstring());
+    cfg["user_agent"] = "FastSMRW/0.0.1";
+    const std::string cfg_str = cfg.dump();
+
+    fastsm_core* core = fastsm_core_create(cfg_str.c_str());
+    if (!core)
+        return 1;
+    window.set_core(core);
+    fastsm_core_set_event_sink(core, &MainWindow::event_sink, &window);
 
     ShowWindow(window.hwnd(), nCmdShow);
     UpdateWindow(window.hwnd());
 
-    app.bootstrap();
-    window.update_auto_refresh_timer();
+    const std::string start = R"({"cmd":"start"})";
+    fastsm_core_dispatch(core, start.c_str(), start.size());
 
     const HACCEL accel = window.accel();
     MSG msg{};
@@ -78,5 +77,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+
+    fastsm_core_destroy(core); // stops the core threads
     return static_cast<int>(msg.wParam);
 }

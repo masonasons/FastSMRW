@@ -13,7 +13,7 @@
 #include "fastsm/store/app_config.hpp"
 #include "fastsm/util/date_parsing.hpp"
 
-#include "../store/settings_serde.hpp" // settings_to_json / settings_from_json
+#include "fastsm/store/settings_json.hpp"
 
 using nlohmann::json;
 
@@ -138,6 +138,9 @@ void CoreSession::cmd_start() {
             rebuild_timelines();
             emit_accounts();
             emit_timelines();
+            emit_settings();
+            if (!accounts_.selected())
+                emit_announce("No account yet. Use Add Account (Ctrl+Shift+A).");
         });
     });
 }
@@ -225,15 +228,13 @@ void CoreSession::cmd_select_account(const json& cmd) {
 
 // --- settings ---
 
-void CoreSession::cmd_get_settings() {
-    emit({{"event", "settings"}, {"settings", store::settings_to_json(settings_)}});
-}
+void CoreSession::cmd_get_settings() { emit_settings(); }
 
 void CoreSession::cmd_update_settings(const json& cmd) {
     settings_ = store::settings_from_json(cmd.value("settings", json::object()));
     apply_settings();
     save_config();
-    emit({{"event", "settings"}, {"settings", store::settings_to_json(settings_)}});
+    emit_settings();
     emit_all_timelines(); // a speech-order change re-renders every row
 }
 
@@ -581,6 +582,15 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
 void CoreSession::emit(const json& event) {
     if (emit_)
         emit_(event.dump());
+}
+
+void CoreSession::emit_settings() {
+    json packs = json::array();
+    for (const auto& p : sound_.list_soundpacks())
+        packs.push_back(p);
+    emit({{"event", "settings"},
+          {"settings", store::settings_to_json(settings_)},
+          {"soundpacks", packs}});
 }
 
 void CoreSession::emit_accounts() {

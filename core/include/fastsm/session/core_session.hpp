@@ -83,6 +83,7 @@ private:
 
     // Event builders.
     void emit(const nlohmann::json& event);
+    void emit_settings(); // settings + available soundpacks
     void emit_accounts();
     void emit_timelines();
     void emit_timeline(int index);
