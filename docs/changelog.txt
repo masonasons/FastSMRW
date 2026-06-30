@@ -54,6 +54,8 @@ Settings
   - Advanced: how many pages to load per refresh.
   - Confirmation: ask before boosting, favoriting, or clearing a timeline.
 - Settings are saved and applied immediately.
+- Your accounts and preferences are now kept together in a single settings file
+  (instead of two), and existing preferences carry over automatically.
 
 Menus and window
 - Application, Status, Timeline, and Account menus with familiar shortcuts.

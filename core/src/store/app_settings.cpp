@@ -6,6 +6,7 @@
 #include <system_error>
 
 #include "fastsm/store/paths.hpp"
+#include "settings_serde.hpp"
 
 using nlohmann::json;
 using namespace fastsm::present;
@@ -42,18 +43,8 @@ SettingsStore SettingsStore::default_store() {
     return SettingsStore(config_dir() / "settings.json");
 }
 
-AppSettings SettingsStore::load() const {
+AppSettings settings_from_json(const json& root) {
     AppSettings settings;
-    std::ifstream in(path_, std::ios::binary);
-    if (!in)
-        return settings; // defaults
-    json root;
-    try {
-        in >> root;
-    } catch (...) {
-        return settings;
-    }
-
     settings.sounds_enabled = root.value("sounds_enabled", true);
     settings.enter_to_send = root.value("enter_to_send", false);
     settings.soundpack = root.value("soundpack", std::string("Default"));
@@ -74,7 +65,7 @@ AppSettings SettingsStore::load() const {
     return settings;
 }
 
-bool SettingsStore::save(const AppSettings& settings) const {
+json settings_to_json(const AppSettings& settings) {
     json root;
     root["sounds_enabled"] = settings.sounds_enabled;
     root["enter_to_send"] = settings.enter_to_send;
@@ -86,14 +77,32 @@ bool SettingsStore::save(const AppSettings& settings) const {
     root["confirm_clear_timeline"] = settings.confirm_clear_timeline;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
+    return root;
+}
 
+// Legacy reader: kept so an old settings.json (pre-unification) is still picked
+// up by AppConfigStore. The app no longer writes this file.
+AppSettings SettingsStore::load() const {
+    std::ifstream in(path_, std::ios::binary);
+    if (!in)
+        return {}; // defaults
+    json root;
+    try {
+        in >> root;
+    } catch (...) {
+        return {};
+    }
+    return settings_from_json(root);
+}
+
+bool SettingsStore::save(const AppSettings& settings) const {
     try {
         const std::filesystem::path tmp = path_.string() + ".tmp";
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
             if (!out)
                 return false;
-            out << root.dump(2);
+            out << settings_to_json(settings).dump(2);
         }
         std::error_code ec;
         std::filesystem::rename(tmp, path_, ec);

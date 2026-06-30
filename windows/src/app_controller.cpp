@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#include <filesystem>
+
 #include "fastsm/auth/bluesky_auth.hpp"
 #include "fastsm/auth/mastodon_auth.hpp"
 #include "fastsm/platform/bluesky/bluesky_account.hpp"
@@ -22,7 +24,9 @@ namespace fastsmui {
 
 AppController::AppController(runtime::IMainExecutor* main, SoundManager* sound)
     : cache_(store::cache_dir()), accounts_(&http_), main_(main), sound_(sound) {
-    settings_ = store::SettingsStore::default_store().load();
+    // Settings live in the same config.json as accounts (loaded fully in
+    // bootstrap); here we just need the preferences to apply at startup.
+    settings_ = store::AppConfigStore::default_store().load().settings;
     apply_settings();
 }
 
@@ -40,8 +44,7 @@ void AppController::apply_settings() {
 void AppController::update_settings(const store::AppSettings& settings) {
     settings_ = settings;
     apply_settings();
-    store::AppSettings to_save = settings_;
-    worker_.post([to_save] { store::SettingsStore::default_store().save(to_save); });
+    save_config(); // persists accounts + settings together in config.json
     // A speech/order change can alter how rows read; repaint the current view.
     if (view_)
         view_->refresh_display();
@@ -129,6 +132,11 @@ void AppController::bootstrap() {
             rebuild_timelines();
             if (view_ && !has_account())
                 view_->announce("No account yet. Use Add Account (Ctrl+Shift+A).");
+            // One-time migration: if a pre-unification settings.json is still
+            // present, fold it into config.json now (save_config removes it), so
+            // the app settles on a single config file.
+            if (std::filesystem::exists(store::config_dir() / "settings.json"))
+                save_config();
         });
     });
 }
@@ -237,6 +245,7 @@ bool AppController::close_current_timeline() {
 
 void AppController::save_config() {
     store::AppConfig config = accounts_.to_config();
+    config.settings = settings_;
     worker_.post([config] { store::AppConfigStore::default_store().save(config); });
 }
 
