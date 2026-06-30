@@ -2,28 +2,14 @@
 
 #include <string>
 
+#include "fastsm/models/platform.hpp"
+
 // SocialAccount is the central abstraction that unifies Mastodon and Bluesky.
 // In M1 this gains the full surface (timeline paging, posting, boost/favorite,
 // user resolution, etc.); for now it anchors the platform layer so the rest of
 // the structure can compile and link.
 
 namespace fastsm {
-
-enum class Platform {
-    Mastodon,
-    Bluesky,
-};
-
-// Stable string tag used as a persistence key prefix and for display.
-inline const char* platform_tag(Platform p) {
-    switch (p) {
-    case Platform::Mastodon:
-        return "mastodon";
-    case Platform::Bluesky:
-        return "bluesky";
-    }
-    return "unknown";
-}
 
 class SocialAccount {
 public:

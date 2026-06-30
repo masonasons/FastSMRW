@@ -1,0 +1,9 @@
+# Normalize line endings: LF in the repo for sources, CRLF for Windows scripts.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.manifest text eol=lf
+*.rc text eol=lf
+
+# Keep vendored single-headers out of language stats and diffs.
+third_party/** linguist-vendored
+third_party/** -diff

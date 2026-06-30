@@ -75,7 +75,8 @@ echo.
 echo === Building FastSMRW [%CONFIG%] ===
 
 REM ---- 1) core -> fastsm_core.lib ----
-set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp"
+set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\winhttp_client.cpp core\src\models\serialization.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp"
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
 if errorlevel 1 goto error
@@ -93,7 +94,7 @@ if errorlevel 1 goto error
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS%
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS%
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"

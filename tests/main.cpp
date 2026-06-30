@@ -5,8 +5,18 @@
 
 #include <cstring>
 
-// M0 placeholder tests: prove the core links and a basic contract works.
-// Real coverage (HTML stripping, date parsing, DTO mapping) arrives in M1.
+// Test entry point. Individual test functions live in test_*.cpp files and are
+// declared + invoked here.
+
+// From test_models.cpp
+void test_status_roundtrip();
+void test_timeline_item_roundtrip();
+
+// From test_util.cpp
+void test_html_stripping();
+void test_entity_decoding();
+void test_date_parsing();
+void test_relative_dates();
 
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
@@ -28,6 +38,12 @@ static void test_http_header_lookup() {
 int main() {
     test_version();
     test_http_header_lookup();
+    test_status_roundtrip();
+    test_timeline_item_roundtrip();
+    test_html_stripping();
+    test_entity_decoding();
+    test_date_parsing();
+    test_relative_dates();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;
