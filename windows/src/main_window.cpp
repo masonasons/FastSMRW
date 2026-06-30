@@ -258,16 +258,17 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             } else if (hdr->code == LVN_KEYDOWN) {
                 auto* kd = reinterpret_cast<NMLVKEYDOWN*>(lp);
                 on_view_keydown(kd->wVKey);
-            } else if (hdr->code == LVN_ITEMCHANGED) {
-                // Remember the focused row per-timeline (position memory). No
-                // per-row earcon: like the Mac app, row movement is conveyed by
-                // the screen reader, not a "navigate" sound (which is silent).
-                auto* nm = reinterpret_cast<NMLISTVIEW*>(lp);
-                if (!updating_selection_ && (nm->uChanged & LVIF_STATE) &&
-                    (nm->uNewState & LVIS_FOCUSED) && app_ && app_->current()) {
+            } else if (hdr->code == LVN_ITEMCHANGED || hdr->code == LVN_ODSTATECHANGED) {
+                // Remember the focused row per-timeline (position memory). A
+                // virtual list reports focus via either notification, so query
+                // the focused item rather than trust the struct. (No per-row
+                // earcon: like the Mac app, row movement is conveyed by the
+                // screen reader, not a "navigate" sound, which is silent.)
+                if (!updating_selection_ && app_ && app_->current()) {
+                    const int focused = ListView_GetNextItem(timeline_view_, -1, LVNI_FOCUSED);
                     const auto& items = app_->current()->items();
-                    if (nm->iItem >= 0 && nm->iItem < static_cast<int>(items.size()))
-                        app_->current()->note_selection(items[static_cast<size_t>(nm->iItem)].id());
+                    if (focused >= 0 && focused < static_cast<int>(items.size()))
+                        app_->current()->note_selection(items[static_cast<size_t>(focused)].id());
                 }
             }
         } else if (hdr->hwndFrom == timelines_list_) {
@@ -355,6 +356,11 @@ void MainWindow::bind_current_to_view() {
         ListView_SetItemState(timeline_view_, idx, LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
         ListView_EnsureVisible(timeline_view_, idx, FALSE);
+        // Anchor the remembered position to the row now shown, so a later
+        // refresh (new posts prepended) keeps the user on this exact post
+        // instead of an index that now points elsewhere.
+        if (tc)
+            tc->note_selection(tc->items()[static_cast<size_t>(idx)].id());
     }
     updating_selection_ = false;
     InvalidateRect(timeline_view_, nullptr, FALSE);
