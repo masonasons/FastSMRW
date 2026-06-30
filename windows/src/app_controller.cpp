@@ -6,8 +6,6 @@
 #include <windows.h>
 #include <shellapi.h>
 
-#include <filesystem>
-
 #include "fastsm/auth/bluesky_auth.hpp"
 #include "fastsm/auth/mastodon_auth.hpp"
 #include "fastsm/platform/bluesky/bluesky_account.hpp"
@@ -132,11 +130,6 @@ void AppController::bootstrap() {
             rebuild_timelines();
             if (view_ && !has_account())
                 view_->announce("No account yet. Use Add Account (Ctrl+Shift+A).");
-            // One-time migration: if a pre-unification settings.json is still
-            // present, fold it into config.json now (save_config removes it), so
-            // the app settles on a single config file.
-            if (std::filesystem::exists(store::config_dir() / "settings.json"))
-                save_config();
         });
     });
 }

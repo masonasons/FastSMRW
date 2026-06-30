@@ -2,10 +2,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <fstream>
-#include <system_error>
-
-#include "fastsm/store/paths.hpp"
 #include "settings_serde.hpp"
 
 using nlohmann::json;
@@ -36,12 +32,6 @@ std::vector<SpeechItem<Field>> items_from_json(const json& arr, FromKey from_key
 }
 
 } // namespace
-
-SettingsStore::SettingsStore(std::filesystem::path path) : path_(std::move(path)) {}
-
-SettingsStore SettingsStore::default_store() {
-    return SettingsStore(config_dir() / "settings.json");
-}
 
 AppSettings settings_from_json(const json& root) {
     AppSettings settings;
@@ -78,42 +68,6 @@ json settings_to_json(const AppSettings& settings) {
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
     return root;
-}
-
-// Legacy reader: kept so an old settings.json (pre-unification) is still picked
-// up by AppConfigStore. The app no longer writes this file.
-AppSettings SettingsStore::load() const {
-    std::ifstream in(path_, std::ios::binary);
-    if (!in)
-        return {}; // defaults
-    json root;
-    try {
-        in >> root;
-    } catch (...) {
-        return {};
-    }
-    return settings_from_json(root);
-}
-
-bool SettingsStore::save(const AppSettings& settings) const {
-    try {
-        const std::filesystem::path tmp = path_.string() + ".tmp";
-        {
-            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-            if (!out)
-                return false;
-            out << settings_to_json(settings).dump(2);
-        }
-        std::error_code ec;
-        std::filesystem::rename(tmp, path_, ec);
-        if (ec) {
-            std::filesystem::remove(tmp, ec);
-            return false;
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
 }
 
 } // namespace fastsm::store

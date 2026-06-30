@@ -94,13 +94,9 @@ AppConfig AppConfigStore::load() const {
             config.accounts.push_back(std::move(rec));
         }
     }
-    // App settings live in this file. If a pre-unification settings.json is still
-    // around (and config.json has no settings yet), read it once so existing
-    // preferences carry over; the next save folds them in and removes it.
+    // App settings live in this file alongside accounts.
     if (auto it = root.find("settings"); it != root.end() && it->is_object())
         config.settings = settings_from_json(*it);
-    else
-        config.settings = SettingsStore::default_store().load();
     return config;
 }
 
@@ -133,8 +129,6 @@ bool AppConfigStore::save(const AppConfig& config) const {
             std::filesystem::remove(tmp, ec);
             return false;
         }
-        // Settings now live here; retire any superseded legacy settings.json.
-        std::filesystem::remove(path_.parent_path() / "settings.json", ec);
         return true;
     } catch (...) {
         return false;

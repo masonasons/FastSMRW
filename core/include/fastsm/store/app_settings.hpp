@@ -1,6 +1,5 @@
 #pragma once
 
-#include <filesystem>
 #include <string>
 
 #include "fastsm/presentation/speech_settings.hpp"
@@ -24,20 +23,6 @@ struct AppSettings {
     static constexpr int kFetchPagesMax = 10;
     static constexpr int kCacheLimitMin = 100;
     static constexpr int kCacheLimitMax = 20000;
-};
-
-// Reads/writes settings.json (plain JSON; no secrets here).
-class SettingsStore {
-public:
-    explicit SettingsStore(std::filesystem::path path);
-
-    AppSettings load() const; // speech is normalized so old files keep working
-    bool save(const AppSettings& settings) const;
-
-    static SettingsStore default_store(); // config_dir()/settings.json
-
-private:
-    std::filesystem::path path_;
 };
 
 } // namespace fastsm::store

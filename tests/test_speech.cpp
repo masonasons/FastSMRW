@@ -3,7 +3,7 @@
 #include <filesystem>
 
 #include "fastsm/presentation/speech_settings.hpp"
-#include "fastsm/store/app_settings.hpp"
+#include "fastsm/store/app_config.hpp"
 
 using namespace fastsm;
 using namespace fastsm::present;
@@ -36,31 +36,32 @@ void test_speech_normalized() {
 }
 
 void test_settings_roundtrip() {
+    // Settings persist inside config.json (alongside accounts).
     const auto dir = std::filesystem::temp_directory_path() / "fastsmrw_settings_test";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    const auto path = dir / "settings.json";
+    const auto path = dir / "config.json";
 
-    store::SettingsStore st(path);
-    store::AppSettings s;
-    s.sounds_enabled = false;
-    s.soundpack = "MyPack";
-    s.speech = SpeechSettings::defaults();
-    for (auto& it : s.speech.status)
+    store::AppConfigStore st(path);
+    store::AppConfig cfg;
+    cfg.settings.sounds_enabled = false;
+    cfg.settings.soundpack = "MyPack";
+    cfg.settings.speech = SpeechSettings::defaults();
+    for (auto& it : cfg.settings.speech.status)
         if (it.field == StatusSpeechField::Handle)
             it.enabled = true; // user turned handle on
 
-    CHECK(st.save(s));
-    const store::AppSettings loaded = st.load();
+    CHECK(st.save(cfg));
+    const store::AppConfig loaded = st.load();
 
-    CHECK(!loaded.sounds_enabled);
-    CHECK_EQ(loaded.soundpack, std::string("MyPack"));
+    CHECK(!loaded.settings.sounds_enabled);
+    CHECK_EQ(loaded.settings.soundpack, std::string("MyPack"));
     bool handle_on = false;
-    for (const auto& it : loaded.speech.status)
+    for (const auto& it : loaded.settings.speech.status)
         if (it.field == StatusSpeechField::Handle)
             handle_on = it.enabled;
     CHECK(handle_on);
-    CHECK(loaded.speech == s.speech.normalized());
+    CHECK(loaded.settings.speech == cfg.settings.speech.normalized());
 
     std::filesystem::remove_all(dir, ec);
 }
