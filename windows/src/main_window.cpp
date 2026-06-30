@@ -727,6 +727,7 @@ void MainWindow::on_event(const std::string& js) {
 }
 
 void MainWindow::ev_timelines_changed(const json& e) {
+    const size_t prev_count = timelines_.size();
     std::vector<Timeline> next;
     for (const auto& t : e.value("timelines", json::array())) {
         Timeline tl;
@@ -747,10 +748,11 @@ void MainWindow::ev_timelines_changed(const json& e) {
         current_ = 0;
     populate_timelines_list();
     bind_current_to_view(/*force=*/true); // a switch always rebinds (even to an empty timeline)
-    // Match the Mac's focusTable(): after switching to or spawning a timeline, put
-    // focus on the posts so the user lands on the content — not stranded on the
-    // timelines list. Guarded so we never steal focus from an open dialog.
-    if (GetForegroundWindow() == hwnd_)
+    // Match the Mac's focusTable(): when a NEW timeline appears (e.g. opening a
+    // thread), put focus on the posts so the user lands on the content. Only on a
+    // spawn (the count grew) — not a plain switch, or arrowing the timelines list
+    // would yank focus to the posts. Guarded so we never steal focus from a dialog.
+    if (timelines_.size() > prev_count && GetForegroundWindow() == hwnd_)
         SetFocus(timeline_view_);
 }
 
