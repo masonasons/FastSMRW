@@ -181,6 +181,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_close_timeline();
     else if (c == "clear_timeline")
         cmd_clear_timeline();
+    else if (c == "clear_all_timelines")
+        cmd_clear_all_timelines();
     else if (c == "add_account")
         cmd_add_account(cmd);
     else if (c == "remove_account")
@@ -714,6 +716,14 @@ void CoreSession::cmd_clear_timeline() {
         tc->clear();
         sound_.play(sound::Earcon::Delete);
     }
+}
+
+void CoreSession::cmd_clear_all_timelines() {
+    if (timelines_.empty())
+        return;
+    for (auto& tc : timelines_)
+        tc->clear(); // each fires on_change -> emit_timeline
+    sound_.play(sound::Earcon::Delete);
 }
 
 // --- posting / actions ---

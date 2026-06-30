@@ -86,6 +86,7 @@ private:
     void cmd_user_action(const nlohmann::json& cmd); // batch follow/mute/block
     void cmd_close_timeline();
     void cmd_clear_timeline();
+    void cmd_clear_all_timelines();
     void cmd_add_account(const nlohmann::json& cmd);
     void cmd_remove_account(const nlohmann::json& cmd);
     void cmd_play_earcon(const nlohmann::json& cmd);
