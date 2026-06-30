@@ -381,11 +381,16 @@ void MainWindow::bind_current_to_view() {
             idx = 0;
             tc->note_selection(tc->items()[0].id());
         }
-        // Only move the selection when it differs, to avoid a redundant
-        // screen-reader re-announcement.
-        if (selected_row() != idx)
-            ListView_SetItemState(timeline_view_, idx, LVIS_SELECTED | LVIS_FOCUSED,
-                                  LVIS_SELECTED | LVIS_FOCUSED);
+        // Re-assert selection unless the target row is already fully
+        // selected+focused (which would make this a redundant screen-reader
+        // re-announcement). Keying off the row's actual state — not the focused
+        // index — matters on a timeline switch: SetItemCountEx can drop the
+        // selection while leaving the previous timeline's focus index intact, so
+        // an index check alone would leave the restored row focused-but-unselected
+        // (a lost position to a screen reader).
+        const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
+        if ((ListView_GetItemState(timeline_view_, idx, want) & want) != want)
+            ListView_SetItemState(timeline_view_, idx, want, want);
         ListView_EnsureVisible(timeline_view_, idx, FALSE);
     }
     updating_selection_ = false;

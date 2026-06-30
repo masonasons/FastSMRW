@@ -19,6 +19,8 @@ Timelines
   close an opened timeline with Delete. Go straight to a timeline with Ctrl+1-9.
 - Each timeline remembers where you were: switching timelines or receiving new
   posts keeps you on the post you were reading instead of jumping to the top.
+- Fixed switching between open timelines sometimes landing on an unselected row,
+  so your place is now reliably restored (and announced) on every timeline.
 
 Reading and posting
 - Single keys on a post: R reply, Q quote, F favorite, B boost, E edit your own
