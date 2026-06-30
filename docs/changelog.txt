@@ -23,7 +23,7 @@ FastSMRW changelog
   Enter to follow, unfollow, mute, unmute, block, or unblock them all at once. U
   and Ctrl+U also work on a person in a list (open their posts or profile).
 - Close the current timeline with Backspace, from anywhere in the window.
-- Clear All Timelines (Ctrl+Shift+Backspace, or the Timeline menu) empties the
-  loaded posts and caches for every open timeline at once.
+- Clear a timeline with Ctrl+Delete, or Clear All Timelines with Ctrl+Shift+Delete
+  (also in the Timeline menu): empties the loaded posts and caches.
 - Closing an opened timeline returns you to the timeline you opened it from,
   instead of whatever was next in the list.

@@ -152,8 +152,8 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tBackspace");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"Clea&r Timeline\tCtrl+Backspace");
-    AppendMenuW(timeline, MF_STRING, ID_CLEAR_ALL, L"Clear &All Timelines\tCtrl+Shift+Backspace");
+    AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"Clea&r Timeline\tCtrl+Delete");
+    AppendMenuW(timeline, MF_STRING, ID_CLEAR_ALL, L"Clear &All Timelines\tCtrl+Shift+Delete");
     AppendMenuW(timeline, MF_STRING, ID_GO_BACK, L"Go &Back\tCtrl+Z");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     for (int i = 1; i <= 9; ++i) {
@@ -216,8 +216,8 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY, VK_BACK, ID_CLOSE_TIMELINE},          // Backspace: close timeline (anywhere)
-        {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
-        {FVIRTKEY | FCONTROL | FSHIFT, VK_BACK, ID_CLEAR_ALL}, // clear every timeline
+        {FVIRTKEY | FCONTROL, VK_DELETE, ID_CLEAR_TIMELINE},          // clear focused timeline
+        {FVIRTKEY | FCONTROL | FSHIFT, VK_DELETE, ID_CLEAR_ALL}, // clear every timeline
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
         {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
