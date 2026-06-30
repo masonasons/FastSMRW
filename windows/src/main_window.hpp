@@ -58,7 +58,8 @@ private:
     HWND timelines_list_ = nullptr;
     HWND timeline_view_ = nullptr;
     HACCEL accel_ = nullptr;
-    std::wstring scratch_; // backing store for virtual-list item text
+    std::wstring scratch_;             // backing store for virtual-list item text
+    std::vector<std::string> rendered_ids_; // last rendered row ids (reload guard)
     bool updating_selection_ = false;
 };
 

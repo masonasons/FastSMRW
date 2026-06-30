@@ -344,23 +344,39 @@ void MainWindow::populate_timelines_list() {
 
 void MainWindow::bind_current_to_view() {
     TimelineController* tc = app_ ? app_->current() : nullptr;
-    const int count = tc ? static_cast<int>(tc->items().size()) : 0;
+
+    // Build the current row-id list and only reload when it actually changes
+    // (the Mac reloads on `ids != renderedIDs`). This stops non-structural
+    // updates (e.g. a favorite toggle) from disturbing the selection/scroll.
+    std::vector<std::string> ids;
+    if (tc) {
+        const auto& items = tc->items();
+        ids.reserve(items.size());
+        for (const auto& it : items)
+            ids.push_back(it.id());
+    }
+    if (ids == rendered_ids_)
+        return;
+    rendered_ids_ = ids;
+
+    const int count = static_cast<int>(ids.size());
     updating_selection_ = true;
     ListView_SetItemCountEx(timeline_view_, count, LVSICF_NOSCROLL);
-    if (count > 0) {
-        // Restore this timeline's remembered row (or the top on first view) so
-        // switching timelines / receiving new posts doesn't jump to the top.
-        int idx = tc ? tc->visible_index_of(tc->selected_id()) : -1;
-        if (idx < 0)
+    if (tc && count > 0) {
+        // Restore to the remembered post; if it's gone (or none yet), adopt the
+        // top row as the position so future incoming posts track it instead of
+        // a fixed index.
+        int idx = tc->visible_index_of(tc->selected_id());
+        if (idx < 0) {
             idx = 0;
-        ListView_SetItemState(timeline_view_, idx, LVIS_SELECTED | LVIS_FOCUSED,
-                              LVIS_SELECTED | LVIS_FOCUSED);
+            tc->note_selection(tc->items()[0].id());
+        }
+        // Only move the selection when it differs, to avoid a redundant
+        // screen-reader re-announcement.
+        if (selected_row() != idx)
+            ListView_SetItemState(timeline_view_, idx, LVIS_SELECTED | LVIS_FOCUSED,
+                                  LVIS_SELECTED | LVIS_FOCUSED);
         ListView_EnsureVisible(timeline_view_, idx, FALSE);
-        // Anchor the remembered position to the row now shown, so a later
-        // refresh (new posts prepended) keeps the user on this exact post
-        // instead of an index that now points elsewhere.
-        if (tc)
-            tc->note_selection(tc->items()[static_cast<size_t>(idx)].id());
     }
     updating_selection_ = false;
     InvalidateRect(timeline_view_, nullptr, FALSE);
