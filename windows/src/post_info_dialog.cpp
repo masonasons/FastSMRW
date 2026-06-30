@@ -55,6 +55,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_POSTINFO_BROWSER:
             finish(PostInfoAction::OpenBrowser);
             return TRUE;
+        case IDC_POSTINFO_THREAD:
+            finish(PostInfoAction::ViewThread);
+            return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);
             return TRUE;

@@ -7,7 +7,7 @@
 
 namespace fastsmui {
 
-enum class PostInfoAction { Reply, Boost, Favorite, Quote, OpenBrowser };
+enum class PostInfoAction { Reply, Boost, Favorite, Quote, OpenBrowser, ViewThread };
 
 // Modal Post Info dialog (Mac parity): a read-only review of the post plus action
 // buttons. Returns the chosen action, or nullopt if dismissed. The caller

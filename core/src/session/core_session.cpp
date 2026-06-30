@@ -124,6 +124,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_get_spawnable();
     else if (c == "spawn_timeline")
         cmd_spawn_timeline(cmd);
+    else if (c == "open_thread")
+        cmd_open_thread(cmd);
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -312,26 +314,35 @@ void CoreSession::cmd_get_spawnable() {
     emit({{"event", "spawnable_timelines"}, {"timelines", tls}});
 }
 
-void CoreSession::cmd_spawn_timeline(const json& cmd) {
-    if (!accounts_.selected())
-        return;
-    auto src = source_from_kind(cmd.value("kind", std::string{}));
-    if (!src)
-        return;
+void CoreSession::spawn_source(const TimelineSource& src) {
     for (size_t i = 0; i < timelines_.size(); ++i) {
-        if (timelines_[i]->source().cache_key() == src->cache_key()) {
-            current_ = static_cast<int>(i);
+        if (timelines_[i]->source().cache_key() == src.cache_key()) {
+            current_ = static_cast<int>(i); // already open -> focus it
             emit_timelines();
             return;
         }
     }
-    timelines_.push_back(make_controller(*src));
+    timelines_.push_back(make_controller(src));
     current_ = static_cast<int>(timelines_.size()) - 1;
     TimelineController* p = timelines_.back().get();
     emit_timelines();
     p->load_cached();
     p->refresh();
     update_streaming();
+}
+
+void CoreSession::cmd_spawn_timeline(const json& cmd) {
+    if (!accounts_.selected())
+        return;
+    if (auto src = source_from_kind(cmd.value("kind", std::string{})))
+        spawn_source(*src);
+}
+
+void CoreSession::cmd_open_thread(const json& cmd) {
+    const std::string id = cmd.value("id", std::string{});
+    if (!accounts_.selected() || id.empty())
+        return;
+    spawn_source(TimelineSource::thread(id));
 }
 
 void CoreSession::cmd_close_timeline() {

@@ -90,6 +90,37 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
                                     const PageCursor& cursor) {
     TimelinePage page;
 
+    // A thread: the focused status plus its ancestors and descendants, in
+    // conversation order. Fetched whole (not paginated).
+    if (source.kind == TimelineSource::Kind::Thread) {
+        const std::string base = credentials_.instance_url + "/api/v1/statuses/" + source.param;
+        std::string body;
+        long st = 0;
+        Status focused;
+        if (request("GET", base, "", "", body, st)) {
+            try {
+                focused = mastodon::map_status(json::parse(body));
+            } catch (...) {
+            }
+        }
+        std::string cbody;
+        if (request("GET", base + "/context", "", "", cbody, st)) {
+            try {
+                json ctx = json::parse(cbody);
+                if (auto a = ctx.find("ancestors"); a != ctx.end() && a->is_array())
+                    for (const auto& s : *a)
+                        page.items.push_back(TimelineItem{mastodon::map_status(s)});
+                if (!focused.id.empty())
+                    page.items.push_back(TimelineItem{std::move(focused)});
+                if (auto d = ctx.find("descendants"); d != ctx.end() && d->is_array())
+                    for (const auto& s : *d)
+                        page.items.push_back(TimelineItem{mastodon::map_status(s)});
+            } catch (...) {
+            }
+        }
+        return page;
+    }
+
     std::string path;
     std::string extra;
     switch (source.kind) {
@@ -113,6 +144,8 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Favorites:
         path = "/api/v1/favourites";
         break;
+    case TimelineSource::Kind::Thread:
+        break; // handled above (early return)
     }
 
     std::string url = credentials_.instance_url + path + "?limit=" + std::to_string(limit) + extra;

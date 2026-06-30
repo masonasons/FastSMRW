@@ -39,6 +39,9 @@ Reading and posting
   content warning, text, attachments, reply/boost/favorite counts) with quick
   action buttons (reply, boost, favorite, quote, open in browser).
 - Open the selected post in your web browser (Status menu - Open in Browser).
+- View a post's conversation thread (Status menu - View Thread, or the View
+  Thread button in Post info): opens the whole thread - the posts it replies to
+  and the replies below it - as its own timeline you can arrow through.
 - Compose dialog for new posts, replies, quotes, and edits, with content warning,
   visibility, language, polls, and scheduling where the platform supports them.
 - The remaining character count appears in the compose window's title bar.

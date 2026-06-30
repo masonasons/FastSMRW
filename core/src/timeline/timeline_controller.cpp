@@ -105,13 +105,13 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
             on_received_new(new_count);
     }
 
-    // Always keep rows newest-first by timestamp — notifications included (their
-    // sort_date is the notification's created_at) — so order never depends on an
-    // unbroken server/cache chain.
-    std::stable_sort(raw_.begin(), raw_.end(),
-                     [](const TimelineItem& a, const TimelineItem& b) {
-                         return a.sort_date() > b.sort_date();
-                     });
+    // Keep rows newest-first by timestamp (notifications included — their
+    // sort_date is created_at). Threads keep their fetched conversation order.
+    if (source_.is_time_ordered())
+        std::stable_sort(raw_.begin(), raw_.end(),
+                         [](const TimelineItem& a, const TimelineItem& b) {
+                             return a.sort_date() > b.sort_date();
+                         });
     rebuild_visible();
     persist();
 }

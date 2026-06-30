@@ -138,7 +138,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tCtrl+Shift+D");
     AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tCtrl+Shift+Q");
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
-    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_VIEW_THREAD, L"View &Thread");
+    AppendMenuW(status, MF_STRING, ID_VIEW_THREAD, L"View &Thread");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_TIMELINE, L"Open &User Timeline");
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
@@ -559,6 +559,9 @@ void MainWindow::ev_post_info(const json& e) {
     case PostInfoAction::OpenBrowser:
         dispatch_cmd({{"cmd", "open_status"}, {"id", id}});
         break;
+    case PostInfoAction::ViewThread:
+        dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
+        break;
     }
 }
 
@@ -637,6 +640,12 @@ void MainWindow::handle_command(int id) {
         const std::string id = selected_id();
         if (!id.empty())
             dispatch_cmd({{"cmd", "open_status"}, {"id", id}});
+        break;
+    }
+    case ID_VIEW_THREAD: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
         break;
     }
     case ID_NEW_TIMELINE:

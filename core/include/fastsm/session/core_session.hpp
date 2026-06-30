@@ -70,6 +70,7 @@ private:
     void cmd_go_back();
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
+    void cmd_open_thread(const nlohmann::json& cmd);
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_add_account(const nlohmann::json& cmd);
@@ -77,6 +78,7 @@ private:
     void cmd_play_earcon(const nlohmann::json& cmd);
 
     void rebuild_timelines();
+    void spawn_source(const TimelineSource& src); // open a timeline (or focus it)
     std::unique_ptr<TimelineController> make_controller(const TimelineSource& src);
     TimelineController* current() const;
     int index_of(const TimelineController* tc) const;

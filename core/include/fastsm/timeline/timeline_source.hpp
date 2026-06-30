@@ -16,9 +16,11 @@ struct TimelineSource {
         Federated,
         Bookmarks,
         Favorites,
+        Thread, // a post's conversation (param = focused status id)
     };
 
     Kind kind = Kind::Home;
+    std::string param; // parameter for parameterized kinds (Thread: status id)
 
     std::string title() const {
         switch (kind) {
@@ -36,6 +38,8 @@ struct TimelineSource {
             return "Bookmarks";
         case Kind::Favorites:
             return "Favorites";
+        case Kind::Thread:
+            return "Thread";
         }
         return "Timeline";
     }
@@ -57,11 +61,16 @@ struct TimelineSource {
             return "bookmarks";
         case Kind::Favorites:
             return "favourites";
+        case Kind::Thread:
+            return "thread:" + param;
         }
         return "timeline";
     }
 
-    bool is_cacheable() const { return true; }
+    // Threads are fetched whole and not re-sorted; everything else caches and
+    // stays newest-first.
+    bool is_cacheable() const { return kind != Kind::Thread; }
+    bool is_time_ordered() const { return kind != Kind::Thread; }
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }
@@ -86,11 +95,12 @@ struct TimelineSource {
             return "mentions";
         case Kind::Bookmarks:
         case Kind::Favorites:
+        case Kind::Thread:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
     }
-    bool operator==(const TimelineSource& o) const { return kind == o.kind; }
+    bool operator==(const TimelineSource& o) const { return kind == o.kind && param == o.param; }
 
     static TimelineSource home() { return {Kind::Home}; }
     static TimelineSource notifications() { return {Kind::Notifications}; }
@@ -99,6 +109,9 @@ struct TimelineSource {
     static TimelineSource federated() { return {Kind::Federated}; }
     static TimelineSource bookmarks() { return {Kind::Bookmarks}; }
     static TimelineSource favorites() { return {Kind::Favorites}; }
+    static TimelineSource thread(std::string status_id) {
+        return {Kind::Thread, std::move(status_id)};
+    }
 };
 
 } // namespace fastsm
