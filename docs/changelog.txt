@@ -29,8 +29,11 @@ FastSMRW changelog
 - Bluesky now loads up to 100 posts per request instead of 40 (its API's limit),
   so timelines fill in faster with fewer round-trips.
 
-- Closing a dialog (compose, settings, a profile, etc.) no longer occasionally
-  snaps you to the top of the timeline - it keeps you on the post you were on.
+- Single-letter shortcuts on a post (R reply, B boost, F favorite, Q quote,
+  E edit, U author) no longer jump your place in the timeline. The posts list
+  was quietly treating those keys as a type-to-search and moving the selection,
+  which is why replying and then escaping flung you to the top. Your position
+  now stays put.
 
 - Bluesky now supports the same social features as Mastodon: view a post's
   thread, open an author's posts, open Followers / Following lists, and the

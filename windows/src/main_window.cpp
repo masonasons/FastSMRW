@@ -250,12 +250,18 @@ LRESULT CALLBACK MainWindow::WndProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPARA
 LRESULT CALLBACK MainWindow::ViewProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
                                             UINT_PTR id, DWORD_PTR ref) {
     auto* self = reinterpret_cast<MainWindow*>(ref);
+    if (msg == WM_CHAR) {
+        // Single letters (R/B/F/Q/E/U/Space...) are command shortcuts handled via
+        // LVN_KEYDOWN. Swallow WM_CHAR so the ListView's built-in type-ahead
+        // incremental search doesn't ALSO move the selection -- that search jumped
+        // focus to the top, which is what flung the user there (e.g. pressing R to
+        // reply moved the position before the dialog even opened).
+        return 0;
+    }
     if (msg == WM_SETFOCUS && self) {
-        // When focus returns to the posts list (typically a modal dialog just
-        // closed), a virtual ListView with no focused item snaps focus to row 0
-        // and fires LVN_ITEMCHANGED -- which would clobber selected_id and jump us
-        // to the top. Capture the real position first, let the default proc run
-        // with the change suppressed, then restore the remembered row.
+        // When focus returns to the posts list (e.g. a modal dialog just closed),
+        // make sure it lands on the remembered row rather than wherever the control
+        // defaults to. Suppress the default proc's selection churn, then restore.
         Timeline* tc = self->current();
         const std::string keep = tc ? tc->selected_id : std::string{};
         self->updating_selection_ = true;
