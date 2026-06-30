@@ -108,9 +108,9 @@ FONT 9, "Segoe UI"
 BEGIN
     LTEXT      "Choose which details the screen reader speaks, and their order, for each kind of row:",
                -1, 10, 10, 220, 18
-    PUSHBUTTON "Configure &Posts…", IDC_SET_SPEECH_POSTS, 10, 36, 140, 16
-    PUSHBUTTON "Configure &Users…", IDC_SET_SPEECH_USERS, 10, 58, 140, 16
-    PUSHBUTTON "Configure &Notifications…", IDC_SET_SPEECH_NOTIFS, 10, 80, 140, 16
+    PUSHBUTTON "Configure &Posts...", IDC_SET_SPEECH_POSTS, 10, 36, 140, 16
+    PUSHBUTTON "Configure &Users...", IDC_SET_SPEECH_USERS, 10, 58, 140, 16
+    PUSHBUTTON "Configure &Notifications...", IDC_SET_SPEECH_NOTIFS, 10, 80, 140, 16
 END
 
 IDD_SPEECH_DETAIL DIALOGEX 0, 0, 264, 200
