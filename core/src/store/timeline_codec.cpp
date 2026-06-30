@@ -252,6 +252,7 @@ void write_status(Writer& w, const Status& s) {
     w.opt_str(s.cid);
     w.opt_str(s.like_uri);
     w.opt_str(s.repost_uri);
+    w.str(s.url);
 }
 
 Status read_status(Reader& r) {
@@ -298,6 +299,7 @@ Status read_status(Reader& r) {
     s.cid = r.opt_str();
     s.like_uri = r.opt_str();
     s.repost_uri = r.opt_str();
+    s.url = r.str();
     return s;
 }
 

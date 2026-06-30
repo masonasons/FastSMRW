@@ -39,6 +39,7 @@ struct Status {
     bool boosted = false;
     std::optional<std::string> application_name; // posting client ("via ...")
     std::optional<std::string> instance_url;     // remote instance, if fetched abroad
+    std::string url;                             // canonical web URL (open in browser)
     Platform platform = Platform::Mastodon;
 
     // Bluesky strong reference + viewer record URIs (empty on Mastodon).

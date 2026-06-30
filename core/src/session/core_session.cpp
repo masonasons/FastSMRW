@@ -110,6 +110,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_post(cmd);
     else if (c == "compose_context")
         cmd_compose_context(cmd);
+    else if (c == "open_status")
+        cmd_open_status(cmd);
     else if (c == "get_spawnable")
         cmd_get_spawnable();
     else if (c == "spawn_timeline")
@@ -435,6 +437,16 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         ctx["title"] = "New Post";
     }
     emit(ctx);
+}
+
+void CoreSession::cmd_open_status(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    if (const TimelineItem* item = find_item(tc, cmd.value("id", std::string{})))
+        if (const Status* s = item->actionable_status())
+            if (!s->url.empty())
+                emit({{"event", "open_url"}, {"url", s->url}});
 }
 
 void CoreSession::cmd_play_earcon(const json& cmd) {

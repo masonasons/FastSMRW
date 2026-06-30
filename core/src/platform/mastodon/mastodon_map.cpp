@@ -106,6 +106,7 @@ Status map_status(const json& j) {
     Status s;
     s.platform = Platform::Mastodon;
     s.id = str(j, "id");
+    s.url = str(j, "url");
     if (auto it = j.find("account"); it != j.end() && it->is_object())
         s.account = map_user(*it);
     s.content = str(j, "content");

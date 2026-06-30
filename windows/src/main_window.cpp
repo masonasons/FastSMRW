@@ -138,7 +138,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_TIMELINE, L"Open &User Timeline");
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_OPEN_BROWSER, L"Open in Browser");
+    AppendMenuW(status, MF_STRING, ID_OPEN_BROWSER, L"Open in Browser");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(status), L"&Status");
 
     HMENU timeline = CreatePopupMenu();
@@ -595,6 +595,12 @@ void MainWindow::handle_command(int id) {
     case ID_POST_INFO:
         do_post_info();
         break;
+    case ID_OPEN_BROWSER: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_status"}, {"id", id}});
+        break;
+    }
     case ID_NEW_TIMELINE:
         do_new_timeline();
         break;

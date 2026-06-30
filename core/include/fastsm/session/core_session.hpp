@@ -62,6 +62,7 @@ private:
     void cmd_toggle_favorite(const nlohmann::json& cmd);
     void cmd_post(const nlohmann::json& cmd);
     void cmd_compose_context(const nlohmann::json& cmd);
+    void cmd_open_status(const nlohmann::json& cmd);
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
     void cmd_close_timeline();

@@ -31,6 +31,7 @@ Timelines
 Reading and posting
 - Single keys on a post: R reply, Q quote, F favorite, B boost, E edit your own
   post, Ctrl+I for full post info.
+- Open the selected post in your web browser (Status menu - Open in Browser).
 - Compose dialog for new posts, replies, quotes, and edits, with content warning,
   visibility, language, polls, and scheduling where the platform supports them.
 - The remaining character count appears in the compose window's title bar.
