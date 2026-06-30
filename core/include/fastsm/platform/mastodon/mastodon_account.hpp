@@ -27,6 +27,8 @@ public:
                        const PageCursor& cursor) override;
 
     std::optional<Status> post(const PostDraft& draft) override;
+    std::optional<Status> edit_post(const std::string& id, const PostDraft& draft) override;
+    std::optional<PostSource> post_source(const std::string& id) override;
     bool boost(const Status& status) override;
     bool unboost(const Status& status) override;
     bool favorite(const Status& status) override;

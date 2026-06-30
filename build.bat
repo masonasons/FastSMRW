@@ -91,7 +91,8 @@ set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\plat
 set "CORE_SRC=%CORE_SRC% core\src\auth\mastodon_auth.cpp core\src\auth\bluesky_auth.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\base64.cpp core\src\store\paths.cpp core\src\store\dpapi.cpp core\src\store\timeline_cache.cpp core\src\store\timeline_codec.cpp core\src\store\app_config.cpp core\src\store\account_store.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\runtime\worker_queue.cpp core\src\timeline\timeline_controller.cpp"
-set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\presentation\speech_settings.cpp core\src\sound\sound_manager.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\presentation\speech_settings.cpp core\src\presentation\reply_helper.cpp core\src\sound\sound_manager.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\util\languages.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\store\app_settings.cpp"
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"

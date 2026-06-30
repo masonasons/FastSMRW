@@ -275,6 +275,30 @@ bool TimelineController::toggle_boost(int visible_index) {
     return want;
 }
 
+void TimelineController::edit_post(const std::string& id, const PostDraft& draft,
+                                   std::function<void(bool)> done) {
+    worker_->post([this, id, draft, done = std::move(done)] {
+        std::optional<Status> updated = account_->edit_post(id, draft);
+        main_->post([this, updated = std::move(updated), done]() mutable {
+            const bool ok = updated.has_value();
+            if (ok) {
+                for (auto& item : raw_) {
+                    if (Status* s = item.mutable_status()) {
+                        if (s->id == updated->id)
+                            *s = *updated;
+                    }
+                }
+                rebuild_visible();
+                persist();
+                if (on_change)
+                    on_change();
+            }
+            if (done)
+                done(ok);
+        });
+    });
+}
+
 void TimelineController::post(const PostDraft& draft, std::function<void(bool)> done) {
     const bool is_reply = draft.reply_to_id.has_value();
     worker_->post([this, draft, done = std::move(done), is_reply] {

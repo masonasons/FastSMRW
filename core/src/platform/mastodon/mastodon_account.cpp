@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
+#include "fastsm/util/date_parsing.hpp"
 #include "fastsm/util/url.hpp"
 
 using nlohmann::json;
@@ -120,6 +121,14 @@ std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
         params.push_back({"spoiler_text", *draft.spoiler_text});
     if (draft.language)
         params.push_back({"language", *draft.language});
+    if (draft.poll && draft.poll->options.size() >= 2) {
+        for (const auto& opt : draft.poll->options)
+            params.push_back({"poll[options][]", opt});
+        params.push_back({"poll[expires_in]", std::to_string(draft.poll->expires_in_seconds)});
+        params.push_back({"poll[multiple]", draft.poll->multiple ? "true" : "false"});
+    }
+    if (draft.scheduled_at)
+        params.push_back({"scheduled_at", util::format_iso8601(*draft.scheduled_at)});
 
     const std::string url = credentials_.instance_url + "/api/v1/statuses";
     std::string body;
@@ -128,7 +137,50 @@ std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
                  status))
         return std::nullopt;
     try {
+        // A scheduled post returns a ScheduledStatus (no "content"); nothing to
+        // insert into the timeline.
+        json j = json::parse(body);
+        if (draft.scheduled_at)
+            return std::nullopt;
+        return mastodon::map_status(j);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::optional<Status> MastodonAccount::edit_post(const std::string& id, const PostDraft& draft) {
+    std::vector<std::pair<std::string, std::string>> params;
+    params.push_back({"status", draft.text});
+    if (draft.spoiler_text)
+        params.push_back({"spoiler_text", *draft.spoiler_text});
+    if (draft.language)
+        params.push_back({"language", *draft.language});
+
+    const std::string url = credentials_.instance_url + "/api/v1/statuses/" + id;
+    std::string body;
+    long status = 0;
+    if (!request("PUT", url, util::form_encode(params), "application/x-www-form-urlencoded", body,
+                 status))
+        return std::nullopt;
+    try {
         return mastodon::map_status(json::parse(body));
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::optional<PostSource> MastodonAccount::post_source(const std::string& id) {
+    const std::string url = credentials_.instance_url + "/api/v1/statuses/" + id + "/source";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return std::nullopt;
+    try {
+        const json j = json::parse(body);
+        PostSource src;
+        src.text = j.value("text", "");
+        src.spoiler_text = j.value("spoiler_text", "");
+        return src;
     } catch (...) {
         return std::nullopt;
     }

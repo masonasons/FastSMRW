@@ -52,6 +52,7 @@ public:
     bool toggle_boost(int visible_index);
 
     void post(const PostDraft& draft, std::function<void(bool)> done);
+    void edit_post(const std::string& id, const PostDraft& draft, std::function<void(bool)> done);
 
     // Per-timeline selected-row memory (by item id). The UI records the focused
     // row here; on switching back or after a refresh it restores this position

@@ -42,6 +42,13 @@ struct TimelinePage {
     std::optional<PageCursor> next_cursor; // nullopt = end of timeline
 };
 
+// A poll to attach to a new post (Mastodon).
+struct PollDraft {
+    std::vector<std::string> options;
+    bool multiple = false;
+    int expires_in_seconds = 86400;
+};
+
 // Input for composing a post.
 struct PostDraft {
     std::string text;
@@ -50,6 +57,14 @@ struct PostDraft {
     std::optional<std::string> spoiler_text;
     std::optional<std::string> quoted_status_id;
     std::optional<std::string> language;
+    std::optional<PollDraft> poll;
+    std::optional<std::int64_t> scheduled_at; // unix seconds (Mastodon)
+};
+
+// Editable source of an existing post (for Edit).
+struct PostSource {
+    std::string text;
+    std::string spoiler_text;
 };
 
 class SocialAccount {
@@ -71,6 +86,12 @@ public:
 
     // Create a post; returns the created status on success.
     virtual std::optional<Status> post(const PostDraft& draft) = 0;
+
+    // Edit an existing post (text/CW/language). Returns the updated status, or
+    // nullopt if unsupported (Bluesky) or on failure.
+    virtual std::optional<Status> edit_post(const std::string&, const PostDraft&) { return std::nullopt; }
+    // Fetch the editable source (raw text + CW) of a post, or nullopt.
+    virtual std::optional<PostSource> post_source(const std::string&) { return std::nullopt; }
 
     // Interaction toggles. Take the full status so platforms can extract what
     // they need (Mastodon: id; Bluesky: at-uri + cid + viewer record uris).
