@@ -54,6 +54,9 @@ void test_sse_multiline_crlf_comments();
 // From test_capi.cpp
 void test_capi_session_events();
 
+// From test_thread.cpp
+void test_mastodon_thread_fetch();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -100,6 +103,7 @@ int main() {
     test_sse_split_across_feeds();
     test_sse_multiline_crlf_comments();
     test_capi_session_events();
+    test_mastodon_thread_fetch();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;
