@@ -32,7 +32,8 @@ std::filesystem::path exe_dir() {
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
-    INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES};
+    INITCOMMONCONTROLSEX icc{sizeof(icc),
+                             ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES | ICC_DATE_CLASSES};
     InitCommonControlsEx(&icc);
 
     WinExecutor executor;
@@ -55,6 +56,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     if (!window.create())
         return 1;
     window.set_speaker(&speaker);
+    window.set_enter_to_send(settings.enter_to_send);
     executor.bind(window.hwnd(), WM_APP_DISPATCH);
 
     AppController app(&executor, &sound);

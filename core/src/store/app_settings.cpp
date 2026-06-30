@@ -55,6 +55,7 @@ AppSettings SettingsStore::load() const {
     }
 
     settings.sounds_enabled = root.value("sounds_enabled", true);
+    settings.enter_to_send = root.value("enter_to_send", false);
     settings.soundpack = root.value("soundpack", std::string("Default"));
 
     SpeechSettings speech;
@@ -71,6 +72,7 @@ AppSettings SettingsStore::load() const {
 bool SettingsStore::save(const AppSettings& settings) const {
     json root;
     root["sounds_enabled"] = settings.sounds_enabled;
+    root["enter_to_send"] = settings.enter_to_send;
     root["soundpack"] = settings.soundpack;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);

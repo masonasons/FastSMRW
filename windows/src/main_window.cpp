@@ -10,6 +10,7 @@
 #include "utf.hpp"
 
 #include "fastsm/fastsm.hpp"
+#include "fastsm/presentation/reply_helper.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
 #include "fastsm/util/date_parsing.hpp"
 
@@ -116,7 +117,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_REPLY, L"&Reply\tR");
     AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tCtrl+Shift+B");
     AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tCtrl+Shift+D");
-    AppendMenuW(status, MF_STRING | MF_GRAYED, ID_QUOTE, L"&Quote\tCtrl+Shift+Q");
+    AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tCtrl+Shift+Q");
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tCtrl+I");
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_VIEW_THREAD, L"View &Thread");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
@@ -181,6 +182,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
         {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
         {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
+        {FVIRTKEY | FCONTROL | FSHIFT, 'Q', ID_QUOTE},
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
@@ -422,6 +424,12 @@ void MainWindow::on_view_keydown(int vk) {
     case 'R':
         do_reply();
         break;
+    case 'Q':
+        do_quote();
+        break;
+    case 'E':
+        do_edit();
+        break;
     case VK_DELETE:
         // Close a spawned (dismissable) timeline.
         if (app_ && app_->close_current_timeline() && app_->sound())
@@ -452,46 +460,94 @@ void MainWindow::do_favorite() {
         app_->sound()->play(now_fav ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
 }
 
-void MainWindow::do_reply() {
+const Status* MainWindow::selected_status() const {
     TimelineController* tc = app_ ? app_->current() : nullptr;
     const int row = selected_row();
     if (!tc || row < 0)
-        return;
+        return nullptr;
     const auto& items = tc->items();
     if (row >= static_cast<int>(items.size()))
-        return;
-    const Status* s = items[static_cast<size_t>(row)].actionable_status();
-    if (!s)
-        return;
-
-    std::wstring context = L"Replying to " + to_wide(s->account.best_name());
-    auto text = show_compose_dialog(hwnd_, inst_, L"Reply", context);
-    if (text) {
-        PostDraft draft;
-        draft.text = *text;
-        draft.reply_to_id = s->id;
-        tc->post(draft, [this](bool ok) {
-            if (app_ && app_->sound())
-                app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
-        });
-    }
+        return nullptr;
+    return items[static_cast<size_t>(row)].actionable_status();
 }
 
-void MainWindow::do_new_post() {
+void MainWindow::present_compose(ComposeMode mode, const Status* target) {
     TimelineController* tc = app_ ? app_->current() : nullptr;
-    if (!tc) {
+    if (!tc || !tc->account()) {
         announce("Add an account before posting.");
         return;
     }
-    auto text = show_compose_dialog(hwnd_, inst_, L"New Post", L"");
-    if (text) {
-        PostDraft draft;
-        draft.text = *text;
-        tc->post(draft, [this](bool ok) {
-            if (app_ && app_->sound())
-                app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
-        });
+    SocialAccount* account = tc->account();
+
+    ComposeRequest req;
+    req.mode = mode;
+    req.features = account->features();
+    req.max_chars = account->max_chars();
+    req.enter_to_send = enter_to_send_;
+
+    std::string reply_to_id, quoted_status_id, edit_id;
+    if (mode == ComposeMode::Reply && target) {
+        req.title = L"Reply";
+        req.context_label = "Replying to " + target->account.best_name() + ": " + target->text;
+        if (account->platform() == Platform::Mastodon)
+            req.prefill_text = present::mention_prefix(*target, account->me());
+        req.default_visibility = target->visibility;
+        reply_to_id = target->id;
+    } else if (mode == ComposeMode::Quote && target) {
+        req.title = L"Quote Post";
+        req.context_label = "Quoting " + target->account.best_name() + ": " + target->text;
+        quoted_status_id = target->id;
+    } else if (mode == ComposeMode::Edit && target) {
+        req.title = L"Edit Post";
+        req.prefill_text = target->text;
+        if (target->spoiler_text)
+            req.prefill_cw = *target->spoiler_text;
+        edit_id = target->id;
+    } else {
+        req.title = L"New Post";
     }
+
+    auto result = show_compose_dialog(hwnd_, inst_, req);
+    if (!result)
+        return;
+    PostDraft draft = std::move(result->draft);
+    if (!reply_to_id.empty())
+        draft.reply_to_id = reply_to_id;
+    if (!quoted_status_id.empty())
+        draft.quoted_status_id = quoted_status_id;
+
+    auto done = [this](bool ok) {
+        if (app_ && app_->sound())
+            app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
+    };
+    if (mode == ComposeMode::Edit && !edit_id.empty())
+        tc->edit_post(edit_id, draft, done);
+    else
+        tc->post(draft, done);
+}
+
+void MainWindow::do_new_post() { present_compose(ComposeMode::New, nullptr); }
+
+void MainWindow::do_reply() {
+    if (const Status* s = selected_status())
+        present_compose(ComposeMode::Reply, s);
+}
+
+void MainWindow::do_quote() {
+    if (const Status* s = selected_status())
+        present_compose(ComposeMode::Quote, s);
+}
+
+void MainWindow::do_edit() {
+    const Status* s = selected_status();
+    TimelineController* tc = app_ ? app_->current() : nullptr;
+    if (!s || !tc || !tc->account())
+        return;
+    if (s->account.id != tc->account()->me().id) {
+        announce("You can only edit your own posts.");
+        return;
+    }
+    present_compose(ComposeMode::Edit, s);
 }
 
 void MainWindow::do_new_timeline() {
@@ -576,6 +632,9 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_FAVORITE:
         do_favorite();
+        break;
+    case ID_QUOTE:
+        do_quote();
         break;
     case ID_POST_INFO:
         do_post_info();

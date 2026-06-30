@@ -11,6 +11,7 @@ namespace fastsm::store {
 // needs plus the configurable speech field order/visibility.
 struct AppSettings {
     bool sounds_enabled = true;
+    bool enter_to_send = false; // Return sends (else Ctrl+Return sends)
     std::string soundpack = "Default";
     present::SpeechSettings speech = present::SpeechSettings::defaults();
 };
