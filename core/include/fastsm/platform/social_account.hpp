@@ -126,7 +126,10 @@ public:
     virtual bool favorite(const Status& status) = 0;
     virtual bool unfavorite(const Status& status) = 0;
 
-    // --- User relationship actions (optional; Mastodon) ---
+    // --- User relationship actions (optional; Mastodon + Bluesky) ---
+    // Fetch a fuller profile for an account (counts, bio) when the row's User is
+    // sparse, or nullopt to use the User already in hand (Mastodon).
+    virtual std::optional<User> fetch_profile(const std::string&) { return std::nullopt; }
     // The viewer's relationship to an account, or nullopt if unsupported/failed.
     virtual std::optional<Relationship> relationship(const std::string&) { return std::nullopt; }
     virtual bool follow(const std::string&) { return false; }

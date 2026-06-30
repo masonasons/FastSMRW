@@ -204,7 +204,9 @@ void CoreSession::cmd_start() {
             emit_accounts();
             emit_timelines();
             emit_settings();
-            if (!accounts_.selected())
+            if (accounts_.selected())
+                sound_.play(sound::Earcon::Refresh); // "ready" chime — startup only
+            else
                 emit_announce("No account yet. Use Add Account (Ctrl+Shift+A).");
         });
     });
@@ -289,6 +291,7 @@ void CoreSession::cmd_select_account(const json& cmd) {
     rebuild_timelines();
     emit_accounts();
     emit_timelines();
+    save_config(); // remember which account is selected across restarts
 }
 
 // --- settings ---
@@ -494,22 +497,26 @@ std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
 void CoreSession::emit_user_profile(const User& u) {
     SocialAccount* acct = accounts_.selected();
     const User user = u;
-    const std::string text = present::user_profile(u);
     const std::string handle = u.acct.empty() ? u.username : u.acct;
     const bool can_hide_boosts = acct && acct->features().hide_boosts;
-    // Fetch the relationship off-thread, then emit (so the dialog's follow/mute/
-    // block buttons reflect the real state). Profiling a mention still works (the
-    // relationship is by id).
-    worker_.post([this, acct, user, text, handle, can_hide_boosts] {
+    // Off-thread: enrich a sparse row (Bluesky) via fetch_profile, compose the
+    // text, and fetch the relationship, then emit. Profiling a mention still
+    // works (everything is keyed by id).
+    worker_.post([this, acct, user, handle, can_hide_boosts] {
+        User full = user;
+        if (acct && !user.id.empty())
+            if (auto p = acct->fetch_profile(user.id))
+                full = *p;
+        const std::string text = present::user_profile(full);
         std::optional<Relationship> rel;
         if (acct && !user.id.empty())
             rel = acct->relationship(user.id);
-        loop_.post([this, user, text, handle, rel, can_hide_boosts] {
+        loop_.post([this, full, text, handle, rel, can_hide_boosts] {
             json e = {{"event", "user_profile"},
                       {"text", text},
-                      {"account_id", user.id},
+                      {"account_id", full.id},
                       {"acct", handle},
-                      {"url", user.url},
+                      {"url", full.url},
                       {"has_relationship", rel.has_value()},
                       {"can_hide_boosts", can_hide_boosts}};
             if (rel) {
@@ -934,13 +941,9 @@ void CoreSession::rebuild_timelines() {
     if (SocialAccount* account = accounts_.selected())
         for (const TimelineSource& src : account->default_timelines())
             timelines_.push_back(make_controller(src));
-    bool first = true;
     for (auto& tc : timelines_) {
         tc->load_cached();
         tc->refresh();
-        if (first)
-            sound_.play(sound::Earcon::Refresh);
-        first = false;
     }
     update_streaming();
 }

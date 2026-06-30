@@ -16,6 +16,18 @@ std::string rkey_from_uri(const std::string& at_uri) {
     return slash == std::string::npos ? at_uri : at_uri.substr(slash + 1);
 }
 
+// Flatten a getPostThread replies tree into rows, depth-first.
+void append_bsky_replies(const json& replies, std::vector<TimelineItem>& out) {
+    if (!replies.is_array())
+        return;
+    for (const auto& node : replies) {
+        if (auto p = node.find("post"); p != node.end() && p->is_object())
+            out.push_back(TimelineItem{bluesky::map_post(*p)});
+        if (auto r = node.find("replies"); r != node.end())
+            append_bsky_replies(*r, out);
+    }
+}
+
 } // namespace
 
 BlueskyAccount::BlueskyAccount(BlueskyCredentials credentials, BlueskySession session, User me,
@@ -76,30 +88,87 @@ net::HttpResponse BlueskyAccount::send_authed(const std::string& method, const s
 TimelinePage BlueskyAccount::items(const TimelineSource& source, int limit,
                                    const PageCursor& cursor) {
     TimelinePage page;
-    if (source.kind != TimelineSource::Kind::Home)
-        return page; // only Home in M1
+    const std::string base = session_.pds_url + "/xrpc/";
+    const std::string cur = (cursor.kind == CursorKind::Token && !cursor.value.empty())
+                                ? "&cursor=" + util::percent_encode(cursor.value)
+                                : std::string{};
+    auto fetch = [&](const std::string& url) -> std::optional<json> {
+        const net::HttpResponse res = send_authed("GET", url, "");
+        if (!res.ok())
+            return std::nullopt;
+        try {
+            return json::parse(res.body);
+        } catch (...) {
+            return std::nullopt;
+        }
+    };
+    auto take_feed = [&](const json& j) {
+        if (auto f = j.find("feed"); f != j.end() && f->is_array())
+            for (const auto& e : *f)
+                page.items.push_back(TimelineItem{bluesky::map_feed_item(e)});
+        if (auto c = j.find("cursor"); c != j.end() && c->is_string())
+            page.next_cursor = PageCursor::token(c->get<std::string>());
+    };
 
-    std::string url =
-        session_.pds_url + "/xrpc/app.bsky.feed.getTimeline?limit=" + std::to_string(limit);
-    if (cursor.kind == CursorKind::Token && !cursor.value.empty())
-        url += "&cursor=" + util::percent_encode(cursor.value);
-
-    const net::HttpResponse res = send_authed("GET", url, "");
-    if (!res.ok())
-        return page;
-
-    json j;
-    try {
-        j = json::parse(res.body);
-    } catch (...) {
-        return page;
+    switch (source.kind) {
+    case TimelineSource::Kind::Home:
+        if (auto j = fetch(base + "app.bsky.feed.getTimeline?limit=" + std::to_string(limit) + cur))
+            take_feed(*j);
+        break;
+    case TimelineSource::Kind::UserPosts:
+        if (auto j = fetch(base + "app.bsky.feed.getAuthorFeed?actor=" +
+                           util::percent_encode(source.param) + "&limit=" + std::to_string(limit) +
+                           cur))
+            take_feed(*j);
+        break;
+    case TimelineSource::Kind::Thread: {
+        auto j = fetch(base + "app.bsky.feed.getPostThread?uri=" +
+                       util::percent_encode(source.param));
+        if (!j)
+            break;
+        auto t = j->find("thread");
+        if (t == j->end() || !t->is_object())
+            break;
+        // Ancestors: walk the parent chain, then reverse into chronological order.
+        std::vector<TimelineItem> ancestors;
+        const json* node = nullptr;
+        if (auto pit = t->find("parent"); pit != t->end() && pit->is_object())
+            node = &(*pit);
+        while (node) {
+            if (auto p = node->find("post"); p != node->end() && p->is_object())
+                ancestors.push_back(TimelineItem{bluesky::map_post(*p)});
+            const json* next = nullptr;
+            if (auto pit = node->find("parent"); pit != node->end() && pit->is_object())
+                next = &(*pit);
+            node = next;
+        }
+        for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it)
+            page.items.push_back(std::move(*it));
+        if (auto p = t->find("post"); p != t->end() && p->is_object())
+            page.items.push_back(TimelineItem{bluesky::map_post(*p)});
+        if (auto r = t->find("replies"); r != t->end())
+            append_bsky_replies(*r, page.items);
+        break;
     }
-    if (auto it = j.find("feed"); it != j.end() && it->is_array()) {
-        for (const auto& entry : *it)
-            page.items.push_back(TimelineItem{bluesky::map_feed_item(entry)});
+    case TimelineSource::Kind::Followers:
+    case TimelineSource::Kind::Following: {
+        const bool followers = source.kind == TimelineSource::Kind::Followers;
+        const std::string ep =
+            followers ? "app.bsky.graph.getFollowers" : "app.bsky.graph.getFollows";
+        const char* key = followers ? "followers" : "follows";
+        if (auto j = fetch(base + ep + "?actor=" + util::percent_encode(source.param) +
+                           "&limit=" + std::to_string(limit) + cur)) {
+            if (auto a = j->find(key); a != j->end() && a->is_array())
+                for (const auto& prof : *a)
+                    page.items.push_back(TimelineItem{bluesky::map_author(prof)});
+            if (auto c = j->find("cursor"); c != j->end() && c->is_string())
+                page.next_cursor = PageCursor::token(c->get<std::string>());
+        }
+        break;
     }
-    if (auto it = j.find("cursor"); it != j.end() && it->is_string())
-        page.next_cursor = PageCursor::token(it->get<std::string>());
+    default:
+        break; // other kinds aren't supported on Bluesky yet
+    }
     return page;
 }
 
@@ -154,6 +223,102 @@ bool BlueskyAccount::delete_record(const char* collection, const std::string& at
         "POST", session_.pds_url + "/xrpc/com.atproto.repo.deleteRecord", body.dump());
     return res.ok();
 }
+
+std::optional<std::string> BlueskyAccount::get_profile_body(const std::string& actor) {
+    const std::string url =
+        session_.pds_url + "/xrpc/app.bsky.actor.getProfile?actor=" + util::percent_encode(actor);
+    const net::HttpResponse res = send_authed("GET", url, "");
+    if (!res.ok())
+        return std::nullopt;
+    return res.body;
+}
+
+std::optional<User> BlueskyAccount::fetch_profile(const std::string& id) {
+    auto body = get_profile_body(id);
+    if (!body)
+        return std::nullopt;
+    try {
+        return bluesky::map_author(json::parse(*body));
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::optional<Relationship> BlueskyAccount::relationship(const std::string& id) {
+    auto body = get_profile_body(id);
+    if (!body)
+        return std::nullopt;
+    try {
+        const json j = json::parse(*body);
+        Relationship r;
+        r.id = j.value("did", id);
+        if (auto v = j.find("viewer"); v != j.end() && v->is_object()) {
+            r.following = v->contains("following"); // a record uri present == following
+            r.muting = v->value("muted", false);
+            r.blocking = v->contains("blocking");
+        }
+        return r;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+bool BlueskyAccount::follow(const std::string& id) {
+    const json rec = {{"$type", "app.bsky.graph.follow"},
+                      {"subject", id},
+                      {"createdAt", util::format_iso8601(util::now_unix())}};
+    return create_record("app.bsky.graph.follow", rec.dump());
+}
+
+bool BlueskyAccount::block(const std::string& id) {
+    const json rec = {{"$type", "app.bsky.graph.block"},
+                      {"subject", id},
+                      {"createdAt", util::format_iso8601(util::now_unix())}};
+    return create_record("app.bsky.graph.block", rec.dump());
+}
+
+// Bluesky follow/block are records; undo by deleting the record whose URI the
+// profile's viewer state carries.
+bool BlueskyAccount::unfollow(const std::string& id) {
+    auto body = get_profile_body(id);
+    if (!body)
+        return false;
+    try {
+        const json j = json::parse(*body);
+        if (auto v = j.find("viewer"); v != j.end()) {
+            const std::string uri = v->value("following", std::string{});
+            if (!uri.empty())
+                return delete_record("app.bsky.graph.follow", uri);
+        }
+    } catch (...) {
+    }
+    return false;
+}
+
+bool BlueskyAccount::unblock(const std::string& id) {
+    auto body = get_profile_body(id);
+    if (!body)
+        return false;
+    try {
+        const json j = json::parse(*body);
+        if (auto v = j.find("viewer"); v != j.end()) {
+            const std::string uri = v->value("blocking", std::string{});
+            if (!uri.empty())
+                return delete_record("app.bsky.graph.block", uri);
+        }
+    } catch (...) {
+    }
+    return false;
+}
+
+bool BlueskyAccount::mute_actor(const std::string& did, bool mute) {
+    const json body = {{"actor", did}};
+    const std::string ep = mute ? "app.bsky.graph.muteActor" : "app.bsky.graph.unmuteActor";
+    const net::HttpResponse res = send_authed("POST", session_.pds_url + "/xrpc/" + ep, body.dump());
+    return res.ok();
+}
+bool BlueskyAccount::mute(const std::string& id) { return mute_actor(id, true); }
+bool BlueskyAccount::unmute(const std::string& id) { return mute_actor(id, false); }
 
 bool BlueskyAccount::favorite(const Status& status) {
     const Status& t = status.display_status();

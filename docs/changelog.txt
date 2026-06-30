@@ -4,6 +4,15 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- Bluesky now supports the same social features as Mastodon: view a post's
+  thread, open an author's posts, open Followers / Following lists, and the
+  profile with follow / unfollow, mute, and block.
+- Fixed the startup "ready" chime playing every time you switched accounts - it
+  now plays only once when the app finishes starting.
+- The app now reopens to the account you were last using.
+- Fixed being stuck at the cached number of posts after launching or switching
+  accounts: loading older posts (scrolling down) works again.
+
 - Speech settings now cover three kinds of rows separately. The Speech tab has
   Configure Posts, Configure Users, and Configure Notifications buttons; each
   opens a dialog to check which details are spoken and reorder them (Ctrl+Up /

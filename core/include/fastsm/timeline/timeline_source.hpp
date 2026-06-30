@@ -123,6 +123,22 @@ struct TimelineSource {
     bool is_user_list() const {
         return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople;
     }
+    // Mastodon paginates these by item id (max_id), so scrollback can be re-seeded
+    // from the oldest loaded row after a cache load.
+    bool paginates_by_item_id() const {
+        switch (kind) {
+        case Kind::Home:
+        case Kind::Local:
+        case Kind::Federated:
+        case Kind::Notifications:
+        case Kind::Mentions:
+        case Kind::UserPosts:
+        case Kind::Hashtag:
+            return true;
+        default:
+            return false;
+        }
+    }
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }

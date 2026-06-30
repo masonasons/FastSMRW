@@ -47,6 +47,18 @@ struct TimelineItem {
     const User* user() const { return std::get_if<User>(&value); }
     const Notification* notification() const { return std::get_if<Notification>(&value); }
 
+    // The id this row paginates by (the outer status/notification/user id, not a
+    // boost's underlying post) — used to seed scrollback after a cache load.
+    std::string pagination_id() const {
+        if (const auto* s = std::get_if<Status>(&value))
+            return s->id;
+        if (const auto* n = std::get_if<Notification>(&value))
+            return n->id;
+        if (const auto* u = std::get_if<User>(&value))
+            return u->id;
+        return {};
+    }
+
     // Mutable access for optimistic UI updates (boost/favorite toggles).
     Status* mutable_status() {
         if (auto* s = std::get_if<Status>(&value))

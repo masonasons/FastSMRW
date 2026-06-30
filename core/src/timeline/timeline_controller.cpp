@@ -136,6 +136,12 @@ void TimelineController::load_cached() {
     if (cached.empty())
         return;
     raw_ = std::move(cached);
+    // Seed the scrollback cursor so "load older" works after a cache load. Only
+    // possible where pagination is by item id (Mastodon); other feeds use an
+    // opaque cursor we can't reconstruct from the cached rows.
+    if (!scrollback_cursor_ && !raw_.empty() && account_ &&
+        account_->platform() == Platform::Mastodon && source_.paginates_by_item_id())
+        scrollback_cursor_ = PageCursor::max_id(raw_.back().pagination_id());
     rebuild_visible();
     if (on_change)
         on_change();

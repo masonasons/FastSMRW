@@ -31,6 +31,15 @@ public:
     bool favorite(const Status& status) override;
     bool unfavorite(const Status& status) override;
 
+    std::optional<User> fetch_profile(const std::string& id) override;
+    std::optional<Relationship> relationship(const std::string& id) override;
+    bool follow(const std::string& id) override;
+    bool unfollow(const std::string& id) override;
+    bool mute(const std::string& id) override;
+    bool unmute(const std::string& id) override;
+    bool block(const std::string& id) override;
+    bool unblock(const std::string& id) override;
+
     const BlueskyCredentials& credentials() const { return credentials_; }
 
 private:
@@ -41,6 +50,9 @@ private:
     bool refresh_session();
     bool create_record(const char* collection, const std::string& record_json);
     bool delete_record(const char* collection, const std::string& at_uri);
+    // Raw app.bsky.actor.getProfile response body for an actor (did or handle).
+    std::optional<std::string> get_profile_body(const std::string& actor);
+    bool mute_actor(const std::string& did, bool mute);
 
     BlueskyCredentials credentials_;
     BlueskySession session_;
