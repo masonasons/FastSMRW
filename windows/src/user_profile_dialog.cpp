@@ -7,6 +7,7 @@ namespace {
 
 struct Ctx {
     const std::wstring* text;
+    const UserProfileRelationship* rel;
     std::optional<UserProfileAction> result;
 };
 
@@ -25,6 +26,17 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 crlf += ch;
         }
         SetDlgItemTextW(dlg, IDC_PROFILE_TEXT, crlf.c_str());
+
+        // Relationship-aware labels; disabled until the relationship is known.
+        const UserProfileRelationship& r = *c->rel;
+        SetDlgItemTextW(dlg, IDC_PROFILE_FOLLOW,
+                        r.requested ? L"Cancel &Request" : (r.following ? L"Un&follow" : L"&Follow"));
+        SetDlgItemTextW(dlg, IDC_PROFILE_MUTE, r.muting ? L"Un&mute" : L"&Mute");
+        SetDlgItemTextW(dlg, IDC_PROFILE_BLOCK, r.blocking ? L"Un&block" : L"&Block");
+        EnableWindow(GetDlgItem(dlg, IDC_PROFILE_FOLLOW), r.known);
+        EnableWindow(GetDlgItem(dlg, IDC_PROFILE_MUTE), r.known);
+        EnableWindow(GetDlgItem(dlg, IDC_PROFILE_BLOCK), r.known);
+
         SetFocus(GetDlgItem(dlg, IDC_PROFILE_TEXT)); // read the profile immediately
         return FALSE;                                // focus set explicitly
     }
@@ -42,6 +54,15 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_PROFILE_BROWSER:
             finish(UserProfileAction::OpenBrowser);
             return TRUE;
+        case IDC_PROFILE_FOLLOW:
+            finish(UserProfileAction::ToggleFollow);
+            return TRUE;
+        case IDC_PROFILE_MUTE:
+            finish(UserProfileAction::ToggleMute);
+            return TRUE;
+        case IDC_PROFILE_BLOCK:
+            finish(UserProfileAction::ToggleBlock);
+            return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);
             return TRUE;
@@ -55,8 +76,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 std::optional<UserProfileAction> show_user_profile_dialog(HWND parent, HINSTANCE inst,
-                                                          const std::wstring& text) {
-    Ctx ctx{&text, std::nullopt};
+                                                          const std::wstring& text,
+                                                          const UserProfileRelationship& rel) {
+    Ctx ctx{&text, &rel, std::nullopt};
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_USER_PROFILE), parent, Proc,
                     reinterpret_cast<LPARAM>(&ctx));
     return ctx.result;

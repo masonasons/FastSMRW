@@ -591,11 +591,21 @@ void MainWindow::ev_user_profile(const json& e) {
     const std::string account_id = e.value("account_id", std::string{});
     const std::string acct = e.value("acct", std::string{});
     const std::string url = e.value("url", std::string{});
+    UserProfileRelationship rel;
+    rel.known = e.value("has_relationship", false);
+    rel.following = e.value("following", false);
+    rel.muting = e.value("muting", false);
+    rel.blocking = e.value("blocking", false);
+    rel.requested = e.value("requested", false);
     const std::string keep_id = selected_id();
-    auto action = show_user_profile_dialog(hwnd_, inst_, text);
+    auto action = show_user_profile_dialog(hwnd_, inst_, text, rel);
     restore_selection(keep_id);
     if (!action)
         return;
+    auto set_rel = [&](const char* a) {
+        dispatch_cmd(
+            {{"cmd", "set_relationship"}, {"account_id", account_id}, {"acct", acct}, {"action", a}});
+    };
     switch (*action) {
     case UserProfileAction::ViewPosts:
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
@@ -603,6 +613,15 @@ void MainWindow::ev_user_profile(const json& e) {
     case UserProfileAction::OpenBrowser:
         if (!url.empty())
             ShellExecuteW(nullptr, L"open", to_wide(url).c_str(), nullptr, nullptr, SW_SHOW);
+        break;
+    case UserProfileAction::ToggleFollow:
+        set_rel((rel.following || rel.requested) ? "unfollow" : "follow");
+        break;
+    case UserProfileAction::ToggleMute:
+        set_rel(rel.muting ? "unmute" : "mute");
+        break;
+    case UserProfileAction::ToggleBlock:
+        set_rel(rel.blocking ? "unblock" : "block");
         break;
     }
 }

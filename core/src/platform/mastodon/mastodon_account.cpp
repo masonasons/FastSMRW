@@ -297,6 +297,44 @@ bool MastodonAccount::unfavorite(const Status& status) {
     return status_action(status.display_status().id, "unfavourite");
 }
 
+std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/relationships?id[]=" + id;
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return std::nullopt;
+    try {
+        json arr = json::parse(body);
+        if (!arr.is_array() || arr.empty())
+            return std::nullopt;
+        const json& j = arr[0];
+        Relationship r;
+        r.id = j.value("id", std::string{});
+        r.following = j.value("following", false);
+        r.followed_by = j.value("followed_by", false);
+        r.muting = j.value("muting", false);
+        r.blocking = j.value("blocking", false);
+        r.requested = j.value("requested", false);
+        return r;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+// POST /api/v1/accounts/:id/{follow,unfollow,mute,unmute,block,unblock}.
+bool MastodonAccount::account_action(const std::string& id, const char* verb) {
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/" + id + "/" + verb;
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
+bool MastodonAccount::follow(const std::string& id) { return account_action(id, "follow"); }
+bool MastodonAccount::unfollow(const std::string& id) { return account_action(id, "unfollow"); }
+bool MastodonAccount::mute(const std::string& id) { return account_action(id, "mute"); }
+bool MastodonAccount::unmute(const std::string& id) { return account_action(id, "unmute"); }
+bool MastodonAccount::block(const std::string& id) { return account_action(id, "block"); }
+bool MastodonAccount::unblock(const std::string& id) { return account_action(id, "unblock"); }
+
 std::optional<StreamRequest> MastodonAccount::user_stream_request() const {
     // The user stream delivers home-timeline updates + notifications over SSE.
     StreamRequest r;

@@ -24,6 +24,16 @@ struct PlatformFeatures {
     bool scheduling = false;
 };
 
+// The viewer's relationship to another account (Mastodon).
+struct Relationship {
+    std::string id; // the other account's id
+    bool following = false;
+    bool followed_by = false;
+    bool muting = false;
+    bool blocking = false;
+    bool requested = false; // follow request pending (locked accounts)
+};
+
 // Pagination cursor. Mastodon pages by max_id; Bluesky by an opaque token.
 enum class CursorKind { Start, MaxID, Token };
 
@@ -113,6 +123,16 @@ public:
     virtual bool unboost(const Status& status) = 0;
     virtual bool favorite(const Status& status) = 0;
     virtual bool unfavorite(const Status& status) = 0;
+
+    // --- User relationship actions (optional; Mastodon) ---
+    // The viewer's relationship to an account, or nullopt if unsupported/failed.
+    virtual std::optional<Relationship> relationship(const std::string&) { return std::nullopt; }
+    virtual bool follow(const std::string&) { return false; }
+    virtual bool unfollow(const std::string&) { return false; }
+    virtual bool mute(const std::string&) { return false; }
+    virtual bool unmute(const std::string&) { return false; }
+    virtual bool block(const std::string&) { return false; }
+    virtual bool unblock(const std::string&) { return false; }
 
     // --- Real-time streaming (optional; Mastodon SSE user stream) ---
 

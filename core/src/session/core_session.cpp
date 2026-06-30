@@ -47,6 +47,24 @@ PostDraft draft_from_json(const json& d) {
     return draft;
 }
 
+// Spoken confirmation for a relationship action.
+std::string relationship_message(const std::string& action, const std::string& handle) {
+    const std::string at = handle.empty() ? "user" : "@" + handle;
+    if (action == "follow")
+        return "Following " + at;
+    if (action == "unfollow")
+        return "Unfollowed " + at;
+    if (action == "mute")
+        return "Muted " + at;
+    if (action == "unmute")
+        return "Unmuted " + at;
+    if (action == "block")
+        return "Blocked " + at;
+    if (action == "unblock")
+        return "Unblocked " + at;
+    return "Done";
+}
+
 json features_json(const PlatformFeatures& f) {
     return {{"visibility", f.visibility},     {"content_warning", f.content_warning},
             {"quote_posts", f.quote_posts},   {"polls", f.polls},
@@ -130,6 +148,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_user_timeline(cmd);
     else if (c == "open_user_profile")
         cmd_open_user_profile(cmd);
+    else if (c == "set_relationship")
+        cmd_set_relationship(cmd);
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -411,11 +431,67 @@ std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
 }
 
 void CoreSession::emit_user_profile(const User& u) {
-    emit({{"event", "user_profile"},
-          {"text", present::user_profile(u)},
-          {"account_id", u.id},
-          {"acct", u.acct.empty() ? u.username : u.acct},
-          {"url", u.url}});
+    SocialAccount* acct = accounts_.selected();
+    const User user = u;
+    const std::string text = present::user_profile(u);
+    const std::string handle = u.acct.empty() ? u.username : u.acct;
+    // Fetch the relationship off-thread, then emit (so the dialog's follow/mute/
+    // block buttons reflect the real state). Profiling a mention still works (the
+    // relationship is by id).
+    worker_.post([this, acct, user, text, handle] {
+        std::optional<Relationship> rel;
+        if (acct && !user.id.empty())
+            rel = acct->relationship(user.id);
+        loop_.post([this, user, text, handle, rel] {
+            json e = {{"event", "user_profile"},
+                      {"text", text},
+                      {"account_id", user.id},
+                      {"acct", handle},
+                      {"url", user.url},
+                      {"has_relationship", rel.has_value()}};
+            if (rel) {
+                e["following"] = rel->following;
+                e["muting"] = rel->muting;
+                e["blocking"] = rel->blocking;
+                e["requested"] = rel->requested;
+            }
+            emit(e);
+        });
+    });
+}
+
+void CoreSession::cmd_set_relationship(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct)
+        return;
+    const std::string id = cmd.value("account_id", std::string{});
+    const std::string action = cmd.value("action", std::string{});
+    const std::string handle = cmd.value("acct", std::string{});
+    if (id.empty() || action.empty())
+        return;
+    worker_.post([this, acct, id, action, handle] {
+        bool ok = false;
+        if (action == "follow")
+            ok = acct->follow(id);
+        else if (action == "unfollow")
+            ok = acct->unfollow(id);
+        else if (action == "mute")
+            ok = acct->mute(id);
+        else if (action == "unmute")
+            ok = acct->unmute(id);
+        else if (action == "block")
+            ok = acct->block(id);
+        else if (action == "unblock")
+            ok = acct->unblock(id);
+        loop_.post([this, ok, action, handle] {
+            if (!ok) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Action failed");
+                return;
+            }
+            emit_announce(relationship_message(action, handle));
+        });
+    });
 }
 
 void CoreSession::emit_user_picker(const std::string& purpose, const std::string& row_id,

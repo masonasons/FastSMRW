@@ -79,6 +79,7 @@ private:
     void emit_user_profile(const User& u);
     void emit_user_picker(const std::string& purpose, const std::string& row_id,
                           const std::vector<User>& users);
+    void cmd_set_relationship(const nlohmann::json& cmd);
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_add_account(const nlohmann::json& cmd);

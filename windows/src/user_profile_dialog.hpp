@@ -7,12 +7,22 @@
 
 namespace fastsmui {
 
-enum class UserProfileAction { ViewPosts, OpenBrowser };
+enum class UserProfileAction { ViewPosts, OpenBrowser, ToggleFollow, ToggleMute, ToggleBlock };
+
+// The viewer's relationship to the user (for relationship-aware button labels).
+struct UserProfileRelationship {
+    bool known = false; // false = the relationship couldn't be loaded
+    bool following = false;
+    bool muting = false;
+    bool blocking = false;
+    bool requested = false; // follow request pending
+};
 
 // Modal Open User Profile dialog (Mac parity): a read-only review of the user's
-// profile (name, handle, bio, counts) plus navigation buttons. Returns the
-// chosen action, or nullopt if dismissed. The caller performs the action.
+// profile plus navigation and follow/mute/block buttons. Returns the chosen
+// action, or nullopt if dismissed. The caller performs the action.
 std::optional<UserProfileAction> show_user_profile_dialog(HWND parent, HINSTANCE inst,
-                                                          const std::wstring& text);
+                                                          const std::wstring& text,
+                                                          const UserProfileRelationship& rel);
 
 } // namespace fastsmui
