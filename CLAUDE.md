@@ -34,6 +34,16 @@ minimal CPU/RAM, fast cache-first startup.
 
 ## Architecture rules
 
+- **The core is driven through a C ABI command/event boundary, not C++ classes.**
+  `core/include/fastsm/capi/fastsm_core.h` is the whole public surface
+  (`create`/`set_event_sink`/`dispatch`/`destroy`); front ends submit **commands**
+  as JSON and render **events** as JSON. `CoreSession`
+  (`core/src/session/core_session.cpp`) is the orchestration that handles every
+  command and emits every event, running engine state on its own core-loop thread.
+  The Win32 app is a **pure client** of this boundary (it holds no engine logic),
+  which is exactly how a future Swift/Kotlin UI binds the same core. Adding a
+  feature = a new command + event(s) in `CoreSession`, plus UI to send/render
+  them — never engine logic in `windows/`.
 - **Features live in the core; only UI lives in the apps.** Anything that isn't
   inherently UI — models, networking, account/timeline logic, settings, string
   and speech composition, sound, filtering, parsing — goes in `fastsm_core` so
