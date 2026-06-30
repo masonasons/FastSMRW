@@ -106,6 +106,10 @@ public:
     // Timelines the user can open via the New Timeline dialog (Ctrl+T).
     virtual std::vector<TimelineSource> spawnable_timelines() const { return {}; }
 
+    // Largest page the platform's API accepts per call (Mastodon 40, Bluesky 100).
+    // The controller uses this so each fetch pulls as much as the server allows.
+    virtual int max_page_size() const { return 40; }
+
     // Fetch one page. Implementations run synchronously on the worker thread.
     virtual TimelinePage items(const TimelineSource& source, int limit,
                                const PageCursor& cursor) = 0;

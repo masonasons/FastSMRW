@@ -26,6 +26,9 @@ FastSMRW changelog
   Bluesky. The cache is trimmed to a real page boundary so it can pick up exactly
   where it left off.
 
+- Bluesky now loads up to 100 posts per request instead of 40 (its API's limit),
+  so timelines fill in faster with fewer round-trips.
+
 - Bluesky now supports the same social features as Mastodon: view a post's
   thread, open an author's posts, open Followers / Following lists, and the
   profile with follow / unfollow, mute, and block.

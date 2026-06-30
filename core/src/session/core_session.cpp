@@ -957,8 +957,9 @@ void CoreSession::rebuild_timelines() {
 }
 
 std::unique_ptr<TimelineController> CoreSession::make_controller(const TimelineSource& src) {
-    auto tc = std::make_unique<TimelineController>(accounts_.selected(), src, &cache_, &worker_,
-                                                   &loop_);
+    SocialAccount* acc = accounts_.selected();
+    const int page = acc ? acc->max_page_size() : 40;
+    auto tc = std::make_unique<TimelineController>(acc, src, &cache_, &worker_, &loop_, page);
     tc->set_max_refresh_pages(settings_.fetch_pages);
     TimelineController* p = tc.get();
     tc->on_change = [this, p] {
