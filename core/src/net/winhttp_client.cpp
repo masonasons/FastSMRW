@@ -110,6 +110,22 @@ HttpResponse WinHttpClient::send(const HttpRequest& req) {
     }
     WinHttpSetTimeouts(session, 15000, 15000, 30000, 30000);
 
+    // Enable TLS 1.2/1.3. Windows 7's WinHTTP defaults to TLS 1.0 and won't
+    // negotiate with modern servers, so the handshake fails and the request
+    // returns status 0. Opt in explicitly; if 1.3 isn't supported (Win7/8/10),
+    // retry with 1.2 only.
+    {
+        DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+#ifdef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
+        protocols |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+#endif
+        if (!WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols,
+                              sizeof(protocols))) {
+            DWORD tls12 = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+            WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &tls12, sizeof(tls12));
+        }
+    }
+
     Handle connect(WinHttpConnect(session, host.c_str(), uc.nPort, 0));
     if (!connect) {
         res.error = "WinHttpConnect failed";
