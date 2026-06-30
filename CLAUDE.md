@@ -4,12 +4,15 @@ FastSMRW is a C++ rewrite of FastSM: a fast, accessible Mastodon/Bluesky client
 for blind users. A portable core (`fastsm_core`) backs native front ends; the
 first is a **pure Win32** Windows app.
 
-## Changelog — REQUIRED for every change
+## Changelog — REQUIRED for every user-noticeable change
 
-After making any change, add a short, **human-readable, non-technical** entry to
-`docs/changelog.txt` describing what changed from a user's point of view (what
-they can now do or what got fixed) — not how it was implemented. Write for an
-end user, not a developer.
+After a change that a user would notice, add a short, **human-readable,
+non-technical** entry to `docs/changelog.txt` describing what changed from a
+user's point of view (what they can now do or what got fixed) — not how it was
+implemented. Write for an end user, not a developer.
+
+Only log changes a user would notice. Purely internal work (refactors, build/CI
+tweaks, test-only changes) does **not** get a changelog entry.
 
 - Put entries under the **current version heading** at the top of the file.
 - **Do NOT bump the version number** unless I explicitly tell you to. Keep adding
