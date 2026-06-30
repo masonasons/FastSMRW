@@ -27,6 +27,13 @@ void test_form_encode();
 void test_bluesky_feed_mapping();
 void test_bluesky_plain_post();
 
+// From test_auth.cpp
+void test_instance_normalization();
+
+// From test_store.cpp
+void test_base64();
+void test_timeline_cache();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -58,6 +65,9 @@ int main() {
     test_form_encode();
     test_bluesky_feed_mapping();
     test_bluesky_plain_post();
+    test_instance_normalization();
+    test_base64();
+    test_timeline_cache();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

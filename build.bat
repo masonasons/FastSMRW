@@ -79,6 +79,8 @@ set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\win
 set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\mastodon\mastodon_map.cpp core\src\platform\mastodon\mastodon_account.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\platform\bluesky\bluesky_account.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\auth\mastodon_auth.cpp core\src\auth\bluesky_auth.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\util\base64.cpp core\src\store\paths.cpp core\src\store\dpapi.cpp core\src\store\timeline_cache.cpp core\src\store\app_config.cpp core\src\store\account_store.cpp"
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
 if errorlevel 1 goto error
@@ -96,7 +98,7 @@ if errorlevel 1 goto error
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS%
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS%
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"
