@@ -247,6 +247,28 @@ LRESULT CALLBACK MainWindow::WndProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPARA
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+LRESULT CALLBACK MainWindow::ViewProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
+                                            UINT_PTR id, DWORD_PTR ref) {
+    auto* self = reinterpret_cast<MainWindow*>(ref);
+    if (msg == WM_SETFOCUS && self) {
+        // When focus returns to the posts list (typically a modal dialog just
+        // closed), a virtual ListView with no focused item snaps focus to row 0
+        // and fires LVN_ITEMCHANGED -- which would clobber selected_id and jump us
+        // to the top. Capture the real position first, let the default proc run
+        // with the change suppressed, then restore the remembered row.
+        Timeline* tc = self->current();
+        const std::string keep = tc ? tc->selected_id : std::string{};
+        self->updating_selection_ = true;
+        const LRESULT r = DefSubclassProc(hwnd, msg, wp, lp);
+        self->updating_selection_ = false;
+        self->restore_selection(keep);
+        return r;
+    }
+    if (msg == WM_NCDESTROY)
+        RemoveWindowSubclass(hwnd, &MainWindow::ViewProcStatic, id);
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
 LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
@@ -271,19 +293,9 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
-    case WM_SETFOCUS: {
-        // Focus is returning to us (typically a modal dialog just closed). Handing
-        // focus to a virtual ListView that lost its focused item makes it focus
-        // row 0 and fire LVN_ITEMCHANGED -- which would clobber selected_id and
-        // snap us to the top. Suppress that, then restore the real position.
-        Timeline* tc = current();
-        const std::string keep = tc ? tc->selected_id : std::string{};
-        updating_selection_ = true;
+    case WM_SETFOCUS:
         SetFocus(timeline_view_);
-        updating_selection_ = false;
-        restore_selection(keep);
         return 0;
-    }
 
     case WM_COMMAND:
         if (HIWORD(wp) == 0 || HIWORD(wp) == 1) { // menu or accelerator
@@ -347,6 +359,8 @@ void MainWindow::create_children() {
         nullptr);
     ListView_SetExtendedListViewStyle(timeline_view_,
                                       LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
+    SetWindowSubclass(timeline_view_, &MainWindow::ViewProcStatic, 0,
+                      reinterpret_cast<DWORD_PTR>(this));
 
     add_single_column(timelines_list_, L"Timelines", dpi_scale(hwnd_, kTimelinesPaneWidth) - 24);
     add_single_column(timeline_view_, L"Timeline", dpi_scale(hwnd_, 640));
