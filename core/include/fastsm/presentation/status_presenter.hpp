@@ -29,4 +29,8 @@ std::string accessibility_label(const Status& s, std::int64_t now,
 std::string accessibility_label(const Status& s, std::int64_t now);
 std::string accessibility_label(const TimelineItem& item, std::int64_t now);
 
+// A readable, multi-line rendering of a post for the Post Info dialog (Mac
+// parity): author/@handle, spoken time, content warning, text, media, stats.
+std::string post_info(const Status& s, std::int64_t now);
+
 } // namespace fastsm::present

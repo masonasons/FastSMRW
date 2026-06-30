@@ -83,6 +83,7 @@ private:
     void ev_settings(const nlohmann::json& e);
     void ev_compose_context(const nlohmann::json& e);
     void ev_spawnable(const nlohmann::json& e);
+    void ev_post_info(const nlohmann::json& e);
 
     HINSTANCE inst_;
     fastsm_core* core_ = nullptr;

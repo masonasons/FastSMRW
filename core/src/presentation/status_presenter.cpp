@@ -164,4 +164,28 @@ std::string accessibility_label(const TimelineItem& item, std::int64_t now) {
     return compact_line(item, now);
 }
 
+std::string post_info(const Status& s, std::int64_t now) {
+    std::string out;
+    out += s.account.best_name() + " (@" + s.account.acct + ")\n";
+    out += util::relative_spoken(s.created_at, now) + "\n";
+    if (s.has_content_warning())
+        out += "Content warning: " + *s.spoiler_text + "\n";
+    out += "\n" + s.text + "\n";
+    if (!s.media_attachments.empty()) {
+        std::vector<std::string> descs;
+        for (const auto& m : s.media_attachments)
+            if (!m.description.empty())
+                descs.push_back(m.description);
+        out += "\n";
+        if (descs.empty())
+            out += std::to_string(s.media_attachments.size()) + " attachment(s)\n";
+        else
+            out += "Attachments: " + join(descs, "; ") + "\n";
+    }
+    out += "\n" + std::to_string(s.replies_count) + " replies, " +
+           std::to_string(s.boosts_count) + " boosts, " + std::to_string(s.favourites_count) +
+           " favorites";
+    return out;
+}
+
 } // namespace fastsm::present

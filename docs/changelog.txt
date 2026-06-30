@@ -30,7 +30,10 @@ Timelines
 
 Reading and posting
 - Single keys on a post: R reply, Q quote, F favorite, B boost, E edit your own
-  post, Ctrl+I for full post info.
+  post.
+- Press Enter on a post for a Post info dialog: the full post (author, time,
+  content warning, text, attachments, reply/boost/favorite counts) with quick
+  action buttons (reply, boost, favorite, quote, open in browser).
 - Open the selected post in your web browser (Status menu - Open in Browser).
 - Compose dialog for new posts, replies, quotes, and edits, with content warning,
   visibility, language, polls, and scheduling where the platform supports them.

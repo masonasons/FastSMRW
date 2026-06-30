@@ -7,6 +7,7 @@
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
 #include "new_timeline_dialog.hpp"
+#include "post_info_dialog.hpp"
 #include "settings_dialog.hpp"
 #include "utf.hpp"
 
@@ -132,7 +133,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tCtrl+Shift+B");
     AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tCtrl+Shift+D");
     AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tCtrl+Shift+Q");
-    AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tCtrl+I");
+    AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_VIEW_THREAD, L"View &Thread");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING | MF_GRAYED, ID_USER_TIMELINE, L"Open &User Timeline");
@@ -201,7 +202,6 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
-        {FVIRTKEY | FCONTROL, 'I', ID_POST_INFO},
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
         {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
         {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
@@ -473,6 +473,9 @@ void MainWindow::on_view_keydown(int vk) {
     case 'E':
         compose("edit");
         break;
+    case VK_RETURN:
+        do_post_info();
+        break;
     case VK_DELETE:
         dispatch_cmd({{"cmd", "close_timeline"}});
         break;
@@ -516,12 +519,38 @@ void MainWindow::compose(const char* mode) {
 }
 
 void MainWindow::do_post_info() {
-    Timeline* tc = current();
-    const int row = selected_row();
-    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
+    const std::string id = selected_id();
+    if (!id.empty())
+        dispatch_cmd({{"cmd", "post_info"}, {"id", id}});
+}
+
+void MainWindow::ev_post_info(const json& e) {
+    const std::string id = e.value("id", std::string{});
+    const std::wstring text = to_wide(e.value("text", std::string{}));
+    const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
+    const bool browser_ok = e.value("has_url", false);
+    const std::string keep_id = selected_id();
+    auto action = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok);
+    restore_selection(keep_id);
+    if (!action)
         return;
-    MessageBoxW(hwnd_, tc->rows[static_cast<size_t>(row)].text.c_str(), L"Post Info",
-                MB_OK | MB_ICONINFORMATION);
+    switch (*action) {
+    case PostInfoAction::Reply:
+        dispatch_cmd({{"cmd", "compose_context"}, {"mode", "reply"}, {"id", id}});
+        break;
+    case PostInfoAction::Boost:
+        dispatch_cmd({{"cmd", "toggle_boost"}, {"id", id}});
+        break;
+    case PostInfoAction::Favorite:
+        dispatch_cmd({{"cmd", "toggle_favorite"}, {"id", id}});
+        break;
+    case PostInfoAction::Quote:
+        dispatch_cmd({{"cmd", "compose_context"}, {"mode", "quote"}, {"id", id}});
+        break;
+    case PostInfoAction::OpenBrowser:
+        dispatch_cmd({{"cmd", "open_status"}, {"id", id}});
+        break;
+    }
 }
 
 void MainWindow::do_new_timeline() { dispatch_cmd({{"cmd", "get_spawnable"}}); }
@@ -646,6 +675,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_compose_context(e);
     else if (ev == "spawnable_timelines")
         ev_spawnable(e);
+    else if (ev == "post_info")
+        ev_post_info(e);
     else if (ev == "open_url")
         ShellExecuteW(nullptr, L"open", to_wide(e.value("url", std::string{})).c_str(), nullptr,
                       nullptr, SW_SHOW);
