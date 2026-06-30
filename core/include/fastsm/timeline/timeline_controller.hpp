@@ -47,6 +47,9 @@ public:
     void load_older();
     void clear(); // empties the timeline and removes its cache
 
+    // Max pages fetched per refresh (gap fill), from the fetch-pages setting.
+    void set_max_refresh_pages(int n) { max_refresh_pages_ = n < 1 ? 1 : n; }
+
     // Optimistic toggles on the row at `visible_index`; returns the new state.
     bool toggle_favorite(int visible_index);
     bool toggle_boost(int visible_index);
@@ -79,6 +82,7 @@ private:
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     std::optional<PageCursor> scrollback_cursor_;
     std::function<bool(const TimelineItem&)> filter_;
+    int max_refresh_pages_ = 5;
     bool loading_ = false;
 };
 

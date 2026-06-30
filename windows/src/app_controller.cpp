@@ -10,6 +10,7 @@
 #include "fastsm/auth/mastodon_auth.hpp"
 #include "fastsm/platform/bluesky/bluesky_account.hpp"
 #include "fastsm/platform/mastodon/mastodon_account.hpp"
+#include "fastsm/presentation/speech_settings.hpp"
 #include "fastsm/store/app_config.hpp"
 #include "fastsm/store/paths.hpp"
 
@@ -20,7 +21,31 @@ using namespace fastsm;
 namespace fastsmui {
 
 AppController::AppController(runtime::IMainExecutor* main, SoundManager* sound)
-    : cache_(store::cache_dir()), accounts_(&http_), main_(main), sound_(sound) {}
+    : cache_(store::cache_dir()), accounts_(&http_), main_(main), sound_(sound) {
+    settings_ = store::SettingsStore::default_store().load();
+    apply_settings();
+}
+
+void AppController::apply_settings() {
+    if (sound_) {
+        sound_->set_enabled(settings_.sounds_enabled);
+        sound_->set_soundpack(settings_.soundpack);
+    }
+    present::SpeechConfig::set_current(settings_.speech);
+    cache_.set_max_entries(settings_.cache_limit);
+    for (auto& tc : timelines_)
+        tc->set_max_refresh_pages(settings_.fetch_pages);
+}
+
+void AppController::update_settings(const store::AppSettings& settings) {
+    settings_ = settings;
+    apply_settings();
+    store::AppSettings to_save = settings_;
+    worker_.post([to_save] { store::SettingsStore::default_store().save(to_save); });
+    // A speech/order change can alter how rows read; repaint the current view.
+    if (view_)
+        view_->refresh_display();
+}
 
 bool AppController::has_account() const { return !accounts_.empty(); }
 
@@ -111,6 +136,7 @@ void AppController::bootstrap() {
 std::unique_ptr<TimelineController> AppController::make_controller(const TimelineSource& src) {
     auto tc = std::make_unique<TimelineController>(accounts_.selected(), src, &cache_, &worker_,
                                                   main_);
+    tc->set_max_refresh_pages(settings_.fetch_pages);
     TimelineController* p = tc.get();
     tc->on_change = [this, p] {
         if (view_)

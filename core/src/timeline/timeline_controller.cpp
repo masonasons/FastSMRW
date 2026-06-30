@@ -119,14 +119,14 @@ void TimelineController::refresh() {
     // worker can page forward through ALL new posts and stop as soon as it
     // reaches one we know — this fills the gap instead of grabbing only the
     // newest page. Bounded so a first load (nothing known) can't run away.
-    constexpr int kMaxRefreshPages = 5;
+    const int kMaxRefreshPages = max_refresh_pages_;
     std::unordered_set<std::string> known;
     known.reserve(raw_.size());
     for (const auto& it : raw_)
         known.insert(it.id());
     const bool was_empty = raw_.empty();
 
-    worker_->post([this, known = std::move(known), was_empty]() mutable {
+    worker_->post([this, known = std::move(known), was_empty, kMaxRefreshPages]() mutable {
         std::vector<TimelineItem> fresh;
         std::optional<PageCursor> tail; // cursor just past the fetched region
         PageCursor cursor = PageCursor::start();

@@ -34,9 +34,16 @@ minimal CPU/RAM, fast cache-first startup.
 
 ## Architecture rules
 
-- **All logic and string composition live in the core.** The Win32 app only
-  renders what the core produces and provides settings UI. Don't assemble post
-  text, labels, or speech strings in the UI layer.
+- **Features live in the core; only UI lives in the apps.** Anything that isn't
+  inherently UI — models, networking, account/timeline logic, settings, string
+  and speech composition, sound, filtering, parsing — goes in `fastsm_core` so
+  every front end shares it. The Win32 app (and future front ends) only do
+  platform UI: windows, dialogs, controls, menus, and rendering what the core
+  produces. If you're tempted to put logic in `windows/`, put it in `core/`
+  instead and call it from the UI.
+- **All string and speech composition lives in the core.** Don't assemble post
+  text, labels, or spoken strings in the UI layer — the UI renders what the core
+  returns and only provides settings to configure it.
 - The UI is **pure Win32** (no frameworks). Keep it light.
 - Keep client-side filtering trivial: the `TimelineController` exposes a filter
   chokepoint (raw rows vs. the visible list).

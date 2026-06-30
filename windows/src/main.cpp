@@ -38,17 +38,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
     WinExecutor executor;
 
-    // Load preferences; the core's presenters read SpeechConfig for field order.
-    const fastsm::store::AppSettings settings = fastsm::store::SettingsStore::default_store().load();
-    fastsm::present::SpeechConfig::set_current(settings.speech);
-
     fastsm::sound::SoundManager sound;
     // Bundled packs ship next to the exe (dist/soundpacks); user packs live in
-    // %APPDATA%\FastSMRW\soundpacks.
+    // %APPDATA%\FastSMRW\soundpacks. AppController applies the saved sound
+    // settings (enabled/soundpack) and SpeechConfig once it loads preferences.
     sound.set_bundled_packs_dir(exe_dir() / "soundpacks");
     sound.set_user_packs_dir(fastsm::store::config_dir() / "soundpacks");
-    sound.set_enabled(settings.sounds_enabled);
-    sound.set_soundpack(settings.soundpack);
 
     WinSpeaker speaker; // UniversalSpeech-backed when the dep is present, else no-op
 
@@ -56,7 +51,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     if (!window.create())
         return 1;
     window.set_speaker(&speaker);
-    window.set_enter_to_send(settings.enter_to_send);
     executor.bind(window.hwnd(), WM_APP_DISPATCH);
 
     AppController app(&executor, &sound);

@@ -485,7 +485,7 @@ void MainWindow::present_compose(ComposeMode mode, const Status* target) {
     req.mode = mode;
     req.features = account->features();
     req.max_chars = account->max_chars();
-    req.enter_to_send = enter_to_send_;
+    req.enter_to_send = app_->settings().enter_to_send;
 
     std::string reply_to_id, quoted_status_id, edit_id;
     if (mode == ComposeMode::Reply && target) {
@@ -689,6 +689,11 @@ void MainWindow::current_timeline_changed() {
 void MainWindow::timeline_updated(TimelineController* tc) {
     if (app_ && tc == app_->current())
         bind_current_to_view();
+}
+
+void MainWindow::refresh_display() {
+    // Force the posts list to re-query its text (e.g. after a speech-order change).
+    InvalidateRect(timeline_view_, nullptr, FALSE);
 }
 
 void MainWindow::announce(const std::string& message) {

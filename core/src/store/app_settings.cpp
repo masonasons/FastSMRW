@@ -57,6 +57,11 @@ AppSettings SettingsStore::load() const {
     settings.sounds_enabled = root.value("sounds_enabled", true);
     settings.enter_to_send = root.value("enter_to_send", false);
     settings.soundpack = root.value("soundpack", std::string("Default"));
+    settings.fetch_pages = root.value("fetch_pages", 3);
+    settings.cache_limit = root.value("cache_limit", 200);
+    settings.confirm_boost = root.value("confirm_boost", false);
+    settings.confirm_favorite = root.value("confirm_favorite", false);
+    settings.confirm_clear_timeline = root.value("confirm_clear_timeline", true);
 
     SpeechSettings speech;
     if (auto it = root.find("speech"); it != root.end() && it->is_object()) {
@@ -74,6 +79,11 @@ bool SettingsStore::save(const AppSettings& settings) const {
     root["sounds_enabled"] = settings.sounds_enabled;
     root["enter_to_send"] = settings.enter_to_send;
     root["soundpack"] = settings.soundpack;
+    root["fetch_pages"] = settings.fetch_pages;
+    root["cache_limit"] = settings.cache_limit;
+    root["confirm_boost"] = settings.confirm_boost;
+    root["confirm_favorite"] = settings.confirm_favorite;
+    root["confirm_clear_timeline"] = settings.confirm_clear_timeline;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
 

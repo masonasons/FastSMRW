@@ -10,6 +10,7 @@
 #include "fastsm/runtime/worker_queue.hpp"
 #include "fastsm/store/account_store.hpp"
 #include "fastsm/sound/sound_manager.hpp"
+#include "fastsm/store/app_settings.hpp"
 #include "fastsm/store/timeline_cache.hpp"
 #include "fastsm/timeline/timeline_controller.hpp"
 
@@ -25,6 +26,7 @@ public:
     virtual void current_timeline_changed() = 0;                     // selection moved
     virtual void timeline_updated(fastsm::TimelineController* tc) = 0; // a controller's data changed
     virtual void announce(const std::string& message) = 0;
+    virtual void refresh_display() = 0; // re-render rows (e.g. after a speech-order change)
 };
 
 // Owns the app's services and the live timeline controllers for the selected
@@ -60,7 +62,12 @@ public:
 
     SoundManager* sound() const { return sound_; }
 
+    // Settings: the current values, and applying + persisting a new set.
+    const fastsm::store::AppSettings& settings() const { return settings_; }
+    void update_settings(const fastsm::store::AppSettings& settings);
+
 private:
+    void apply_settings();
     void rebuild_timelines();
     std::unique_ptr<fastsm::TimelineController> make_controller(const fastsm::TimelineSource& src);
     void save_config();
@@ -68,6 +75,7 @@ private:
     fastsm::net::WinHttpClient http_;
     fastsm::store::TimelineCache cache_;
     fastsm::AccountStore accounts_;
+    fastsm::store::AppSettings settings_;
     std::vector<std::unique_ptr<fastsm::TimelineController>> timelines_;
     // Closed timelines kept alive (with in-flight async) until shutdown, so
     // pending worker/main tasks never touch a freed controller.
