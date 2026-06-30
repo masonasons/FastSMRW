@@ -76,12 +76,13 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
             on_received_new(new_count);
     }
 
-    if (source_.is_time_ordered()) {
-        std::stable_sort(raw_.begin(), raw_.end(),
-                         [](const TimelineItem& a, const TimelineItem& b) {
-                             return a.sort_date() > b.sort_date();
-                         });
-    }
+    // Always keep rows newest-first by timestamp — notifications included (their
+    // sort_date is the notification's created_at) — so order never depends on an
+    // unbroken server/cache chain.
+    std::stable_sort(raw_.begin(), raw_.end(),
+                     [](const TimelineItem& a, const TimelineItem& b) {
+                         return a.sort_date() > b.sort_date();
+                     });
     rebuild_visible();
     persist();
 }
@@ -96,18 +97,19 @@ void TimelineController::persist() {
 }
 
 void TimelineController::load_cached() {
-    const std::string key = cache_key();
-    worker_->post([this, key] {
-        auto cached = cache_->load(key);
-        main_->post([this, cached = std::move(cached)]() mutable {
-            if (raw_.empty() && !cached.empty()) {
-                raw_ = std::move(cached);
-                rebuild_visible();
-                if (on_change)
-                    on_change();
-            }
-        });
-    });
+    // Synchronous on purpose: a fast local read that populates raw_ *before*
+    // refresh() snapshots its known-id set, so the immediately-following refresh
+    // does a warm gap-fill (fetch only the delta and stop at the first known
+    // post) instead of a cold full refetch on every launch.
+    if (!raw_.empty())
+        return;
+    auto cached = cache_->load(cache_key());
+    if (cached.empty())
+        return;
+    raw_ = std::move(cached);
+    rebuild_visible();
+    if (on_change)
+        on_change();
 }
 
 void TimelineController::refresh() {

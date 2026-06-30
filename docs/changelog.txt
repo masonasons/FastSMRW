@@ -21,6 +21,9 @@ Timelines
   posts keeps you on the post you were reading instead of jumping to the top.
 - Fixed switching between open timelines sometimes landing on an unselected row,
   so your place is now reliably restored (and announced) on every timeline.
+- Fixed timelines re-downloading from scratch on every launch: they now load
+  instantly from the cache and only fetch posts that are actually new.
+- Notifications and mentions now always show newest first.
 
 Reading and posting
 - Single keys on a post: R reply, Q quote, F favorite, B boost, E edit your own

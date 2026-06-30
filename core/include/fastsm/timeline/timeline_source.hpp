@@ -77,9 +77,6 @@ struct TimelineSource {
         }
         return std::nullopt;
     }
-    // Rows are time-ordered (re-sort on merge) for feeds, not for notifications.
-    bool is_time_ordered() const { return !is_notification_timeline(); }
-
     bool operator==(const TimelineSource& o) const { return kind == o.kind; }
 
     static TimelineSource home() { return {Kind::Home}; }
