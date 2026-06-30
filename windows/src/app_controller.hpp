@@ -46,6 +46,12 @@ public:
     void next_account();
     void previous_account();
 
+    // New Timeline (Ctrl+T): the timelines this account can open that aren't
+    // already open, spawning one, and closing a dismissable one (Delete).
+    std::vector<fastsm::TimelineSource> spawnable_timelines() const;
+    void spawn_timeline(const fastsm::TimelineSource& source);
+    bool close_current_timeline();
+
     // Sign-in (runs on the worker thread; `done(ok, error)` fires on the UI thread).
     void add_mastodon(const std::string& instance, std::function<void(bool, std::string)> done);
     void add_bluesky(const std::string& service, const std::string& handle,
@@ -56,12 +62,16 @@ public:
 
 private:
     void rebuild_timelines();
+    std::unique_ptr<fastsm::TimelineController> make_controller(const fastsm::TimelineSource& src);
     void save_config();
 
     fastsm::net::WinHttpClient http_;
     fastsm::store::TimelineCache cache_;
     fastsm::AccountStore accounts_;
     std::vector<std::unique_ptr<fastsm::TimelineController>> timelines_;
+    // Closed timelines kept alive (with in-flight async) until shutdown, so
+    // pending worker/main tasks never touch a freed controller.
+    std::vector<std::unique_ptr<fastsm::TimelineController>> retired_;
     // Declared last so it is destroyed (joined) first — its tasks reference the
     // members above.
     fastsm::runtime::WorkerQueue worker_;

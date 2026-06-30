@@ -21,3 +21,7 @@
 #define IDD_COMPOSE        220
 #define IDC_COMPOSE_CONTEXT 221
 #define IDC_COMPOSE_EDIT    222
+
+// New Timeline dialog.
+#define IDD_NEW_TIMELINE   240
+#define IDC_TIMELINE_TYPE  241

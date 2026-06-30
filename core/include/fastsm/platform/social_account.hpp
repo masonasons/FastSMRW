@@ -62,6 +62,8 @@ public:
     virtual std::string account_key() const = 0; // "mastodon:<id>" / "bluesky:<did>"
     virtual PlatformFeatures features() const = 0;
     virtual std::vector<TimelineSource> default_timelines() const = 0;
+    // Timelines the user can open via the New Timeline dialog (Ctrl+T).
+    virtual std::vector<TimelineSource> spawnable_timelines() const { return {}; }
 
     // Fetch one page. Implementations run synchronously on the worker thread.
     virtual TimelinePage items(const TimelineSource& source, int limit,

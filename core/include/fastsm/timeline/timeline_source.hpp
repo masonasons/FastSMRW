@@ -55,6 +55,11 @@ struct TimelineSource {
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }
+    // Standing feeds (home/notifications/mentions) can't be closed; spawned ones
+    // (local/federated/...) can (Delete key).
+    bool is_dismissable() const {
+        return kind == Kind::Local || kind == Kind::Federated;
+    }
 
     // Soundpack base name chimed when this timeline receives new posts on
     // refresh (matches the Mac TimelineSource.newItemsSoundName). nullopt = no
@@ -79,6 +84,9 @@ struct TimelineSource {
 
     static TimelineSource home() { return {Kind::Home}; }
     static TimelineSource notifications() { return {Kind::Notifications}; }
+    static TimelineSource mentions() { return {Kind::Mentions}; }
+    static TimelineSource local() { return {Kind::Local}; }
+    static TimelineSource federated() { return {Kind::Federated}; }
 };
 
 } // namespace fastsm

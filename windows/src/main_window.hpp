@@ -46,6 +46,7 @@ private:
     void do_reply();
     void do_new_post();
     void do_post_info();
+    void do_new_timeline();
     void do_add_account();
     void about();
 

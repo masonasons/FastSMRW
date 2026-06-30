@@ -15,6 +15,15 @@ std::string TimelineController::cache_key() const {
     return account_->account_key() + ":" + source_.cache_key();
 }
 
+int TimelineController::visible_index_of(const std::string& id) const {
+    if (id.empty())
+        return -1;
+    for (size_t i = 0; i < visible_.size(); ++i)
+        if (visible_[i].id() == id)
+            return static_cast<int>(i);
+    return -1;
+}
+
 void TimelineController::set_filter(std::function<bool(const TimelineItem&)> predicate) {
     filter_ = std::move(predicate);
     rebuild_visible();

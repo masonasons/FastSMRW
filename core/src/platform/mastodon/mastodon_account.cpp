@@ -29,6 +29,10 @@ std::vector<TimelineSource> MastodonAccount::default_timelines() const {
     return {TimelineSource::home(), TimelineSource::notifications()};
 }
 
+std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
+    return {TimelineSource::local(), TimelineSource::federated()};
+}
+
 bool MastodonAccount::request(const std::string& method, const std::string& url,
                               const std::string& body, const std::string& content_type,
                               std::string& out_body, long& out_status) {

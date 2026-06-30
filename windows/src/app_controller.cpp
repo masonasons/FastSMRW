@@ -108,31 +108,34 @@ void AppController::bootstrap() {
     });
 }
 
+std::unique_ptr<TimelineController> AppController::make_controller(const TimelineSource& src) {
+    auto tc = std::make_unique<TimelineController>(accounts_.selected(), src, &cache_, &worker_,
+                                                  main_);
+    TimelineController* p = tc.get();
+    tc->on_change = [this, p] {
+        if (view_)
+            view_->timeline_updated(p);
+    };
+    tc->on_error = [this](std::string e) {
+        if (view_)
+            view_->announce(e);
+        if (sound_)
+            sound_->play(sound::Earcon::Error);
+    };
+    tc->on_received_new = [this, p](int n) {
+        if (sound_ && n > 0)
+            if (auto name = p->source().new_items_sound_name())
+                sound_->play_named(*name);
+    };
+    return tc;
+}
+
 void AppController::rebuild_timelines() {
     timelines_.clear();
     current_ = 0;
-    SocialAccount* account = accounts_.selected();
-    if (account) {
-        for (const TimelineSource& src : account->default_timelines()) {
-            auto tc = std::make_unique<TimelineController>(account, src, &cache_, &worker_, main_);
-            TimelineController* p = tc.get();
-            tc->on_change = [this, p] {
-                if (view_)
-                    view_->timeline_updated(p);
-            };
-            tc->on_error = [this](std::string e) {
-                if (view_)
-                    view_->announce(e);
-                if (sound_)
-                    sound_->play(sound::Earcon::Error);
-            };
-            tc->on_received_new = [this, p](int n) {
-                if (sound_ && n > 0)
-                    if (auto name = p->source().new_items_sound_name())
-                        sound_->play_named(*name);
-            };
-            timelines_.push_back(std::move(tc));
-        }
+    if (SocialAccount* account = accounts_.selected()) {
+        for (const TimelineSource& src : account->default_timelines())
+            timelines_.push_back(make_controller(src));
     }
 
     if (view_)
@@ -146,6 +149,64 @@ void AppController::rebuild_timelines() {
             sound_->play(sound::Earcon::Refresh);
         first = false;
     }
+}
+
+std::vector<TimelineSource> AppController::spawnable_timelines() const {
+    SocialAccount* account = accounts_.selected();
+    if (!account)
+        return {};
+    std::vector<TimelineSource> out;
+    for (const auto& src : account->spawnable_timelines()) {
+        bool open = false;
+        for (const auto& tc : timelines_)
+            if (tc->source().cache_key() == src.cache_key()) {
+                open = true;
+                break;
+            }
+        if (!open)
+            out.push_back(src);
+    }
+    return out;
+}
+
+void AppController::spawn_timeline(const TimelineSource& source) {
+    if (!accounts_.selected())
+        return;
+    // Already open -> just switch to it.
+    for (size_t i = 0; i < timelines_.size(); ++i) {
+        if (timelines_[i]->source().cache_key() == source.cache_key()) {
+            current_ = static_cast<int>(i);
+            if (view_)
+                view_->timelines_rebuilt();
+            return;
+        }
+    }
+    timelines_.push_back(make_controller(source));
+    current_ = static_cast<int>(timelines_.size()) - 1;
+    TimelineController* p = timelines_.back().get();
+    if (view_)
+        view_->timelines_rebuilt();
+    p->load_cached();
+    p->refresh();
+}
+
+bool AppController::close_current_timeline() {
+    TimelineController* tc = current();
+    if (!tc || !tc->source().is_dismissable())
+        return false;
+    tc->on_change = nullptr;
+    tc->on_error = nullptr;
+    tc->on_received_new = nullptr;
+    tc->clear(); // drop items + cache
+    retired_.push_back(std::move(timelines_[static_cast<size_t>(current_)]));
+    timelines_.erase(timelines_.begin() + current_);
+    if (current_ >= static_cast<int>(timelines_.size()))
+        current_ = static_cast<int>(timelines_.size()) - 1;
+    if (current_ < 0)
+        current_ = 0;
+    if (view_)
+        view_->timelines_rebuilt();
+    return true;
 }
 
 void AppController::save_config() {

@@ -21,6 +21,7 @@ public:
     std::string account_key() const override { return "mastodon:" + me_.id; }
     PlatformFeatures features() const override;
     std::vector<TimelineSource> default_timelines() const override;
+    std::vector<TimelineSource> spawnable_timelines() const override;
 
     TimelinePage items(const TimelineSource& source, int limit,
                        const PageCursor& cursor) override;

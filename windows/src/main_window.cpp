@@ -6,6 +6,7 @@
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
 #include "compose_dialog.hpp"
+#include "new_timeline_dialog.hpp"
 #include "utf.hpp"
 
 #include "fastsm/fastsm.hpp"
@@ -126,7 +127,7 @@ HMENU build_menu() {
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(status), L"&Status");
 
     HMENU timeline = CreatePopupMenu();
-    AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
+    AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"&Clear Timeline\tCtrl+Backspace");
     AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_CLEAR_ALL, L"Clear &All Timelines");
@@ -174,6 +175,7 @@ bool MainWindow::create() {
     std::vector<ACCEL> accels = {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
+        {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
         {FVIRTKEY | FCONTROL, 'I', ID_POST_INFO},
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
@@ -256,9 +258,18 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             } else if (hdr->code == LVN_KEYDOWN) {
                 auto* kd = reinterpret_cast<NMLVKEYDOWN*>(lp);
                 on_view_keydown(kd->wVKey);
+            } else if (hdr->code == LVN_ITEMCHANGED) {
+                // Remember the focused row per-timeline (position memory). No
+                // per-row earcon: like the Mac app, row movement is conveyed by
+                // the screen reader, not a "navigate" sound (which is silent).
+                auto* nm = reinterpret_cast<NMLISTVIEW*>(lp);
+                if (!updating_selection_ && (nm->uChanged & LVIF_STATE) &&
+                    (nm->uNewState & LVIS_FOCUSED) && app_ && app_->current()) {
+                    const auto& items = app_->current()->items();
+                    if (nm->iItem >= 0 && nm->iItem < static_cast<int>(items.size()))
+                        app_->current()->note_selection(items[static_cast<size_t>(nm->iItem)].id());
+                }
             }
-            // No per-row earcon: like the Mac app, row movement is conveyed by
-            // the screen reader, not a "navigate" sound (which is silent).
         } else if (hdr->hwndFrom == timelines_list_) {
             if (hdr->code == LVN_ITEMCHANGED && !updating_selection_) {
                 auto* nm = reinterpret_cast<NMLISTVIEW*>(lp);
@@ -333,11 +344,20 @@ void MainWindow::populate_timelines_list() {
 void MainWindow::bind_current_to_view() {
     TimelineController* tc = app_ ? app_->current() : nullptr;
     const int count = tc ? static_cast<int>(tc->items().size()) : 0;
+    updating_selection_ = true;
     ListView_SetItemCountEx(timeline_view_, count, LVSICF_NOSCROLL);
-    InvalidateRect(timeline_view_, nullptr, FALSE);
-    if (count > 0 && selected_row() < 0)
-        ListView_SetItemState(timeline_view_, 0, LVIS_SELECTED | LVIS_FOCUSED,
+    if (count > 0) {
+        // Restore this timeline's remembered row (or the top on first view) so
+        // switching timelines / receiving new posts doesn't jump to the top.
+        int idx = tc ? tc->visible_index_of(tc->selected_id()) : -1;
+        if (idx < 0)
+            idx = 0;
+        ListView_SetItemState(timeline_view_, idx, LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
+        ListView_EnsureVisible(timeline_view_, idx, FALSE);
+    }
+    updating_selection_ = false;
+    InvalidateRect(timeline_view_, nullptr, FALSE);
 }
 
 int MainWindow::selected_row() const {
@@ -379,6 +399,11 @@ void MainWindow::on_view_keydown(int vk) {
         break;
     case 'R':
         do_reply();
+        break;
+    case VK_DELETE:
+        // Close a spawned (dismissable) timeline.
+        if (app_ && app_->close_current_timeline() && app_->sound())
+            app_->sound()->play(sound::Earcon::Close);
         break;
     default:
         break;
@@ -445,6 +470,23 @@ void MainWindow::do_new_post() {
                 app_->sound()->play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
         });
     }
+}
+
+void MainWindow::do_new_timeline() {
+    if (!app_)
+        return;
+    const auto sources = app_->spawnable_timelines();
+    if (sources.empty()) {
+        announce("No more timelines to add for this account.");
+        return;
+    }
+    std::vector<std::wstring> titles;
+    titles.reserve(sources.size());
+    for (const auto& s : sources)
+        titles.push_back(to_wide(s.title()));
+    if (auto choice = show_new_timeline_dialog(hwnd_, inst_, titles))
+        if (*choice >= 0 && *choice < static_cast<int>(sources.size()))
+            app_->spawn_timeline(sources[static_cast<size_t>(*choice)]);
 }
 
 void MainWindow::do_add_account() {
@@ -515,6 +557,9 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_POST_INFO:
         do_post_info();
+        break;
+    case ID_NEW_TIMELINE:
+        do_new_timeline();
         break;
     case ID_CLEAR_TIMELINE:
         if (app_ && app_->current()) {

@@ -53,6 +53,13 @@ public:
 
     void post(const PostDraft& draft, std::function<void(bool)> done);
 
+    // Per-timeline selected-row memory (by item id). The UI records the focused
+    // row here; on switching back or after a refresh it restores this position
+    // instead of jumping to the top (Mac parity).
+    void note_selection(const std::string& id) { selected_id_ = id; }
+    const std::string& selected_id() const { return selected_id_; }
+    int visible_index_of(const std::string& id) const;
+
 private:
     void rebuild_visible();
     void merge_fresh(std::vector<TimelineItem> fresh, std::optional<PageCursor> next);
@@ -66,6 +73,7 @@ private:
     runtime::IMainExecutor* main_;
     int fetch_limit_;
 
+    std::string selected_id_;           // remembered selected row (by id)
     std::vector<TimelineItem> raw_;     // everything fetched/cached
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     std::optional<PageCursor> scrollback_cursor_;
