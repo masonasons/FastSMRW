@@ -42,6 +42,7 @@ enum {
     ID_USER_PROFILE,
     ID_OPEN_BROWSER,
     ID_NEW_TIMELINE,
+    ID_CLOSE_TIMELINE,
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
     ID_GO_BACK,
@@ -149,8 +150,9 @@ HMENU build_menu() {
 
     HMENU timeline = CreatePopupMenu();
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
+    AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tBackspace");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"&Clear Timeline\tCtrl+Backspace");
+    AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"Clea&r Timeline\tCtrl+Backspace");
     AppendMenuW(timeline, MF_STRING | MF_GRAYED, ID_CLEAR_ALL, L"Clear &All Timelines");
     AppendMenuW(timeline, MF_STRING, ID_GO_BACK, L"Go &Back\tCtrl+Z");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
@@ -213,6 +215,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL | FSHIFT, 'Q', ID_QUOTE},
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
+        {FVIRTKEY, VK_BACK, ID_CLOSE_TIMELINE},          // Backspace: close timeline (anywhere)
         {FVIRTKEY | FCONTROL, VK_BACK, ID_CLEAR_TIMELINE},
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
@@ -309,10 +312,6 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 if ((nm->uChanged & LVIF_STATE) && (nm->uNewState & LVIS_SELECTED) &&
                     !(nm->uOldState & LVIS_SELECTED))
                     dispatch_cmd({{"cmd", "select_timeline"}, {"index", nm->iItem}});
-            } else if (hdr->code == LVN_KEYDOWN) {
-                // Delete on the timelines list closes the selected (current) timeline.
-                if (reinterpret_cast<NMLVKEYDOWN*>(lp)->wVKey == VK_DELETE)
-                    dispatch_cmd({{"cmd", "close_timeline"}});
             }
         }
         return 0;
@@ -705,6 +704,9 @@ void MainWindow::handle_command(int id) {
     }
     case ID_NEW_TIMELINE:
         do_new_timeline();
+        break;
+    case ID_CLOSE_TIMELINE:
+        dispatch_cmd({{"cmd", "close_timeline"}});
         break;
     case ID_CLEAR_TIMELINE:
         if (!settings_.value("confirm_clear_timeline", true) ||
