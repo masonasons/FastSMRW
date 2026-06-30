@@ -23,6 +23,7 @@ public:
     HACCEL accel() const { return accel_; }
     void set_app(AppController* app) { app_ = app; }
     void set_speaker(fastsm::speech::Speaker* speaker) { speaker_ = speaker; }
+    void update_auto_refresh_timer(); // (re)arm the auto-refresh timer from settings
     void cycle_focus(); // Tab between the two panes
 
     // AppView

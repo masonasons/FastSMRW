@@ -17,12 +17,15 @@ struct AppSettings {
     bool confirm_boost = false;
     bool confirm_favorite = false;
     bool confirm_clear_timeline = true;
+    int auto_refresh_seconds = 0; // 0 = off; otherwise poll interval
     present::SpeechSettings speech = present::SpeechSettings::defaults();
 
     static constexpr int kFetchPagesMin = 1;
     static constexpr int kFetchPagesMax = 10;
     static constexpr int kCacheLimitMin = 100;
     static constexpr int kCacheLimitMax = 20000;
+    // Auto-refresh choices offered in Settings (seconds); 0 = Off. Mac parity.
+    static constexpr int kAutoRefreshOptions[] = {0, 30, 60, 120, 300};
 };
 
 } // namespace fastsm::store

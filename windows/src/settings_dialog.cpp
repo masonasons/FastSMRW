@@ -1,6 +1,7 @@
 #include "settings_dialog.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 #include <commctrl.h>
 #include <prsht.h>
@@ -60,6 +61,23 @@ INT_PTR CALLBACK GeneralProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     return FALSE;
 }
 
+std::wstring auto_refresh_label(int secs) {
+    switch (secs) {
+    case 0:
+        return L"Off";
+    case 30:
+        return L"Every 30 seconds";
+    case 60:
+        return L"Every minute";
+    case 120:
+        return L"Every 2 minutes";
+    case 300:
+        return L"Every 5 minutes";
+    default:
+        return L"Every " + std::to_wstring(secs) + L" seconds";
+    }
+}
+
 INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
@@ -67,14 +85,31 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         HWND spin = GetDlgItem(dlg, IDC_SET_CACHELIMIT_SPIN);
         SendMessageW(spin, UDM_SETRANGE32, AppSettings::kCacheLimitMin, AppSettings::kCacheLimitMax);
         SendMessageW(spin, UDM_SETPOS32, 0, ctx->settings.cache_limit);
+
+        HWND combo = GetDlgItem(dlg, IDC_SET_AUTOREFRESH);
+        int sel = 0, i = 0;
+        for (int secs : AppSettings::kAutoRefreshOptions) {
+            SendMessageW(combo, CB_ADDSTRING, 0,
+                         reinterpret_cast<LPARAM>(auto_refresh_label(secs).c_str()));
+            if (secs == ctx->settings.auto_refresh_seconds)
+                sel = i;
+            ++i;
+        }
+        SendMessageW(combo, CB_SETCURSEL, sel, 0);
         return TRUE;
     }
     case WM_NOTIFY:
         if (is_apply(lp)) {
+            Ctx* ctx = ctx_of(dlg);
             int v = static_cast<int>(GetDlgItemInt(dlg, IDC_SET_CACHELIMIT, nullptr, FALSE));
             v = std::clamp(v, AppSettings::kCacheLimitMin, AppSettings::kCacheLimitMax);
-            ctx_of(dlg)->settings.cache_limit = v;
-            ctx_of(dlg)->applied = true;
+            ctx->settings.cache_limit = v;
+            const int sel =
+                static_cast<int>(SendDlgItemMessageW(dlg, IDC_SET_AUTOREFRESH, CB_GETCURSEL, 0, 0));
+            const int n = static_cast<int>(std::size(AppSettings::kAutoRefreshOptions));
+            if (sel >= 0 && sel < n)
+                ctx->settings.auto_refresh_seconds = AppSettings::kAutoRefreshOptions[sel];
+            ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
         }

@@ -62,6 +62,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     UpdateWindow(window.hwnd());
 
     app.bootstrap();
+    window.update_auto_refresh_timer();
 
     const HACCEL accel = window.accel();
     MSG msg{};

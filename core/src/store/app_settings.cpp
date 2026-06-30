@@ -43,6 +43,7 @@ AppSettings settings_from_json(const json& root) {
     settings.confirm_boost = root.value("confirm_boost", false);
     settings.confirm_favorite = root.value("confirm_favorite", false);
     settings.confirm_clear_timeline = root.value("confirm_clear_timeline", true);
+    settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 0);
 
     SpeechSettings speech;
     if (auto it = root.find("speech"); it != root.end() && it->is_object()) {
@@ -65,6 +66,7 @@ json settings_to_json(const AppSettings& settings) {
     root["confirm_boost"] = settings.confirm_boost;
     root["confirm_favorite"] = settings.confirm_favorite;
     root["confirm_clear_timeline"] = settings.confirm_clear_timeline;
+    root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
     return root;

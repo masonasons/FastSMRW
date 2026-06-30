@@ -66,6 +66,10 @@ public:
     const fastsm::store::AppSettings& settings() const { return settings_; }
     void update_settings(const fastsm::store::AppSettings& settings);
 
+    // Auto-refresh tick: refresh every open timeline (each chimes its own
+    // new-posts sound when posts arrive).
+    void refresh_open_timelines();
+
 private:
     void apply_settings();
     void rebuild_timelines();

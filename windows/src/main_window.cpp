@@ -24,6 +24,7 @@ constexpr wchar_t kClassName[] = L"FastSMRWMain";
 constexpr int kTimelinesPaneWidth = 220;
 constexpr int kMinWidth = 920;
 constexpr int kMinHeight = 720;
+constexpr UINT_PTR kAutoRefreshTimer = 1;
 
 // Command ids.
 enum {
@@ -239,6 +240,11 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_SETFOCUS:
         SetFocus(timeline_view_);
+        return 0;
+
+    case WM_TIMER:
+        if (wp == kAutoRefreshTimer && app_)
+            app_->refresh_open_timelines();
         return 0;
 
     case WM_COMMAND:
@@ -617,8 +623,10 @@ void MainWindow::do_settings() {
     std::vector<std::string> packs{"Default"};
     if (app_->sound())
         packs = app_->sound()->list_soundpacks();
-    if (auto result = show_settings_dialog(hwnd_, inst_, app_->settings(), packs))
+    if (auto result = show_settings_dialog(hwnd_, inst_, app_->settings(), packs)) {
         app_->update_settings(*result);
+        update_auto_refresh_timer(); // interval may have changed
+    }
 }
 
 void MainWindow::do_add_account() {
@@ -750,6 +758,13 @@ void MainWindow::timeline_updated(TimelineController* tc) {
 void MainWindow::refresh_display() {
     // Force the posts list to re-query its text (e.g. after a speech-order change).
     InvalidateRect(timeline_view_, nullptr, FALSE);
+}
+
+void MainWindow::update_auto_refresh_timer() {
+    KillTimer(hwnd_, kAutoRefreshTimer);
+    const int secs = app_ ? app_->settings().auto_refresh_seconds : 0;
+    if (secs > 0)
+        SetTimer(hwnd_, kAutoRefreshTimer, static_cast<UINT>(secs) * 1000, nullptr);
 }
 
 void MainWindow::announce(const std::string& message) {

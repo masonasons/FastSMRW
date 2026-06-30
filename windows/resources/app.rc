@@ -78,6 +78,10 @@ BEGIN
                UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
     LTEXT      "How many posts to keep saved per timeline for instant startup (100-20000). This is storage, not how many load at once - see Advanced.",
                -1, 10, 30, 224, 26
+    LTEXT      "&Auto-refresh:", -1, 10, 66, 56, 9
+    COMBOBOX   IDC_SET_AUTOREFRESH, 68, 64, 114, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "Check timelines for new posts on this interval; new posts play that timeline's sound.",
+               -1, 10, 82, 224, 18
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 160

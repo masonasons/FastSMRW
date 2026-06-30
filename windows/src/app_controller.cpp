@@ -48,6 +48,11 @@ void AppController::update_settings(const store::AppSettings& settings) {
         view_->refresh_display();
 }
 
+void AppController::refresh_open_timelines() {
+    for (auto& tc : timelines_)
+        tc->refresh();
+}
+
 bool AppController::has_account() const { return !accounts_.empty(); }
 
 std::vector<TimelineController*> AppController::timelines() const {
