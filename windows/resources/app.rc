@@ -182,6 +182,20 @@ BEGIN
                -1, 10, 102, 224, 26
 END
 
+IDD_SET_UPDATES DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Updates"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Update &branch:", -1, 10, 13, 70, 9
+    COMBOBOX   IDC_SET_UPDATE_BRANCH, 84, 11, 146, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "Stable installs only version updates; Latest tracks every new build as it's published.",
+               -1, 10, 30, 224, 18
+    AUTOCHECKBOX "&Check for updates automatically at startup", IDC_SET_UPDATE_STARTUP, 10, 54, 224, 12
+    LTEXT      "You can always check now from Application > Check for Updates. Updating downloads the new build and restarts FastSMRW.",
+               -1, 10, 74, 224, 26
+END
+
 IDD_KEYMAP_MANAGER DIALOGEX 0, 0, 340, 260
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Keyboard Manager"

@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
+#include "fastsm/timeline/timeline_source.hpp"
 #include "fastsm/util/url.hpp"
 
 using namespace fastsm;
@@ -91,6 +92,54 @@ void test_mastodon_notification_mapping() {
     CHECK_EQ(n.account.display_name, std::string("Alice"));
     CHECK(n.status != nullptr);
     CHECK_EQ(n.status->text, std::string("hi"));
+}
+
+void test_mark_remote() {
+    // A local-looking author (bare acct) and a missing URL, plus a boost of a
+    // post that already carries a full URL.
+    const char* kRemote = R"JSON({
+      "id": "500", "created_at": "2024-06-28T12:00:00.000Z", "content": "<p>hi</p>",
+      "url": "",
+      "account": { "id": "1", "acct": "bob", "username": "bob", "display_name": "Bob" },
+      "reblog": {
+        "id": "600", "created_at": "2024-06-28T11:00:00.000Z", "content": "<p>orig</p>",
+        "url": "https://other.social/@dana/600",
+        "account": { "id": "2", "acct": "dana@other.social", "username": "dana" }
+      }
+    })JSON";
+    Status s = mastodon::map_status(json::parse(kRemote));
+    mastodon::mark_remote(s, "https://mastodon.social", "mastodon.social");
+
+    CHECK(s.instance_url.has_value());
+    CHECK_EQ(s.instance_url.value(), std::string("https://mastodon.social"));
+    // A bare local handle gains the instance domain.
+    CHECK_EQ(s.account.acct, std::string("bob@mastodon.social"));
+    // A missing URL is synthesized from the instance + username + id.
+    CHECK_EQ(s.url, std::string("https://mastodon.social/@bob/500"));
+    // The boosted inner post is tagged too, but keeps its own real URL and its
+    // already-qualified handle.
+    CHECK(s.reblog->instance_url.has_value());
+    CHECK_EQ(s.reblog->url, std::string("https://other.social/@dana/600"));
+    CHECK_EQ(s.reblog->account.acct, std::string("dana@other.social"));
+}
+
+void test_remote_timeline_source() {
+    const auto local = TimelineSource::remote_local("mastodon.social");
+    CHECK(local.kind == TimelineSource::Kind::RemoteLocal);
+    CHECK_EQ(local.title(), std::string("mastodon.social (Local)"));
+    CHECK_EQ(local.cache_key(), std::string("remoteLocal:mastodon.social"));
+    CHECK(!local.is_cacheable());
+    CHECK(local.is_dismissable());
+    CHECK(local.paginates_by_item_id());
+    CHECK(!local.is_user_list());
+    CHECK(local.new_items_sound_name().value() == "home");
+
+    const auto user = TimelineSource::remote_user("dana@other.social");
+    CHECK(user.kind == TimelineSource::Kind::RemoteUser);
+    CHECK_EQ(user.title(), std::string("@dana@other.social"));
+    CHECK_EQ(user.cache_key(), std::string("remoteUser:dana@other.social"));
+    CHECK(!user.is_cacheable());
+    CHECK(user.paginates_by_item_id());
 }
 
 void test_form_encode() {

@@ -66,6 +66,9 @@ struct PollDraft {
 struct PostDraft {
     std::string text;
     std::optional<std::string> reply_to_id;
+    // When replying to a post fetched from a remote instance, its canonical URL,
+    // so the platform can resolve it to a local copy before posting the reply.
+    std::optional<std::string> reply_to_url;
     std::optional<Visibility> visibility;
     std::optional<std::string> spoiler_text;
     std::optional<std::string> quoted_status_id;

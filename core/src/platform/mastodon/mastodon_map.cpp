@@ -157,6 +157,20 @@ Status map_status(const json& j) {
     return s;
 }
 
+void mark_remote(Status& s, const std::string& base, const std::string& domain) {
+    s.instance_url = base;
+    // On a remote instance's own feed, its local authors' handles come back
+    // bare (no domain); qualify them so they read as "user@domain".
+    if (!s.account.acct.empty() && s.account.acct.find('@') == std::string::npos && !domain.empty())
+        s.account.acct += "@" + domain;
+    // Some servers omit `url`; synthesize the canonical one so interactions can
+    // resolve the post on the user's own instance.
+    if (s.url.empty() && !s.account.username.empty() && !s.id.empty())
+        s.url = base + "/@" + s.account.username + "/" + s.id;
+    if (s.reblog)
+        mark_remote(*s.reblog, base, domain); // the boosted post is the action target
+}
+
 Notification map_notification(const json& j) {
     Notification n;
     n.platform = Platform::Mastodon;

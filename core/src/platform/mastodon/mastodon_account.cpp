@@ -153,6 +153,65 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         return page;
     }
 
+    // Remote timelines: fetched unauthenticated from a foreign instance, then
+    // tagged with that instance so interactions resolve to a local copy first.
+    if (source.kind == TimelineSource::Kind::RemoteLocal ||
+        source.kind == TimelineSource::Kind::RemoteUser) {
+        const bool user = source.kind == TimelineSource::Kind::RemoteUser;
+        std::string domain = source.param;
+        std::string username;
+        if (user) {
+            const size_t at = source.param.find('@');
+            if (at == std::string::npos || at == 0)
+                return page; // malformed "user@instance"
+            username = source.param.substr(0, at);
+            domain = source.param.substr(at + 1);
+        }
+        if (domain.empty())
+            return page;
+        const std::string base = "https://" + domain;
+
+        std::string rpath;
+        if (user) {
+            const std::string acct_id = remote_account_id(base, username);
+            if (acct_id.empty())
+                return page; // couldn't find the user on that instance
+            rpath = "/api/v1/accounts/" + acct_id + "/statuses";
+        } else {
+            rpath = "/api/v1/timelines/public";
+        }
+        std::string rurl = base + rpath + "?limit=" + std::to_string(limit);
+        if (!user)
+            rurl += "&local=true";
+        if (cursor.kind == CursorKind::MaxID)
+            rurl += "&max_id=" + cursor.value;
+
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = rurl; // unauthenticated: no Authorization header
+        const net::HttpResponse res = http_->send(req);
+        if (!res.ok())
+            return page;
+        json j;
+        try {
+            j = json::parse(res.body);
+        } catch (...) {
+            return page;
+        }
+        if (!j.is_array())
+            return page;
+        std::string last_id;
+        for (const auto& entry : j) {
+            Status s = mastodon::map_status(entry);
+            last_id = s.id;
+            mastodon::mark_remote(s, base, domain);
+            page.items.push_back(TimelineItem{std::move(s)});
+        }
+        if (!last_id.empty())
+            page.next_cursor = PageCursor::max_id(last_id);
+        return page;
+    }
+
     std::string path;
     std::string extra;
     switch (source.kind) {
@@ -191,6 +250,8 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Thread:
     case TimelineSource::Kind::SearchPosts:
     case TimelineSource::Kind::SearchPeople:
+    case TimelineSource::Kind::RemoteLocal:
+    case TimelineSource::Kind::RemoteUser:
         break; // handled above (early return)
     }
 
@@ -258,8 +319,15 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
 std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
     std::vector<std::pair<std::string, std::string>> params;
     params.push_back({"status", draft.text});
-    if (draft.reply_to_id)
-        params.push_back({"in_reply_to_id", *draft.reply_to_id});
+    if (draft.reply_to_id) {
+        // Replying to a remote post: resolve its URL to a local id first, so the
+        // reply threads correctly on the user's own instance.
+        std::string reply_id = *draft.reply_to_id;
+        if (draft.reply_to_url && !draft.reply_to_url->empty())
+            if (auto local = resolve_url(*draft.reply_to_url))
+                reply_id = *local;
+        params.push_back({"in_reply_to_id", reply_id});
+    }
     if (draft.visibility)
         params.push_back({"visibility", visibility_tag(*draft.visibility)});
     if (draft.spoiler_text && !draft.spoiler_text->empty())
@@ -339,17 +407,73 @@ bool MastodonAccount::status_action(const std::string& status_id, const char* ve
     return request("POST", url, "", "", body, status);
 }
 
+std::string MastodonAccount::remote_account_id(const std::string& base,
+                                               const std::string& username) {
+    net::HttpRequest req;
+    req.method = "GET";
+    req.url = base + "/api/v1/accounts/lookup?acct=" + util::percent_encode(username);
+    net::HttpResponse res = http_->send(req);
+    if (res.ok()) {
+        try {
+            if (std::string id = json::parse(res.body).value("id", std::string()); !id.empty())
+                return id;
+        } catch (...) {
+        }
+    }
+    // Older servers lack /lookup; fall back to account search.
+    req.url = base + "/api/v1/accounts/search?q=" + util::percent_encode(username) + "&limit=1";
+    res = http_->send(req);
+    if (res.ok()) {
+        try {
+            const json arr = json::parse(res.body);
+            if (arr.is_array() && !arr.empty())
+                return arr[0].value("id", std::string());
+        } catch (...) {
+        }
+    }
+    return {};
+}
+
+std::optional<std::string> MastodonAccount::resolve_url(const std::string& post_url) {
+    if (post_url.empty())
+        return std::nullopt;
+    const std::string url = credentials_.instance_url + "/api/v2/search?q=" +
+                            util::percent_encode(post_url) +
+                            "&type=statuses&resolve=true&limit=1";
+    std::string body;
+    long st = 0;
+    if (!request("GET", url, "", "", body, st))
+        return std::nullopt;
+    try {
+        const json j = json::parse(body);
+        const json arr = j.value("statuses", json::array());
+        if (arr.is_array() && !arr.empty())
+            if (std::string id = arr[0].value("id", std::string()); !id.empty())
+                return id;
+    } catch (...) {
+    }
+    return std::nullopt;
+}
+
+std::string MastodonAccount::action_status_id(const Status& status) {
+    const Status& d = status.display_status();
+    if (d.instance_url && !d.url.empty())
+        if (auto local = resolve_url(d.url))
+            return *local;
+    return d.id;
+}
+
 bool MastodonAccount::boost(const Status& status) {
-    return status_action(status.display_status().id, "reblog");
+    return status_action(action_status_id(status), "reblog");
 }
 bool MastodonAccount::unboost(const Status& status) {
-    return status_action(status.display_status().id, "unreblog");
+    return status_action(action_status_id(status), "unreblog");
 }
 bool MastodonAccount::favorite(const Status& status) {
-    return status_action(status.display_status().id, "favourite");
+    return status_action(action_status_id(status), "favourite");
 }
 bool MastodonAccount::unfavorite(const Status& status) {
-    return status_action(status.display_status().id, "unfavourite");
+    return status_action(action_status_id(status), "unfavourite");
 }
 
 std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {

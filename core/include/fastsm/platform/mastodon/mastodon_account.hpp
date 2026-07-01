@@ -57,6 +57,16 @@ private:
     bool status_action(const std::string& status_id, const char* verb);
     bool account_action(const std::string& id, const char* verb);
 
+    // --- Remote timelines (fetched unauthenticated from a foreign instance) ---
+    // Look up a username's account id on its home instance (unauthenticated).
+    std::string remote_account_id(const std::string& base, const std::string& username);
+    // Search the user's own instance for a remote post's URL (resolve=true pulls
+    // it in if unknown); returns the local status id, or nullopt.
+    std::optional<std::string> resolve_url(const std::string& post_url);
+    // The status id to act on: a remote post's local copy if it resolves, else
+    // the status's own id.
+    std::string action_status_id(const Status& status);
+
     MastodonCredentials credentials_;
     User me_;
     net::IHttpClient* http_;

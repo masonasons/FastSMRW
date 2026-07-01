@@ -26,6 +26,8 @@ struct AppSettings {
     std::string invisible_keymap = "default";  // active keymap name
     std::string invisible_layer_key = "control+win+space"; // combo that toggles the layer
     bool window_shown = true;                  // remembered across restarts (ToggleWindow)
+    std::string update_branch = "stable";      // "stable" (versioned) | "latest" (rolling)
+    bool check_updates_on_startup = true;      // quietly check on launch
     present::SpeechSettings speech = present::SpeechSettings::defaults();
     present::TextPresentation text; // content-warning / demojify / mention-collapse
 

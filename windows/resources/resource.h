@@ -89,6 +89,10 @@
 #define IDC_SET_INVIS_LAYERKEY 357
 #define IDC_SET_INVIS_MANAGER 358
 
+#define IDD_SET_UPDATES     390
+#define IDC_SET_UPDATE_BRANCH 391
+#define IDC_SET_UPDATE_STARTUP 392
+
 // Keyboard Manager dialog + its binding-capture sub-dialog.
 #define IDD_KEYMAP_MANAGER  400
 #define IDC_KM_KEYMAP       401

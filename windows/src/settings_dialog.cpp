@@ -529,6 +529,44 @@ INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     return FALSE;
 }
 
+// Updates page: which release branch to follow + whether to check on startup.
+const char* const kUpdateBranches[] = {"stable", "latest"};
+const wchar_t* const kUpdateBranchLabels[] = {L"Stable (version updates)",
+                                              L"Latest (every new build)"};
+
+INT_PTR CALLBACK UpdatesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        Ctx* ctx = on_init(dlg, lp);
+        HWND combo = GetDlgItem(dlg, IDC_SET_UPDATE_BRANCH);
+        int sel = 0;
+        for (int i = 0; i < static_cast<int>(std::size(kUpdateBranches)); ++i) {
+            SendMessageW(combo, CB_ADDSTRING, 0,
+                         reinterpret_cast<LPARAM>(kUpdateBranchLabels[i]));
+            if (ctx->settings.update_branch == kUpdateBranches[i])
+                sel = i;
+        }
+        SendMessageW(combo, CB_SETCURSEL, sel, 0);
+        checked(dlg, IDC_SET_UPDATE_STARTUP, ctx->settings.check_updates_on_startup);
+        return TRUE;
+    }
+    case WM_NOTIFY:
+        if (is_apply(lp)) {
+            Ctx* ctx = ctx_of(dlg);
+            const int sel = static_cast<int>(
+                SendDlgItemMessageW(dlg, IDC_SET_UPDATE_BRANCH, CB_GETCURSEL, 0, 0));
+            if (sel >= 0 && sel < static_cast<int>(std::size(kUpdateBranches)))
+                ctx->settings.update_branch = kUpdateBranches[sel];
+            ctx->settings.check_updates_on_startup = is_checked(dlg, IDC_SET_UPDATE_STARTUP);
+            ctx->applied = true;
+            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 PROPSHEETPAGEW make_page(HINSTANCE inst, int dlg, DLGPROC proc, Ctx* ctx) {
     PROPSHEETPAGEW page{};
     page.dwSize = sizeof(page);
@@ -558,6 +596,7 @@ std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
         make_page(inst, IDD_SET_ADVANCED, AdvancedProc, &ctx),
         make_page(inst, IDD_SET_CONFIRM, ConfirmProc, &ctx),
         make_page(inst, IDD_SET_INVISIBLE, InvisibleProc, &ctx),
+        make_page(inst, IDD_SET_UPDATES, UpdatesProc, &ctx),
     };
 
     PROPSHEETHEADERW hdr{};

@@ -8,6 +8,7 @@
 #include <set>
 
 #include "fastsm/auth/bluesky_auth.hpp"
+#include "fastsm/fastsm.hpp"
 #include "fastsm/input/keymap.hpp"
 #include "fastsm/auth/mastodon_auth.hpp"
 #include "fastsm/platform/bluesky/bluesky_account.hpp"
@@ -16,6 +17,7 @@
 #include "fastsm/presentation/speech_settings.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
 #include "fastsm/store/app_config.hpp"
+#include "fastsm/update/update_checker.hpp"
 #include "fastsm/util/date_parsing.hpp"
 
 #include "fastsm/store/settings_json.hpp"
@@ -25,11 +27,16 @@ using nlohmann::json;
 namespace fastsm {
 namespace {
 
+// The GitHub repo the in-app updater checks.
+constexpr const char* kUpdateRepo = "masonasons/FastSMRW";
+
 PostDraft draft_from_json(const json& d) {
     PostDraft draft;
     draft.text = d.value("text", std::string{});
     if (d.contains("reply_to_id"))
         draft.reply_to_id = d.value("reply_to_id", std::string{});
+    if (d.contains("reply_to_url"))
+        draft.reply_to_url = d.value("reply_to_url", std::string{});
     if (d.contains("quoted_status_id"))
         draft.quoted_status_id = d.value("quoted_status_id", std::string{});
     if (d.contains("spoiler_text"))
@@ -115,6 +122,8 @@ const char* kind_name(TimelineSource::Kind k) {
     case K::Hashtag: return "hashtag";
     case K::SearchPosts: return "searchPosts";
     case K::SearchPeople: return "searchPeople";
+    case K::RemoteLocal: return "remoteLocal";
+    case K::RemoteUser: return "remoteUser";
     }
     return "home";
 }
@@ -135,6 +144,8 @@ std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
     if (s == "hashtag") return K::Hashtag;
     if (s == "searchPosts") return K::SearchPosts;
     if (s == "searchPeople") return K::SearchPeople;
+    if (s == "remoteLocal") return K::RemoteLocal;
+    if (s == "remoteUser") return K::RemoteUser;
     return std::nullopt;
 }
 
@@ -268,6 +279,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_set_window_shown(cmd);
     else if (c == "get_layer_keymap")
         cmd_get_layer_keymap();
+    else if (c == "check_for_update")
+        cmd_check_for_update(cmd);
+    else if (c == "download_update")
+        cmd_download_update(cmd);
 }
 
 // --- lifecycle / accounts ---
@@ -495,6 +510,12 @@ void CoreSession::cmd_get_spawnable() {
             tls.push_back({{"kind", "search_posts"}, {"title", "Search Posts"}, {"input", "Search"}});
             tls.push_back(
                 {{"kind", "search_people"}, {"title", "Search People"}, {"input", "Search"}});
+            tls.push_back({{"kind", "remote_local"},
+                           {"title", "Remote Instance Timeline"},
+                           {"input", "Instance (e.g. mastodon.social)"}});
+            tls.push_back({{"kind", "remote_user"},
+                           {"title", "Remote User Timeline"},
+                           {"input", "User (e.g. name@instance.social)"}});
         }
     }
     emit({{"event", "spawnable_timelines"}, {"timelines", tls}});
@@ -547,6 +568,38 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
             spawn_source(TimelineSource::search_posts(value));
         } else {
             spawn_source(TimelineSource::search_people(value));
+        }
+        return;
+    }
+    // Remote timelines: a bare instance domain, or a "user@instance" handle.
+    if (kind == "remote_local" || kind == "remote_user") {
+        auto lc = [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; };
+        std::string value = cmd.value("value", std::string{});
+        const size_t b = value.find_first_not_of(" \t");
+        const size_t e = value.find_last_not_of(" \t");
+        value = (b == std::string::npos) ? std::string{} : value.substr(b, e - b + 1);
+        if (!value.empty() && value[0] == '@')
+            value.erase(0, 1); // drop a leading '@'
+        for (const std::string p : {"https://", "http://"})
+            if (value.rfind(p, 0) == 0) {
+                value.erase(0, p.size());
+                break;
+            }
+        while (!value.empty() && value.back() == '/')
+            value.pop_back();
+        if (value.empty())
+            return;
+        if (kind == "remote_local") {
+            for (char& ch : value)
+                ch = lc(ch); // domain is case-insensitive
+            spawn_source(TimelineSource::remote_local(value));
+        } else {
+            const size_t at = value.find('@');
+            if (at == std::string::npos || at == 0 || at + 1 >= value.size())
+                return; // need "user@instance"
+            for (size_t i = at + 1; i < value.size(); ++i)
+                value[i] = lc(value[i]); // lowercase the domain, keep the username
+            spawn_source(TimelineSource::remote_user(value));
         }
         return;
     }
@@ -964,6 +1017,9 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         if (target->spoiler_text)
             ctx["prefill_cw"] = *target->spoiler_text;
         ctx["reply_to_id"] = target->id;
+        // A remote post: pass its canonical URL so the reply resolves to a local copy.
+        if (target->instance_url && !target->url.empty())
+            ctx["reply_to_url"] = target->url;
     } else if (mode == "quote" && target) {
         ctx["title"] = "Quote Post";
         ctx["context_label"] = "Quoting " + target->account.best_name() + ": " + target->text;
@@ -1260,6 +1316,63 @@ void CoreSession::cmd_set_window_shown(const json& cmd) {
     save_config(); // lightweight: just persist, no re-render
 }
 
+void CoreSession::cmd_check_for_update(const json& cmd) {
+    const bool silent = cmd.value("silent", false);
+    const std::string branch = settings_.update_branch;
+    net::IHttpClient* http = http_.get();
+    const std::string cur_ver = fastsm::version();
+    const std::string cur_commit = fastsm::build_commit();
+    worker_.post([this, silent, branch, http, cur_ver, cur_commit] {
+        const update::UpdateInfo info =
+            update::check_for_update(*http, branch, cur_ver, cur_commit, kUpdateRepo);
+        loop_.post([this, silent, info] {
+            emit({{"event", "update_status"},
+                  {"silent", silent},
+                  {"available", info.available},
+                  {"branch", info.branch},
+                  {"version", info.version},
+                  {"notes", info.notes},
+                  {"download_url", info.download_url},
+                  {"error", info.error}});
+        });
+    });
+}
+
+void CoreSession::cmd_download_update(const json& cmd) {
+    const std::string url = cmd.value("url", std::string{});
+    if (url.empty())
+        return;
+    net::IHttpClient* http = http_.get();
+    worker_.post([this, http, url] {
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = url;
+        const net::HttpResponse res = http->send(req);
+        std::string path, error;
+        if (!res.ok() || res.body.empty()) {
+            error = res.error.empty() ? ("Download failed (" + std::to_string(res.status) + ")")
+                                      : res.error;
+        } else {
+            std::error_code ec;
+            const auto p = std::filesystem::temp_directory_path(ec) / "FastSMRW-update.zip";
+            std::ofstream out(p, std::ios::binary | std::ios::trunc);
+            if (out) {
+                out.write(res.body.data(), static_cast<std::streamsize>(res.body.size()));
+                out.close();
+                path = p.string();
+            } else {
+                error = "Couldn't save the downloaded update.";
+            }
+        }
+        loop_.post([this, path, error] {
+            if (!error.empty())
+                emit({{"event", "update_error"}, {"error", error}});
+            else
+                emit({{"event", "update_ready"}, {"path", path}});
+        });
+    });
+}
+
 void CoreSession::cmd_get_layer_keymap() {
     json bindings = json::object();
     for (const auto& [key, action] : input::layer_keymap())
@@ -1421,7 +1534,7 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
                                                                  const TimelineSource& src) {
     const int page = account ? account->max_page_size() : 40;
     auto tc = std::make_unique<TimelineController>(account, src, &cache_, &worker_, &loop_, page);
-    tc->set_max_refresh_pages(settings_.fetch_pages);
+    apply_timeline_settings(*tc); // refresh depth + Notifications mentions filter
     TimelineController* p = tc.get();
     tc->on_change = [this, p] {
         const int i = index_of(p);
@@ -1457,27 +1570,34 @@ const TimelineItem* CoreSession::find_item(const TimelineController* tc, const s
     return nullptr;
 }
 
+void CoreSession::apply_timeline_settings(TimelineController& tc) {
+    tc.set_max_refresh_pages(settings_.fetch_pages);
+    // Optionally hide mention notifications from the Notifications timeline (e.g.
+    // when a separate Mentions timeline is open).
+    if (tc.source().kind == TimelineSource::Kind::Notifications) {
+        if (settings_.show_mentions_in_notifications)
+            tc.set_filter(nullptr);
+        else
+            tc.set_filter([](const TimelineItem& item) {
+                const Notification* n = item.notification();
+                return !(n && n->type == Notification::Kind::Mention);
+            });
+    }
+}
+
 void CoreSession::apply_settings() {
     sound_.set_enabled(settings_.sounds_enabled);
     sound_.set_soundpack(settings_.soundpack);
     present::SpeechConfig::set_current(settings_.speech);
     present::TextConfig::set_current(settings_.text);
     cache_.set_max_entries(settings_.cache_limit);
-    const bool show_mentions = settings_.show_mentions_in_notifications;
-    for (auto& tc : timelines_) {
-        tc->set_max_refresh_pages(settings_.fetch_pages);
-        // Optionally hide mention notifications from the Notifications timeline
-        // (e.g. when a separate Mentions timeline is open).
-        if (tc->source().kind == TimelineSource::Kind::Notifications) {
-            if (show_mentions)
-                tc->set_filter(nullptr);
-            else
-                tc->set_filter([](const TimelineItem& item) {
-                    const Notification* n = item.notification();
-                    return !(n && n->type == Notification::Kind::Mention);
-                });
-        }
-    }
+    // Re-apply per-timeline settings to every open timeline, displayed or parked,
+    // so a change (e.g. toggling mentions in Notifications) takes effect at once.
+    for (auto& tc : timelines_)
+        apply_timeline_settings(*tc);
+    for (auto& [key, v] : parked_)
+        for (auto& tc : v)
+            apply_timeline_settings(*tc);
     auto_refresh_seconds_.store(settings_.auto_refresh_seconds);
     update_streaming();
 }

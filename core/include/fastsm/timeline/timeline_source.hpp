@@ -23,6 +23,8 @@ struct TimelineSource {
         Hashtag,     // posts tagged #param
         SearchPosts, // full-text post search for param
         SearchPeople, // people search for param; rows are users
+        RemoteLocal, // a remote instance's Local timeline (param = instance domain)
+        RemoteUser,  // a remote user's posts (param = "user@instance"), fetched abroad
     };
 
     Kind kind = Kind::Home;
@@ -59,6 +61,10 @@ struct TimelineSource {
             return title_text.empty() ? ("Search: " + param) : title_text;
         case Kind::SearchPeople:
             return title_text.empty() ? ("People: " + param) : title_text;
+        case Kind::RemoteLocal:
+            return title_text.empty() ? (param + " (Local)") : title_text;
+        case Kind::RemoteUser:
+            return title_text.empty() ? ("@" + param) : title_text;
         }
         return "Timeline";
     }
@@ -94,6 +100,10 @@ struct TimelineSource {
             return "search:posts:" + param;
         case Kind::SearchPeople:
             return "search:people:" + param;
+        case Kind::RemoteLocal:
+            return "remoteLocal:" + param;
+        case Kind::RemoteUser:
+            return "remoteUser:" + param;
         }
         return "timeline";
     }
@@ -109,6 +119,8 @@ struct TimelineSource {
         case Kind::Hashtag:
         case Kind::SearchPosts:
         case Kind::SearchPeople:
+        case Kind::RemoteLocal:
+        case Kind::RemoteUser:
             return false;
         default:
             return true;
@@ -134,6 +146,8 @@ struct TimelineSource {
         case Kind::Mentions:
         case Kind::UserPosts:
         case Kind::Hashtag:
+        case Kind::RemoteLocal:
+        case Kind::RemoteUser:
             return true;
         default:
             return false;
@@ -157,6 +171,8 @@ struct TimelineSource {
         case Kind::Local:
         case Kind::Federated:
         case Kind::Hashtag:
+        case Kind::RemoteLocal:
+        case Kind::RemoteUser:
             return "home";
         case Kind::Notifications:
             return "notification";
@@ -201,6 +217,14 @@ struct TimelineSource {
     }
     static TimelineSource search_people(std::string query) {
         return {Kind::SearchPeople, std::move(query)};
+    }
+    // A remote instance's Local timeline (instance = bare domain, e.g. "mastodon.social").
+    static TimelineSource remote_local(std::string instance, std::string title = {}) {
+        return {Kind::RemoteLocal, std::move(instance), std::move(title)};
+    }
+    // A remote user's posts (handle = "user@instance"), fetched from their home server.
+    static TimelineSource remote_user(std::string handle, std::string title = {}) {
+        return {Kind::RemoteUser, std::move(handle), std::move(title)};
     }
 };
 

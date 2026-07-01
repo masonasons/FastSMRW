@@ -82,6 +82,12 @@ if /i "%CONFIG%"=="debug" (
 )
 set "COREINC=/I core\include"
 
+REM ---- embed the short git commit so the "latest" update branch can tell builds
+REM apart (empty for a build outside a git checkout) ----
+set "BUILD_COMMIT="
+for /f "tokens=*" %%i in ('git rev-parse --short HEAD 2^>nul') do set "BUILD_COMMIT=%%i"
+if defined BUILD_COMMIT set "CFLAGS=%CFLAGS% /DFASTSM_BUILD_COMMIT=\"%BUILD_COMMIT%\""
+
 echo.
 echo === Building FastSMRW [%CONFIG%] ===
 
@@ -97,6 +103,7 @@ set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\pre
 set "CORE_SRC=%CORE_SRC% core\src\util\languages.cpp core\src\util\demojify.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\store\app_settings.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\input\keymap.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\update\update_checker.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\session\core_session.cpp core\src\capi\fastsm_core.cpp"
 echo Compiling core...
 cl %CFLAGS% %COREINC% /c %CORE_SRC% /Fo"%OBJ%\core\\"
@@ -149,7 +156,7 @@ if exist "deps\UniversalSpeech\bin-x64\*.dll" copy /y deps\UniversalSpeech\bin-x
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_thread.cpp tests\test_keymap.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"

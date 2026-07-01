@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 
 #include <cwctype>
+#include <fstream>
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -59,6 +60,7 @@ enum {
     ID_FIND,
     ID_FIND_NEXT,
     ID_FIND_PREV,
+    ID_CHECK_UPDATES,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -134,6 +136,7 @@ HMENU build_menu() {
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+,");
     AppendMenuW(app, MF_STRING, ID_KEYMAP_MANAGER, L"&Keyboard Manager…");
+    AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
@@ -1013,6 +1016,10 @@ void MainWindow::handle_command(int id) {
     case ID_KEYMAP_MANAGER:
         open_keymap_manager(hwnd_);
         break;
+    case ID_CHECK_UPDATES:
+        announce("Checking for updates…");
+        dispatch_cmd({{"cmd", "check_for_update"}, {"silent", false}});
+        break;
     case ID_FIND:
         do_find();
         break;
@@ -1160,6 +1167,12 @@ void MainWindow::on_event(const std::string& js) {
         ev_action_catalog(e);
     else if (ev == "invisible_ui_action")
         ev_invisible_ui_action(e);
+    else if (ev == "update_status")
+        ev_update_status(e);
+    else if (ev == "update_ready")
+        ev_update_ready(e);
+    else if (ev == "update_error")
+        announce(e.value("error", std::string("Update failed.")));
     else if (ev == "open_url")
         ShellExecuteW(nullptr, L"open", to_wide(e.value("url", std::string{})).c_str(), nullptr,
                       nullptr, SW_SHOW);
@@ -1237,6 +1250,98 @@ void MainWindow::ev_settings(const json& e) {
     if (action_catalog_.empty()) // load once so the Keyboard Manager has its actions
         dispatch_cmd({{"cmd", "get_action_catalog"}});
     apply_invisible();
+    // Quietly check for updates once on startup, if enabled.
+    if (!startup_update_checked_) {
+        startup_update_checked_ = true;
+        if (settings_.value("check_updates_on_startup", true))
+            dispatch_cmd({{"cmd", "check_for_update"}, {"silent", true}});
+    }
+}
+
+void MainWindow::ev_update_status(const json& e) {
+    const bool silent = e.value("silent", false);
+    const std::string error = e.value("error", std::string{});
+    const bool available = e.value("available", false);
+    const std::string branch = e.value("branch", std::string{});
+    const std::string version = e.value("version", std::string{});
+    const std::string notes = e.value("notes", std::string{});
+    pending_update_url_ = e.value("download_url", std::string{});
+
+    if (!error.empty()) {
+        if (!silent)
+            MessageBoxW(hwnd_, to_wide(error).c_str(), L"Check for Updates",
+                        MB_OK | MB_ICONWARNING);
+        return;
+    }
+    if (!available) {
+        if (!silent)
+            MessageBoxW(hwnd_, L"You're running the latest version.", L"Check for Updates",
+                        MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (pending_update_url_.empty())
+        return; // nothing to download
+
+    std::wstring msg;
+    if (branch == "latest")
+        msg = L"A newer build is available.";
+    else
+        msg = L"Version " + to_wide(version) + L" is available (you have " +
+              to_wide(fastsm::version()) + L").";
+    msg += L"\n\nDownload and install it now? FastSMRW will restart to finish.";
+    if (!notes.empty()) {
+        std::string trimmed = notes.substr(0, 700);
+        msg += L"\n\nRelease notes:\n" + to_wide(trimmed);
+    }
+    if (MessageBoxW(hwnd_, msg.c_str(), L"Update Available", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+        announce("Downloading update…");
+        dispatch_cmd({{"cmd", "download_update"}, {"url", pending_update_url_}});
+    }
+}
+
+void MainWindow::ev_update_ready(const json& e) {
+    const std::string zip = e.value("path", std::string{});
+    if (zip.empty()) {
+        announce("Update download failed.");
+        return;
+    }
+    wchar_t exe[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring exe_path = exe;
+    const size_t slash = exe_path.find_last_of(L"\\/");
+    const std::wstring app_dir = exe_path.substr(0, slash);
+    const std::wstring exe_name = exe_path.substr(slash + 1);
+    const std::wstring extract_dir = app_dir + L"\\update_temp";
+    const std::wstring bat_path = app_dir + L"\\fastsmrw-update.bat";
+    const unsigned long pid = GetCurrentProcessId();
+
+    // Batch: wait for this process to exit, extract the zip, overlay the run
+    // folder, relaunch, and delete itself. Quote every path for spaces.
+    std::string bat;
+    bat += "@echo off\r\nchcp 65001 >nul\r\n";
+    bat += "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Wait-Process -Id " +
+           std::to_string(pid) + " -Timeout 20 -ErrorAction SilentlyContinue; " +
+           "Expand-Archive -LiteralPath '" + zip + "' -DestinationPath '" + to_utf8(extract_dir) +
+           "' -Force\"\r\n";
+    bat += "xcopy /s /e /y /q \"" + to_utf8(extract_dir) + "\\*\" \"" + to_utf8(app_dir) +
+           "\\\" >nul\r\n";
+    bat += "rmdir /s /q \"" + to_utf8(extract_dir) + "\"\r\n";
+    bat += "del /q \"" + zip + "\"\r\n";
+    bat += "start \"\" \"" + to_utf8(app_dir) + "\\" + to_utf8(exe_name) + "\"\r\n";
+    bat += "del \"%~f0\"\r\n";
+
+    {
+        std::ofstream out(bat_path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            announce("Couldn't write the updater script.");
+            return;
+        }
+        out.write(bat.data(), static_cast<std::streamsize>(bat.size()));
+    }
+    // Launch the updater hidden, then quit so it can replace the running files.
+    ShellExecuteW(nullptr, L"open", bat_path.c_str(), nullptr, app_dir.c_str(), SW_HIDE);
+    announce("Installing update and restarting…");
+    DestroyWindow(hwnd_);
 }
 
 void MainWindow::apply_invisible() {
@@ -1382,6 +1487,8 @@ void MainWindow::ev_compose_context(const json& e) {
     json draft = draft_to_json(result->draft);
     if (e.contains("reply_to_id"))
         draft["reply_to_id"] = e["reply_to_id"];
+    if (e.contains("reply_to_url")) // remote reply target: resolved core-side
+        draft["reply_to_url"] = e["reply_to_url"];
     if (e.contains("quoted_status_id"))
         draft["quoted_status_id"] = e["quoted_status_id"];
     json cmd = {{"cmd", "post"}, {"draft", draft}};

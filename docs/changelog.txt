@@ -4,6 +4,12 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- Auto-update: Application > Check for Updates downloads and installs the newest build and restarts; a new Settings > Updates page lets you pick the Stable branch (version updates only) or Latest (every new build), and whether to check automatically at startup.
+
+- Fixed: turning off "Show mentions in the Notifications timeline" now actually hides them (the setting was saved but not applied on startup).
+
+- Remote timelines (Mastodon): New Timeline now offers "Remote Instance Timeline" (browse another server's local feed, e.g. mastodon.social) and "Remote User Timeline" (a user's posts from their home server, e.g. name@instance.social); replying, boosting and favoriting a remote post just work.
+
 - Find in timeline: press Ctrl+F to search the current timeline, F3 for the next match and Shift+F3 for the previous one (also available as unbindable invisible-interface actions).
 
 - New Settings > Speech options for how posts read: choose how content warnings are handled (show the warning only, the warning then the post, or ignore it), remove emoji from post text and/or display names, and collapse long leading @mention lists to keep the first few names.

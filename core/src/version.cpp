@@ -6,4 +6,12 @@ const char* version() {
     return "0.0.3";
 }
 
+const char* build_commit() {
+#ifdef FASTSM_BUILD_COMMIT
+    return FASTSM_BUILD_COMMIT;
+#else
+    return "";
+#endif
+}
+
 } // namespace fastsm

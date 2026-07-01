@@ -11,4 +11,9 @@ namespace fastsm {
 // Semantic version string of the core library, e.g. "0.0.1".
 const char* version();
 
+// Short git commit the binary was built from (e.g. "a1b2c3d"), or "" for a local
+// build without the commit embedded. Used by the "latest" update branch to tell
+// one rolling build from another.
+const char* build_commit();
+
 } // namespace fastsm

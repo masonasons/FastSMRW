@@ -103,6 +103,8 @@ private:
     void cmd_perform_action(const nlohmann::json& cmd); // {action}
     void cmd_get_layer_keymap();                        // layer bindings + activation combo
     void cmd_set_window_shown(const nlohmann::json& cmd); // persist window visibility
+    void cmd_check_for_update(const nlohmann::json& cmd); // {silent} -> update_status event
+    void cmd_download_update(const nlohmann::json& cmd);  // {url} -> update_ready/update_error
     // Keymap file location + loading. User keymaps live in <config>/keymaps and are
     // editable; built-in keymaps ship in the app's keymaps folder and are read-only.
     std::filesystem::path keymaps_dir() const; // the user (editable) keymaps dir
@@ -140,6 +142,10 @@ private:
     int index_of(const TimelineController* tc) const;
     const TimelineItem* find_item(const TimelineController* tc, const std::string& id) const;
     void apply_settings();
+    // Apply the per-timeline settings (refresh depth, the Notifications mentions
+    // filter) to one controller. Called for every controller at creation and
+    // whenever settings change, so it holds no matter when a timeline is built.
+    void apply_timeline_settings(TimelineController& tc);
     void save_config();
     // Per-timeline reading position (cache_key -> selected post id), remembered
     // across restarts in a small positions.json (separate from the item cache).

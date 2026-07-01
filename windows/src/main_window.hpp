@@ -105,6 +105,8 @@ private:
     void ev_layer_keymap(const nlohmann::json& e);
     void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
+    void ev_update_status(const nlohmann::json& e); // check result -> prompt / announce
+    void ev_update_ready(const nlohmann::json& e);  // downloaded -> swap + restart
     // Apply the current invisible-interface mode (from settings_): (re)load the
     // keymap for hotkey mode, or tear the global hotkeys down when off.
     void apply_invisible();
@@ -127,6 +129,8 @@ private:
     HotkeyDriver hotkey_driver_;   // mode "hotkey" (RegisterHotKey)
     KeyhookDriver keyhook_driver_; // mode "keyhook" (WH_KEYBOARD_LL)
     std::string invisible_mode_ = "off";
+    std::string pending_update_url_;        // FastSMRW.zip URL from the last check
+    bool startup_update_checked_ = false;   // guard the one-shot startup check
     std::map<std::string, std::string> invisible_bindings_; // key -> action
     std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager
     KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open

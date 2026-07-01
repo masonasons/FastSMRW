@@ -24,6 +24,8 @@ void test_truncate_mentions();
 // From test_mastodon_map.cpp
 void test_mastodon_status_mapping();
 void test_mastodon_notification_mapping();
+void test_mark_remote();
+void test_remote_timeline_source();
 void test_form_encode();
 
 // From test_bluesky_map.cpp
@@ -67,6 +69,11 @@ void test_keymap_default_and_catalog();
 void test_keymap_parse_and_serialize();
 void test_keymap_inheritance();
 
+// From test_update.cpp
+void test_update_version_compare();
+void test_update_stable_branch();
+void test_update_latest_branch();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -98,6 +105,8 @@ int main() {
     test_truncate_mentions();
     test_mastodon_status_mapping();
     test_mastodon_notification_mapping();
+    test_mark_remote();
+    test_remote_timeline_source();
     test_form_encode();
     test_bluesky_feed_mapping();
     test_bluesky_plain_post();
@@ -122,6 +131,9 @@ int main() {
     test_keymap_default_and_catalog();
     test_keymap_parse_and_serialize();
     test_keymap_inheritance();
+    test_update_version_compare();
+    test_update_stable_branch();
+    test_update_latest_branch();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

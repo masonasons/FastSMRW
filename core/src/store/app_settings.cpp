@@ -52,6 +52,8 @@ AppSettings settings_from_json(const json& root) {
     settings.invisible_layer_key =
         root.value("invisible_layer_key", std::string("control+win+space"));
     settings.window_shown = root.value("window_shown", true);
+    settings.update_branch = root.value("update_branch", std::string("stable"));
+    settings.check_updates_on_startup = root.value("check_updates_on_startup", true);
 
     if (CwMode cw; cw_mode_from_key(root.value("cw_mode", std::string("hide")), cw))
         settings.text.cw = cw;
@@ -93,6 +95,8 @@ json settings_to_json(const AppSettings& settings) {
     root["invisible_keymap"] = settings.invisible_keymap;
     root["invisible_layer_key"] = settings.invisible_layer_key;
     root["window_shown"] = settings.window_shown;
+    root["update_branch"] = settings.update_branch;
+    root["check_updates_on_startup"] = settings.check_updates_on_startup;
     root["cw_mode"] = cw_mode_key(settings.text.cw);
     root["post_emoji_removal"] = emoji_removal_key(settings.text.post_emoji);
     root["name_emoji_removal"] = emoji_removal_key(settings.text.name_emoji);
