@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <thread>
@@ -125,6 +126,11 @@ private:
     const TimelineItem* find_item(const TimelineController* tc, const std::string& id) const;
     void apply_settings();
     void save_config();
+    // Per-timeline reading position (cache_key -> selected post id), remembered
+    // across restarts in a small positions.json (separate from the item cache).
+    std::filesystem::path positions_path() const;
+    void load_positions();
+    void save_positions() const;
     void update_streaming();
     void auto_refresh_loop();
     static std::optional<TimelineSource> source_from_kind(const std::string& kind);
@@ -141,6 +147,7 @@ private:
 
     std::filesystem::path config_path_;
     std::filesystem::path bundled_keymaps_dir_; // read-only keymaps shipped with the app
+    std::map<std::string, std::string> positions_; // cache_key -> remembered selected id
     std::function<void(const std::string&)> emit_;
 
     std::unique_ptr<net::IHttpClient> http_;

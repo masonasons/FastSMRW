@@ -223,6 +223,7 @@ void CoreSession::cmd_start() {
         loop_.post([this, config] {
             settings_ = config.settings;
             apply_settings();
+            load_positions(); // remembered reading positions (before timelines build)
             rebuild_timelines();
             emit_accounts();
             emit_timelines();
@@ -391,8 +392,16 @@ void CoreSession::cmd_load_older() {
 }
 
 void CoreSession::cmd_note_selection(const json& cmd) {
-    if (TimelineController* tc = current())
-        tc->note_selection(cmd.value("id", std::string{}));
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const std::string id = cmd.value("id", std::string{});
+    tc->note_selection(id);
+    // Remember the reading position for this timeline across restarts.
+    if (!id.empty() && positions_[tc->cache_key()] != id) {
+        positions_[tc->cache_key()] = id;
+        save_positions();
+    }
 }
 
 void CoreSession::cmd_get_spawnable() {
@@ -1262,6 +1271,10 @@ void CoreSession::rebuild_timelines() {
         for (const TimelineSource& src : account->default_timelines())
             timelines_.push_back(make_controller(src));
     for (auto& tc : timelines_) {
+        // Restore the remembered reading position before the cache load emits, so
+        // the UI lands where the user left off (kept across the following refresh).
+        if (auto it = positions_.find(tc->cache_key()); it != positions_.end())
+            tc->note_selection(it->second);
         tc->load_cached();
         tc->refresh();
     }
@@ -1337,6 +1350,47 @@ void CoreSession::save_config() {
     config.settings = settings_;
     const auto path = config_path_;
     worker_.post([config, path] { store::AppConfigStore(path).save(config); });
+}
+
+std::filesystem::path CoreSession::positions_path() const {
+    return config_path_.parent_path() / "positions.json";
+}
+
+void CoreSession::load_positions() {
+    positions_.clear();
+    std::ifstream in(positions_path(), std::ios::binary);
+    if (!in)
+        return;
+    try {
+        json root;
+        in >> root;
+        if (root.is_object())
+            for (const auto& [key, id] : root.items())
+                if (id.is_string())
+                    positions_[key] = id.get<std::string>();
+    } catch (...) {
+    }
+}
+
+void CoreSession::save_positions() const {
+    // Tiny file (a handful of entries), written from the core-loop thread; separate
+    // from the item cache so it never races the (worker-thread) cache writes.
+    json root = json::object();
+    for (const auto& [key, id] : positions_)
+        root[key] = id;
+    const std::string blob = root.dump();
+    const std::filesystem::path path = positions_path();
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+        out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec)
+        std::filesystem::remove(tmp, ec);
 }
 
 void CoreSession::update_streaming() {

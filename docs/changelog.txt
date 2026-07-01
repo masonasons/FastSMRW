@@ -4,6 +4,8 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- Your reading position in each timeline is now remembered across restarts, so you come back to the post you were on instead of the top.
+
 - New Invisible interface (Settings > Invisible interface): global hotkeys drive FastSMRW from any window, speaking the post you land on and the timeline and place when you switch (e.g. "Home, 1 of 500").
 - New Keyboard Manager (Application menu, or the Invisible interface tab): create, edit, unbind, and share custom keymaps; files are interchangeable with the desktop client.
 - Ctrl+Win+W (invisible interface) shows or hides the FastSMRW window from anywhere, and the app remembers whether it was hidden across restarts.
