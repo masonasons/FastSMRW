@@ -51,6 +51,7 @@ AppSettings settings_from_json(const json& root) {
     settings.invisible_keymap = root.value("invisible_keymap", std::string("default"));
     settings.invisible_layer_key =
         root.value("invisible_layer_key", std::string("control+win+space"));
+    settings.invisible_repeat_at_edge = root.value("invisible_repeat_at_edge", true);
     settings.window_shown = root.value("window_shown", true);
     settings.update_branch = root.value("update_branch", std::string("stable"));
     settings.check_updates_on_startup = root.value("check_updates_on_startup", true);
@@ -94,6 +95,7 @@ json settings_to_json(const AppSettings& settings) {
     root["invisible_mode"] = settings.invisible_mode;
     root["invisible_keymap"] = settings.invisible_keymap;
     root["invisible_layer_key"] = settings.invisible_layer_key;
+    root["invisible_repeat_at_edge"] = settings.invisible_repeat_at_edge;
     root["window_shown"] = settings.window_shown;
     root["update_branch"] = settings.update_branch;
     root["check_updates_on_startup"] = settings.check_updates_on_startup;

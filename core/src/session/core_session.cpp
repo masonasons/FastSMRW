@@ -1289,8 +1289,11 @@ void CoreSession::invisible_step(int delta) {
         dest = 0;
     if (dest > static_cast<int>(items.size()) - 1)
         dest = static_cast<int>(items.size()) - 1;
-    if (dest == idx)
-        sound_.play(sound::Earcon::Boundary); // hit an edge; still (re)speak for orientation
+    if (dest == idx) {
+        sound_.play(sound::Earcon::Boundary); // hit an edge
+        if (!settings_.invisible_repeat_at_edge)
+            return; // boundary tone only; don't re-speak the item you're already on
+    }
     const std::string id = items[static_cast<size_t>(dest)].id();
     tc->note_selection(id);
     emit({{"event", "select_row"}, {"id", id}}); // visible list follows if the window is shown

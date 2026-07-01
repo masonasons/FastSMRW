@@ -370,6 +370,7 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         SendMessageW(spin, UDM_SETRANGE32, AppSettings::kMaxMentionsMin,
                      AppSettings::kMaxMentionsMax);
         SendMessageW(spin, UDM_SETPOS32, 0, ctx->settings.text.max_mentions);
+        checked(dlg, IDC_SET_REPEAT_EDGE, ctx->settings.invisible_repeat_at_edge);
         return TRUE;
     }
     case WM_COMMAND: {
@@ -401,6 +402,7 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             int v = static_cast<int>(GetDlgItemInt(dlg, IDC_SET_MAX_MENTIONS, nullptr, FALSE));
             ctx->settings.text.max_mentions =
                 std::clamp(v, AppSettings::kMaxMentionsMin, AppSettings::kMaxMentionsMax);
+            ctx->settings.invisible_repeat_at_edge = is_checked(dlg, IDC_SET_REPEAT_EDGE);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

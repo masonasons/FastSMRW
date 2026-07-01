@@ -4,6 +4,8 @@ FastSMRW changelog
 0.0.5 (in development)
 ----------------------
 
+- New Speech option "Repeat the item when you hit the top or bottom of a timeline": with the invisible interface or layer, choose whether bumping an edge re-speaks the current post (still plays the boundary sound either way).
+- Portable mode: put a "userdata" folder next to FastSMRW.exe and all your settings, accounts and cache are stored there instead of in AppData, so you can carry FastSM on a USB stick.
 - Fixed: adding your first account now loads it right away instead of showing nothing until you restart.
 - Fixed: switching the Add Account type between Mastodon and Bluesky no longer leaves "bsky.social" filling in as your Mastodon instance.
 

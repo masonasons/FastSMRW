@@ -4,11 +4,13 @@
 
 namespace fastsm::store {
 
-// %APPDATA%\FastSMRW (created if missing) — holds config.json.
+// The data folder (created if missing) — holds config.json. Normally
+// %APPDATA%\FastSMRW, but a "userdata" folder next to the executable overrides
+// it (portable mode), in which case that folder is used directly.
 std::filesystem::path config_dir();
 
-// %APPDATA%\FastSMRW\cache (created if missing) — the timeline cache, kept in
-// the same FastSM data folder as config.json.
+// <data folder>\cache (created if missing) — the timeline cache, kept in the
+// same FastSM data folder as config.json.
 std::filesystem::path cache_dir();
 
 } // namespace fastsm::store
