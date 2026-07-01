@@ -5,6 +5,7 @@ FastSMRW changelog
 ----------------------
 
 - Your reading position in each timeline is now remembered across restarts, so you come back to the post you were on instead of the top.
+- Any timeline you open (an author's posts, a thread, a hashtag, a search, ...) now reopens after a restart, per account; closing a timeline forgets its saved position and cache.
 - All your accounts now stay loaded, refresh at your auto-refresh interval, and stream in real time all at once (not just the one you're viewing), so switching accounts is instant and every account stays up to date.
 
 - New Invisible interface (Settings > Invisible interface): global hotkeys drive FastSMRW from any window, speaking the post you land on and the timeline and place when you switch (e.g. "Home, 1 of 500").

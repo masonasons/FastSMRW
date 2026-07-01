@@ -97,6 +97,62 @@ json features_json(const PlatformFeatures& f) {
             {"editing", f.editing},           {"scheduling", f.scheduling}};
 }
 
+// Stable name for a timeline kind, for persisting the set of open timelines.
+const char* kind_name(TimelineSource::Kind k) {
+    using K = TimelineSource::Kind;
+    switch (k) {
+    case K::Home: return "home";
+    case K::Notifications: return "notifications";
+    case K::Mentions: return "mentions";
+    case K::Local: return "local";
+    case K::Federated: return "federated";
+    case K::Bookmarks: return "bookmarks";
+    case K::Favorites: return "favorites";
+    case K::Thread: return "thread";
+    case K::UserPosts: return "userPosts";
+    case K::Followers: return "followers";
+    case K::Following: return "following";
+    case K::Hashtag: return "hashtag";
+    case K::SearchPosts: return "searchPosts";
+    case K::SearchPeople: return "searchPeople";
+    }
+    return "home";
+}
+
+std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
+    using K = TimelineSource::Kind;
+    if (s == "home") return K::Home;
+    if (s == "notifications") return K::Notifications;
+    if (s == "mentions") return K::Mentions;
+    if (s == "local") return K::Local;
+    if (s == "federated") return K::Federated;
+    if (s == "bookmarks") return K::Bookmarks;
+    if (s == "favorites") return K::Favorites;
+    if (s == "thread") return K::Thread;
+    if (s == "userPosts") return K::UserPosts;
+    if (s == "followers") return K::Followers;
+    if (s == "following") return K::Following;
+    if (s == "hashtag") return K::Hashtag;
+    if (s == "searchPosts") return K::SearchPosts;
+    if (s == "searchPeople") return K::SearchPeople;
+    return std::nullopt;
+}
+
+json source_to_json(const TimelineSource& s) {
+    return {{"kind", kind_name(s.kind)}, {"param", s.param}, {"title", s.title_text}};
+}
+
+std::optional<TimelineSource> source_from_json(const json& j) {
+    auto k = kind_from_name(j.value("kind", std::string{}));
+    if (!k)
+        return std::nullopt;
+    TimelineSource s;
+    s.kind = *k;
+    s.param = j.value("param", std::string{});
+    s.title_text = j.value("title", std::string{});
+    return s;
+}
+
 } // namespace
 
 CoreSession::CoreSession(Paths paths, std::unique_ptr<net::IHttpClient> http,
@@ -304,10 +360,11 @@ void CoreSession::cmd_remove_account(const json& cmd) {
         if (auto it = parked_.find(now); it != parked_.end()) {
             timelines_ = std::move(it->second);
             parked_.erase(it);
-        } else {
-            timelines_ = build_timelines_for(accounts_.selected());
+        } else if (SocialAccount* a = accounts_.selected()) {
+            timelines_ = build_timelines_for(a, a->default_timelines());
         }
     }
+    save_open_timelines();
     update_streaming(); // start/stop streams for the new account set
     emit_accounts();
     emit_timelines();
@@ -459,9 +516,13 @@ void CoreSession::spawn_source(const TimelineSource& src) {
     current_ = static_cast<int>(timelines_.size()) - 1;
     TimelineController* p = timelines_.back().get();
     p->set_origin_key(origin);
+    // Restore this timeline's remembered position (works for spawned kinds too).
+    if (auto it = positions_.find(p->cache_key()); it != positions_.end())
+        p->note_selection(it->second);
     emit_timelines();
     p->load_cached();
     p->refresh();
+    save_open_timelines(); // remember this timeline is now open
     update_streaming();
 }
 
@@ -783,13 +844,18 @@ void CoreSession::cmd_close_timeline() {
     if (!tc || !tc->source().is_dismissable())
         return;
     const std::string origin = tc->origin_key();
+    const std::string closed_key = tc->cache_key();
     const int closed_index = current_;
     tc->on_change = nullptr;
     tc->on_error = nullptr;
     tc->on_received_new = nullptr;
-    tc->clear();
+    tc->clear(); // drops this timeline's cache file (if it was cacheable)
     retired_.push_back(std::move(timelines_[static_cast<size_t>(closed_index)]));
     timelines_.erase(timelines_.begin() + closed_index);
+    // Forget the closed timeline's remembered reading position.
+    if (positions_.erase(closed_key) > 0)
+        save_positions();
+    save_open_timelines(); // remember it's no longer open
 
     // Return to the timeline we came from, if it's still open; else a neighbor.
     int next = -1;
@@ -1280,11 +1346,11 @@ void CoreSession::cmd_perform_action(const json& cmd) {
 // --- helpers ---
 
 std::vector<std::unique_ptr<TimelineController>>
-CoreSession::build_timelines_for(SocialAccount* account) {
+CoreSession::build_timelines_for(SocialAccount* account, const std::vector<TimelineSource>& sources) {
     std::vector<std::unique_ptr<TimelineController>> v;
     if (!account)
         return v;
-    for (const TimelineSource& src : account->default_timelines())
+    for (const TimelineSource& src : sources)
         v.push_back(make_controller(account, src));
     for (auto& tc : v) {
         // Restore the remembered reading position before the cache load emits, so
@@ -1299,16 +1365,25 @@ CoreSession::build_timelines_for(SocialAccount* account) {
 
 void CoreSession::rebuild_timelines() {
     // Build (and keep warm) timelines for EVERY account: the selected one is
-    // displayed, the rest are parked and refreshed in the background.
+    // displayed, the rest are parked and refreshed in the background. Each account
+    // reopens the exact set of timelines it had (spawned ones included); a first
+    // run with nothing saved falls back to that account's defaults.
     timelines_.clear();
     parked_.clear();
     current_ = 0;
+    const auto saved = load_open_timelines();
     for (SocialAccount* account : accounts_.accounts()) {
-        auto v = build_timelines_for(account);
-        if (account->account_key() == accounts_.selected_key())
+        const std::string key = account->account_key();
+        std::vector<TimelineSource> sources;
+        if (auto it = saved.find(key); it != saved.end() && !it->second.empty())
+            sources = it->second;
+        else
+            sources = account->default_timelines();
+        auto v = build_timelines_for(account, sources);
+        if (key == accounts_.selected_key())
             timelines_ = std::move(v);
         else
-            parked_[account->account_key()] = std::move(v);
+            parked_[key] = std::move(v);
     }
     update_streaming();
 }
@@ -1325,8 +1400,8 @@ void CoreSession::switch_account(const std::string& new_key) {
     if (auto it = parked_.find(new_key); it != parked_.end()) {
         timelines_ = std::move(it->second); // unpark the warm timelines
         parked_.erase(it);
-    } else {
-        timelines_ = build_timelines_for(accounts_.selected());
+    } else if (SocialAccount* a = accounts_.selected()) {
+        timelines_ = build_timelines_for(a, a->default_timelines());
     }
     for (auto& tc : timelines_)
         tc->refresh(); // freshen the account we just switched to
@@ -1440,6 +1515,58 @@ void CoreSession::save_positions() const {
         root[key] = id;
     const std::string blob = root.dump();
     const std::filesystem::path path = positions_path();
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+        out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec)
+        std::filesystem::remove(tmp, ec);
+}
+
+std::filesystem::path CoreSession::open_timelines_path() const {
+    return config_path_.parent_path() / "open_timelines.json";
+}
+
+std::map<std::string, std::vector<TimelineSource>> CoreSession::load_open_timelines() const {
+    std::map<std::string, std::vector<TimelineSource>> out;
+    std::ifstream in(open_timelines_path(), std::ios::binary);
+    if (!in)
+        return out;
+    try {
+        json root;
+        in >> root;
+        if (root.is_object())
+            for (const auto& [key, arr] : root.items())
+                if (arr.is_array())
+                    for (const auto& j : arr)
+                        if (auto s = source_from_json(j))
+                            out[key].push_back(*s);
+    } catch (...) {
+    }
+    return out;
+}
+
+void CoreSession::save_open_timelines() const {
+    json root = json::object();
+    auto add = [&](const std::string& key,
+                   const std::vector<std::unique_ptr<TimelineController>>& v) {
+        json arr = json::array();
+        for (const auto& tc : v)
+            arr.push_back(source_to_json(tc->source()));
+        root[key] = arr;
+    };
+    if (!accounts_.selected_key().empty())
+        add(accounts_.selected_key(), timelines_);
+    for (const auto& [key, v] : parked_)
+        add(key, v);
+
+    const std::string blob = root.dump();
+    const std::filesystem::path path = open_timelines_path();
     const std::filesystem::path tmp = path.string() + ".tmp";
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);

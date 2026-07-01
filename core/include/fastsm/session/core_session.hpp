@@ -119,8 +119,14 @@ private:
     std::string timeline_position_text(const TimelineController* tc) const;
 
     void rebuild_timelines(); // (re)build timelines for every account
-    // Build + warm (cache load + refresh) one account's timelines.
-    std::vector<std::unique_ptr<TimelineController>> build_timelines_for(SocialAccount* account);
+    // Build + warm (cache load + refresh) an account's timelines from these sources.
+    std::vector<std::unique_ptr<TimelineController>>
+    build_timelines_for(SocialAccount* account, const std::vector<TimelineSource>& sources);
+    // The set of open timelines is remembered across restarts (per account) in a
+    // small open_timelines.json, so spawned/closed timelines reopen as you left them.
+    std::filesystem::path open_timelines_path() const;
+    std::map<std::string, std::vector<TimelineSource>> load_open_timelines() const;
+    void save_open_timelines() const;
     // Switch the displayed account: park the current, unpark (or build) the target.
     void switch_account(const std::string& new_key);
     void refresh_all_accounts(); // refresh the current + every parked account
