@@ -4,6 +4,8 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- The Mentions timeline now shows each mention as the post itself (a regular post), not as an "X mentioned you" notification.
+
 - Your reading position in each timeline is now remembered across restarts, so you come back to the post you were on instead of the top.
 - Any timeline you open (an author's posts, a thread, a hashtag, a search, ...) now reopens after a restart, per account; closing a timeline forgets its saved position and cache.
 - All your accounts now stay loaded, refresh at your auto-refresh interval, and stream in real time all at once (not just the one you're viewing), so switching accounts is instant and every account stays up to date.

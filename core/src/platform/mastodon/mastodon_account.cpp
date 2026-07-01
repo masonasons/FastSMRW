@@ -217,7 +217,8 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     if (!j.is_array())
         return page;
 
-    const bool notifications = source.is_notification_timeline();
+    const bool notif_feed = source.is_notification_timeline(); // Notifications or Mentions
+    const bool mentions = source.kind == TimelineSource::Kind::Mentions;
     const bool user_list = source.is_user_list();
     std::string last_id;
     for (const auto& entry : j) {
@@ -225,10 +226,16 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
             User u = mastodon::map_user(entry);
             last_id = u.id;
             page.items.push_back(TimelineItem{std::move(u)});
-        } else if (notifications) {
+        } else if (notif_feed) {
             Notification n = mastodon::map_notification(entry);
-            last_id = n.id;
-            page.items.push_back(TimelineItem{std::move(n)});
+            last_id = n.id; // /notifications paginates by notification id
+            if (mentions) {
+                // Show a @-mention as the post itself, not a "X mentioned you" row.
+                if (n.status)
+                    page.items.push_back(TimelineItem{*n.status});
+            } else {
+                page.items.push_back(TimelineItem{std::move(n)});
+            }
         } else {
             Status s = mastodon::map_status(entry);
             last_id = s.id;
