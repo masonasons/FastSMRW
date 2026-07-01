@@ -108,7 +108,15 @@ bool AppConfigStore::save(const AppConfig& config) const {
         json a;
         a["account_key"] = rec.account_key;
         a["platform"] = static_cast<int>(rec.platform);
-        a["me"] = rec.me;
+        // Persist only the identity fields needed to rebuild the account at startup
+        // (from_json defaults the rest). The cosmetic/mutable fields -- follower
+        // counts, bio, avatar/header, created_at -- are re-fetched when shown and
+        // would just bloat config.json with stale data.
+        a["me"] = json{{"id", rec.me.id},
+                       {"acct", rec.me.acct},
+                       {"username", rec.me.username},
+                       {"display_name", rec.me.display_name},
+                       {"platform", static_cast<int>(rec.me.platform)}};
         const std::string plain = credential_to_json(rec.credential).dump();
         a["credential_enc"] = util::base64_encode(dpapi_protect(plain));
         root["accounts"].push_back(std::move(a));
