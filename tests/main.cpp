@@ -57,6 +57,12 @@ void test_capi_session_events();
 // From test_thread.cpp
 void test_mastodon_thread_fetch();
 
+// From test_keymap.cpp
+void test_keymap_normalize();
+void test_keymap_default_and_catalog();
+void test_keymap_parse_and_serialize();
+void test_keymap_inheritance();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -104,6 +110,10 @@ int main() {
     test_sse_multiline_crlf_comments();
     test_capi_session_events();
     test_mastodon_thread_fetch();
+    test_keymap_normalize();
+    test_keymap_default_and_catalog();
+    test_keymap_parse_and_serialize();
+    test_keymap_inheritance();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;
