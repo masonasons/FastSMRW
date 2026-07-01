@@ -11,6 +11,9 @@ non-technical** entry to `docs/changelog.txt` describing what changed from a
 user's point of view (what they can now do or what got fixed) — not how it was
 implemented. Write for an end user, not a developer.
 
+**Keep each entry to ONE line.** One sentence per change — no multi-line
+paragraphs. If it needs more than a line, it's too detailed for a changelog.
+
 Only log changes a user would notice. Purely internal work (refactors, build/CI
 tweaks, test-only changes) does **not** get a changelog entry.
 

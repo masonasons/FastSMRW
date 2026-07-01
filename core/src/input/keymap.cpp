@@ -168,6 +168,9 @@ const std::vector<ActionDef>& action_catalog() {
     // Defaults mirror the Python original's alt+win / control+win combos, which
     // are screen-reader-friendly and unlikely to collide with other apps under
     // RegisterHotKey. The Win32 driver maps these strings to VK codes.
+    // Action ids match the Python FastSM tokens (Reply, BoostToggle, next_item,
+    // ...) so .keymap files are interchangeable between the two clients for easy
+    // sharing. Actions one client lacks are simply ignored by the other.
     static const std::vector<ActionDef> catalog = {
         // --- navigation ---
         {"next_item", "Next item", "control+alt+win+down"},
@@ -176,35 +179,35 @@ const std::vector<ActionDef>& action_catalog() {
         {"prev_item_jump", "Jump back (20 items)", "control+win+pageup"},
         {"top_item", "Top of timeline", "alt+win+home"},
         {"bottom_item", "Bottom of timeline", "alt+win+end"},
-        {"next_timeline", "Next timeline", "control+alt+win+right"},
-        {"prev_timeline", "Previous timeline", "control+alt+win+left"},
-        {"next_account", "Next account", "control+shift+win+pagedown"},
-        {"prev_account", "Previous account", "control+shift+win+pageup"},
+        {"next_tl", "Next timeline", "control+alt+win+right"},
+        {"prev_tl", "Previous timeline", "control+alt+win+left"},
+        {"NextAccount", "Next account", "control+shift+win+pagedown"},
+        {"PrevAccount", "Previous account", "control+shift+win+pageup"},
         {"speak_item", "Speak current item", "alt+win+space"},
-        {"undo_navigation", "Undo navigation (go back)", "alt+win+z"},
+        {"UndoNavigation", "Undo navigation (go back)", "alt+win+z"},
         {"refresh", "Refresh timeline", "control+alt+win+u"},
         // --- post actions ---
-        {"reply", "Reply", "control+win+r"},
-        {"quote", "Quote post", "alt+win+q"},
-        {"edit", "Edit post", "alt+win+e"},
-        {"post", "New post", "alt+win+n"},
-        {"boost_toggle", "Boost / Unboost", "control+win+shift+r"},
-        {"favorite_toggle", "Like / Unlike", "alt+win+k"},
-        {"post_info", "Post info", "alt+win+v"},
-        {"open_url", "Open post URL", "alt+win+return"},
+        {"Reply", "Reply", "control+win+r"},
+        {"Quote", "Quote post", "alt+win+q"},
+        {"Edit", "Edit post", "alt+win+e"},
+        {"Post", "New post", "alt+win+n"},
+        {"BoostToggle", "Boost / Unboost", "control+shift+win+r"},
+        {"LikeToggle", "Like / Unlike", "alt+win+k"},
+        {"View", "Post info", "alt+win+v"},
+        {"Url", "Open post URL", "alt+win+return"},
         {"open_thread", "View thread", "alt+win+t"},
         // --- user actions ---
-        {"open_user_timeline", "Open user timeline", "alt+win+u"},
-        {"open_user_profile", "Open user profile", "alt+win+shift+u"},
-        {"follow_toggle", "Follow / Unfollow", "alt+win+l"},
-        {"mute_toggle", "Mute / Unmute user", "alt+win+shift+l"},
-        {"block_toggle", "Block / Unblock user", "control+shift+win+b"},
+        {"UserTimeline", "Open user timeline", "alt+win+u"},
+        {"UserProfile", "Open user profile", "alt+win+shift+u"},
+        {"FollowToggle", "Follow / Unfollow", "alt+win+l"},
+        {"MuteToggle", "Mute / Unmute user", "alt+win+shift+l"},
+        {"BlockToggle", "Block / Unblock user", "control+shift+win+b"},
         // --- timeline / app ---
-        {"close_timeline", "Close timeline", "alt+win+'"},
-        {"toggle_window", "Show / hide window", "control+win+w"},
-        {"settings", "Settings", "alt+win+o"},
-        {"keymap_manager", "Keyboard manager", "control+alt+win+k"},
-        {"stop_audio", "Stop audio / speech", "control+win+shift+return"},
+        {"CloseTimeline", "Close timeline", "alt+win+'"},
+        {"ToggleWindow", "Show / hide window", "control+win+w"},
+        {"Options", "Settings", "alt+win+o"},
+        {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
+        {"StopAudio", "Stop audio / speech", "control+win+shift+return"},
     };
     return catalog;
 }

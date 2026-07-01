@@ -4,72 +4,23 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
-- New: an Invisible interface. Settings has a new "Invisible interface" tab where
-  you can turn on Global hotkeys to drive FastSMRW from any window - move through
-  your timeline, reply, boost, favorite, switch timelines and accounts, and more,
-  without switching to the app. Navigation speaks the post you land on, and
-  switching timelines announces the timeline and your place in it (e.g. "Home,
-  1 of 500"). (Still to
-  come: a low-level keyhook mode that can also grab key combos Windows reserves
-  for itself - like Win+arrows - plus a full keyboard manager to customize the
-  shortcuts.)
-
-- When a refresh brings in new posts that don't connect to what you already had
-  (you were away a while), the app now remembers the gap and fills it in
-  automatically as you scroll down into it - so the timeline stays continuous
-  instead of silently jumping. These gaps are saved with the cache too.
-
-- The scroll position for loading older posts is now saved in the cache, so
-  scrolling down to load more keeps working after you restart the app or switch
-  accounts (previously it only worked in the session where you first loaded the
-  timeline). Note: this needs the cache to hold the posts you'd loaded - if you
-  set a high "API calls per timeline load" but a low "Maximum posts to cache",
-  raise the cache so the two match.
-
-- Timelines now load older posts automatically as you reach the bottom (seamless
-  infinite scroll), in every timeline that supports it - this previously did not
-  happen at all, so you were stuck at the first batch. Each load pulls as many
-  pages as your "API calls per timeline load" setting (Advanced).
-
-- Loading older posts now keeps working after a restart even when your "Maximum
-  posts to cache" is smaller than what you'd scrolled through - including on
-  Bluesky. The cache is trimmed to a real page boundary so it can pick up exactly
-  where it left off.
-
-- Bluesky now loads up to 100 posts per request instead of 40 (its API's limit),
-  so timelines fill in faster with fewer round-trips.
-
-- Single-letter shortcuts on a post (R reply, B boost, F favorite, Q quote,
-  E edit, U author) no longer jump your place in the timeline. The posts list
-  was quietly treating those keys as a type-to-search and moving the selection,
-  which is why replying and then escaping flung you to the top. Your position
-  now stays put.
-
-- Bluesky now supports the same social features as Mastodon: view a post's
-  thread, open an author's posts, open Followers / Following lists, and the
-  profile with follow / unfollow, mute, and block.
-- Fixed the startup "ready" chime playing every time you switched accounts - it
-  now plays only once when the app finishes starting.
+- New Invisible interface (Settings > Invisible interface): global hotkeys drive FastSMRW from any window, speaking the post you land on and the timeline and place when you switch (e.g. "Home, 1 of 500").
+- Gaps left when you were away are now remembered and filled in automatically as you scroll down into them, so the timeline stays continuous.
+- The scroll position for loading older posts is saved in the cache, so it keeps working after a restart or account switch.
+- Timelines now load older posts automatically as you reach the bottom (seamless infinite scroll), in every timeline that supports it.
+- Loading older posts keeps working after a restart even when your cache is smaller than what you'd scrolled through, including on Bluesky.
+- Bluesky now loads up to 100 posts per request instead of 40, so timelines fill in faster.
+- Single-letter shortcuts on a post (R, B, F, Q, E, U) no longer jump your place in the timeline.
+- Bluesky now supports the same social features as Mastodon: threads, an author's posts, Followers / Following, and profile with follow / mute / block.
+- Fixed the startup "ready" chime playing every time you switched accounts; it now plays only once at startup.
 - The app now reopens to the account you were last using.
-- Fixed being stuck at the cached number of posts after launching or switching
-  accounts: loading older posts (scrolling down) works again.
-
-- Speech settings now cover three kinds of rows separately. The Speech tab has
-  Configure Posts, Configure Users, and Configure Notifications buttons; each
-  opens a dialog to check which details are spoken and reorder them (Ctrl+Up /
-  Ctrl+Down or the Move buttons).
-- Notification rows now read who acted, what they did, the related post, and the
-  time - and you can choose/reorder those parts (Speech > Notifications).
-- People rows (Followers / Following / People search) now follow your Users
-  speech settings instead of always reading just name and handle.
-- New setting (Timelines tab): "Show mentions in the Notifications timeline" (on
-  by default). Turn it off to hide mentions there - handy when you keep a
-  separate Mentions timeline open.
-
-- The New Timeline dialog (Ctrl+T) can now open a Hashtag timeline, Search Posts,
-  or Search People (Mastodon) - pick the type and type the hashtag or search text.
-- Search People opens as a people list with the same multi-select and batch
-  follow / mute / block as Followers and Following.
+- Fixed being stuck at the cached number of posts after launching or switching accounts.
+- Speech settings now cover posts, users, and notifications separately (Speech tab: Configure Posts / Users / Notifications).
+- Notification rows now read who acted, what they did, the related post, and the time, and you can reorder those parts.
+- People rows (Followers / Following / People search) now follow your Users speech settings.
+- New setting (Timelines tab): "Show mentions in the Notifications timeline".
+- The New Timeline dialog (Ctrl+T) can now open a Hashtag timeline, Search Posts, or Search People (Mastodon).
+- Search People opens as a people list with the same multi-select and batch follow / mute / block as Followers and Following.
 
 
 0.0.2

@@ -24,14 +24,14 @@ void test_keymap_normalize() {
 void test_keymap_default_and_catalog() {
     const auto& cat = action_catalog();
     CHECK(cat.size() > 10);
-    CHECK(find_action("reply") != nullptr);
+    CHECK(find_action("Reply") != nullptr); // tokens match the Python client for sharing
     CHECK(find_action("does_not_exist") == nullptr);
 
     KeyBindings def = default_bindings();
-    // reply default is control+win+r -> "reply".
+    // Reply default is control+win+r -> "Reply".
     auto it = def.find("control+win+r");
     CHECK(it != def.end());
-    CHECK_EQ(it->second, std::string("reply"));
+    CHECK_EQ(it->second, std::string("Reply"));
     // No two default bindings collide on the same key: every catalog entry with a
     // default produced a distinct binding, so the map size equals the count.
     size_t with_default = 0;
@@ -62,18 +62,18 @@ void test_keymap_parse_and_serialize() {
 }
 
 void test_keymap_inheritance() {
-    // Custom rebinds reply to a new key and unbinds refresh; everything else
+    // Custom rebinds Reply to a new key and unbinds refresh; everything else
     // inherits from default.
     ParsedKeymap custom;
-    custom.bindings["alt+win+y"] = "reply"; // move reply off its default key
+    custom.bindings["alt+win+y"] = "Reply"; // move Reply off its default key
     custom.unbinds.insert("refresh");
 
     KeyBindings eff = resolve_bindings(custom);
-    // reply is now on the custom key, and its default key no longer maps to reply.
-    CHECK_EQ(eff["alt+win+y"], std::string("reply"));
+    // Reply is now on the custom key, and its default key no longer maps to Reply.
+    CHECK_EQ(eff["alt+win+y"], std::string("Reply"));
     CHECK(eff.find("control+win+r") == eff.end()); // old default key dropped
     // refresh's default key is gone (unbound).
     CHECK(eff.find("control+alt+win+u") == eff.end());
-    // An untouched default (favorite) still present.
-    CHECK_EQ(eff["alt+win+k"], std::string("favorite_toggle"));
+    // An untouched default (Like) still present.
+    CHECK_EQ(eff["alt+win+k"], std::string("LikeToggle"));
 }

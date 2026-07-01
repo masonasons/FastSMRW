@@ -1016,10 +1016,20 @@ void CoreSession::emit_keymap(const std::string& name) {
     json bindings = json::object();
     for (const auto& [key, action] : eff)
         bindings[key] = action;
+    // Raw custom layer (action -> key overrides + unbound actions), so the
+    // Keyboard Manager can show each binding's source and edit only overrides.
+    json overrides = json::object();
+    for (const auto& [key, action] : custom.bindings)
+        overrides[action] = key;
+    json unbinds = json::array();
+    for (const auto& a : custom.unbinds)
+        unbinds.push_back(a);
     emit({{"event", "keymap"},
           {"name", name},
           {"mode", settings_.invisible_mode},
           {"bindings", bindings},
+          {"overrides", overrides},
+          {"unbinds", unbinds},
           {"keymaps", list_keymaps()}});
 }
 
@@ -1134,21 +1144,21 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return invisible_goto_edge(true);
     if (a == "bottom_item")
         return invisible_goto_edge(false);
-    if (a == "next_timeline")
+    if (a == "next_tl")
         return cmd_select_timeline({{"dir", "next"}, {"speak_position", true}});
-    if (a == "prev_timeline")
+    if (a == "prev_tl")
         return cmd_select_timeline({{"dir", "prev"}, {"speak_position", true}});
     if (a == "speak_item") {
         if (TimelineController* tc = current())
             invisible_speak_index(tc->visible_index_of(tc->selected_id()));
         return;
     }
-    if (a == "undo_navigation")
+    if (a == "UndoNavigation")
         return cmd_go_back();
     if (a == "refresh")
         return cmd_refresh();
-    if (a == "next_account" || a == "prev_account") {
-        cmd_select_account({{"dir", a == "prev_account" ? "prev" : "next"}});
+    if (a == "NextAccount" || a == "PrevAccount") {
+        cmd_select_account({{"dir", a == "PrevAccount" ? "prev" : "next"}});
         if (SocialAccount* ac = accounts_.selected())
             emit_announce(ac->me().acct);
         return;
@@ -1156,36 +1166,36 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     // Actions on the current row (reuse the same handlers the UI uses).
     TimelineController* tc = current();
     const std::string row = tc ? tc->selected_id() : std::string{};
-    if (a == "boost_toggle")
+    if (a == "BoostToggle")
         return cmd_toggle_boost({{"id", row}});
-    if (a == "favorite_toggle")
+    if (a == "LikeToggle")
         return cmd_toggle_favorite({{"id", row}});
-    if (a == "reply")
+    if (a == "Reply")
         return cmd_compose_context({{"mode", "reply"}, {"id", row}});
-    if (a == "quote")
+    if (a == "Quote")
         return cmd_compose_context({{"mode", "quote"}, {"id", row}});
-    if (a == "edit")
+    if (a == "Edit")
         return cmd_compose_context({{"mode", "edit"}, {"id", row}});
-    if (a == "post")
+    if (a == "Post")
         return cmd_compose_context({{"mode", "new"}});
-    if (a == "post_info")
+    if (a == "View")
         return cmd_post_info({{"id", row}});
-    if (a == "open_url")
+    if (a == "Url")
         return cmd_open_status({{"id", row}});
     if (a == "open_thread")
         return cmd_open_thread({{"id", row}});
-    if (a == "open_user_timeline")
+    if (a == "UserTimeline")
         return cmd_open_user_timeline({{"id", row}});
-    if (a == "open_user_profile")
+    if (a == "UserProfile")
         return cmd_open_user_profile({{"id", row}});
-    if (a == "close_timeline")
+    if (a == "CloseTimeline")
         return cmd_close_timeline();
     // UI-only actions the app carries out (window/dialogs/stop speech).
-    if (a == "toggle_window" || a == "settings" || a == "keymap_manager" || a == "stop_audio") {
+    if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }
-    // follow_toggle / mute_toggle / block_toggle need relationship round-trips;
+    // FollowToggle / MuteToggle / BlockToggle need relationship round-trips;
     // deferred to a later phase.
 }
 

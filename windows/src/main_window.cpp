@@ -1095,18 +1095,18 @@ void MainWindow::ev_keymap(const json& e) {
 
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
-    if (a == "toggle_window") {
+    if (a == "ToggleWindow") {
         if (IsWindowVisible(hwnd_) && GetForegroundWindow() == hwnd_) {
             ShowWindow(hwnd_, SW_HIDE);
         } else {
             ShowWindow(hwnd_, SW_SHOW);
             SetForegroundWindow(hwnd_);
         }
-    } else if (a == "settings") {
+    } else if (a == "Options") {
         do_settings();
-    } else if (a == "keymap_manager") {
+    } else if (a == "KeymapManager") {
         announce("Keyboard manager is coming soon."); // Phase 2
-    } else if (a == "stop_audio") {
+    } else if (a == "StopAudio") {
         if (speaker_)
             speaker_->stop();
     }
