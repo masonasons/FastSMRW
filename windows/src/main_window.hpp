@@ -13,6 +13,7 @@
 
 #include "compose_dialog.hpp"
 #include "invisible_hotkeys.hpp"
+#include "keymap_manager_dialog.hpp"
 
 namespace fastsmui {
 
@@ -96,10 +97,12 @@ private:
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
     void ev_keymap(const nlohmann::json& e);
+    void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
     // Apply the current invisible-interface mode (from settings_): (re)load the
     // keymap for hotkey mode, or tear the global hotkeys down when off.
     void apply_invisible();
+    void open_keymap_manager(HWND parent);
 
     HINSTANCE inst_;
     fastsm_core* core_ = nullptr;
@@ -118,6 +121,8 @@ private:
     HotkeyDriver hotkey_driver_;
     std::string invisible_mode_ = "off";
     std::map<std::string, std::string> invisible_bindings_; // key -> action
+    std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager
+    KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open
 
     std::vector<Timeline> timelines_;
     int current_ = 0;

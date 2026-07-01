@@ -81,6 +81,28 @@
 #define IDC_SET_CONFIRM_BLOCK 354
 #define IDD_SET_INVISIBLE   355
 #define IDC_SET_INVIS_MODE  356
+#define IDC_SET_INVIS_MANAGER 357
+
+// Keyboard Manager dialog + its binding-capture sub-dialog.
+#define IDD_KEYMAP_MANAGER  400
+#define IDC_KM_KEYMAP       401
+#define IDC_KM_NEW          402
+#define IDC_KM_DELETE       403
+#define IDC_KM_STATUS       404
+#define IDC_KM_LIST         405
+#define IDC_KM_SET          406
+#define IDC_KM_UNBIND       407
+#define IDC_KM_RESET        408
+#define IDC_KM_SAVE         409
+#define IDD_KM_BINDING      420
+#define IDC_KMB_CTRL        421
+#define IDC_KMB_ALT         422
+#define IDC_KMB_SHIFT       423
+#define IDC_KMB_WIN         424
+#define IDC_KMB_KEY         425
+#define IDC_KMB_CURRENT     426
+#define IDD_KM_NEWNAME      430
+#define IDC_KMN_NAME        431
 
 // Post Info dialog.
 #define IDD_POST_INFO         360

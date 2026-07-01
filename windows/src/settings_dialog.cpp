@@ -1,6 +1,7 @@
 #include "settings_dialog.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 
 #include <commctrl.h>
@@ -22,6 +23,7 @@ namespace {
 struct Ctx {
     AppSettings settings;
     std::vector<std::string> soundpacks;
+    std::function<void(HWND)> open_manager;
     bool applied = false;
 };
 
@@ -401,7 +403,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
 const char* const kInvisibleModes[] = {"off", "hotkey"};
 const wchar_t* const kInvisibleModeLabels[] = {L"Off", L"Global hotkeys"};
 
-INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
+INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
         Ctx* ctx = on_init(dlg, lp);
@@ -416,6 +418,14 @@ INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
         return TRUE;
     }
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDC_SET_INVIS_MANAGER) {
+            Ctx* ctx = ctx_of(dlg);
+            if (ctx && ctx->open_manager)
+                ctx->open_manager(dlg);
+            return TRUE;
+        }
+        break;
     case WM_NOTIFY:
         if (is_apply(lp)) {
             const int sel = static_cast<int>(
@@ -445,10 +455,12 @@ PROPSHEETPAGEW make_page(HINSTANCE inst, int dlg, DLGPROC proc, Ctx* ctx) {
 
 std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
                                                 const AppSettings& current,
-                                                const std::vector<std::string>& soundpacks) {
+                                                const std::vector<std::string>& soundpacks,
+                                                std::function<void(HWND)> open_manager) {
     Ctx ctx;
     ctx.settings = current;
     ctx.soundpacks = soundpacks;
+    ctx.open_manager = std::move(open_manager);
 
     PROPSHEETPAGEW pages[] = {
         make_page(inst, IDD_SET_GENERAL, GeneralProc, &ctx),

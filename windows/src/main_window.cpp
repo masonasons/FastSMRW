@@ -53,6 +53,7 @@ enum {
     ID_PREV_ACCOUNT,
     ID_NEXT_ACCOUNT,
     ID_ADD_ACCOUNT,
+    ID_KEYMAP_MANAGER,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -127,6 +128,7 @@ HMENU build_menu() {
     AppendMenuW(app, MF_STRING, ID_ABOUT, L"&About FastSMRW");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+,");
+    AppendMenuW(app, MF_STRING, ID_KEYMAP_MANAGER, L"&Keyboard Manager…");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
@@ -845,7 +847,8 @@ void MainWindow::do_settings() {
     std::vector<std::string> packs = soundpacks_.empty()
                                          ? std::vector<std::string>{"Default"}
                                          : soundpacks_;
-    if (auto result = show_settings_dialog(hwnd_, inst_, s, packs))
+    auto open_mgr = [this](HWND parent) { open_keymap_manager(parent); };
+    if (auto result = show_settings_dialog(hwnd_, inst_, s, packs, open_mgr))
         dispatch_cmd({{"cmd", "update_settings"}, {"settings", store::settings_to_json(*result)}});
 }
 
@@ -867,6 +870,9 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_SETTINGS:
         do_settings();
+        break;
+    case ID_KEYMAP_MANAGER:
+        open_keymap_manager(hwnd_);
         break;
     case ID_QUIT:
         DestroyWindow(hwnd_);
@@ -1000,6 +1006,8 @@ void MainWindow::on_event(const std::string& js) {
         restore_selection(e.value("id", std::string{}));
     else if (ev == "keymap")
         ev_keymap(e);
+    else if (ev == "action_catalog")
+        ev_action_catalog(e);
     else if (ev == "invisible_ui_action")
         ev_invisible_ui_action(e);
     else if (ev == "open_url")
@@ -1069,6 +1077,8 @@ void MainWindow::ev_settings(const json& e) {
     soundpacks_.clear();
     for (const auto& p : e.value("soundpacks", json::array()))
         soundpacks_.push_back(p.get<std::string>());
+    if (action_catalog_.empty()) // load once so the Keyboard Manager has its actions
+        dispatch_cmd({{"cmd", "get_action_catalog"}});
     apply_invisible();
 }
 
@@ -1081,6 +1091,14 @@ void MainWindow::apply_invisible() {
 }
 
 void MainWindow::ev_keymap(const json& e) {
+    // Forward to the Keyboard Manager if it's open (it may have asked for any keymap).
+    if (keymap_mgr_)
+        keymap_mgr_->on_keymap(e);
+    // Only (re)bind the global hotkeys for the ACTIVE keymap — ignore events for
+    // other keymaps the manager is merely browsing.
+    const std::string active = settings_.value("invisible_keymap", std::string("default"));
+    if (e.value("name", std::string{}) != active)
+        return;
     invisible_bindings_.clear();
     // Bind to a named object first: iterating .items() on the temporary returned
     // by value() would dangle (the proxy outlives the temporary).
@@ -1091,6 +1109,28 @@ void MainWindow::ev_keymap(const json& e) {
         hotkey_driver_.set_bindings(invisible_bindings_);
     else
         hotkey_driver_.clear();
+}
+
+void MainWindow::ev_action_catalog(const json& e) {
+    action_catalog_.clear();
+    const json actions = e.value("actions", json::array());
+    for (const auto& a : actions)
+        action_catalog_.push_back({a.value("id", std::string{}), a.value("label", std::string{}),
+                                   a.value("default_key", std::string{})});
+}
+
+void MainWindow::open_keymap_manager(HWND parent) {
+    if (action_catalog_.empty()) {
+        announce("Keyboard actions are still loading; try again in a moment.");
+        dispatch_cmd({{"cmd", "get_action_catalog"}});
+        return;
+    }
+    const std::string active = settings_.value("invisible_keymap", std::string("default"));
+    KeymapManagerDialog dlg(inst_, action_catalog_, active,
+                            [this](const json& cmd) { dispatch_cmd(cmd); });
+    keymap_mgr_ = &dlg;
+    dlg.run(parent);
+    keymap_mgr_ = nullptr;
 }
 
 void MainWindow::ev_invisible_ui_action(const json& e) {
@@ -1105,7 +1145,11 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
     } else if (a == "Options") {
         do_settings();
     } else if (a == "KeymapManager") {
-        announce("Keyboard manager is coming soon."); // Phase 2
+        if (!IsWindowVisible(hwnd_)) {
+            ShowWindow(hwnd_, SW_SHOW);
+            SetForegroundWindow(hwnd_);
+        }
+        open_keymap_manager(hwnd_);
     } else if (a == "StopAudio") {
         if (speaker_)
             speaker_->stop();

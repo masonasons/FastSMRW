@@ -164,6 +164,58 @@ BEGIN
     COMBOBOX   IDC_SET_INVIS_MODE, 52, 32, 162, 80, CBS_DROPDOWNLIST | WS_TABSTOP
     LTEXT      "Global hotkeys use Windows to register each shortcut. Some keys Windows reserves cannot be captured this way; a low-level keyhook (coming soon) will.",
                -1, 10, 52, 224, 26
+    PUSHBUTTON "&Keyboard Manager...", IDC_SET_INVIS_MANAGER, 10, 84, 120, 14
+    LTEXT      "Customize which keys do what, and share keymaps with the desktop client.",
+               -1, 10, 102, 224, 18
+END
+
+IDD_KEYMAP_MANAGER DIALOGEX 0, 0, 340, 260
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Keyboard Manager"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Active &keymap:", -1, 8, 10, 60, 9
+    COMBOBOX   IDC_KM_KEYMAP, 70, 8, 140, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON "&New...", IDC_KM_NEW, 216, 7, 56, 14
+    PUSHBUTTON "&Delete", IDC_KM_DELETE, 276, 7, 56, 14
+    LTEXT      "", IDC_KM_STATUS, 8, 28, 324, 18
+    LTEXT      "&Actions:", -1, 8, 48, 60, 9
+    CONTROL    "", IDC_KM_LIST, "SysListView32",
+               LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,
+               8, 60, 324, 150
+    PUSHBUTTON "&Set binding...", IDC_KM_SET, 8, 216, 80, 14
+    PUSHBUTTON "&Unbind", IDC_KM_UNBIND, 92, 216, 60, 14
+    PUSHBUTTON "&Reset to default", IDC_KM_RESET, 156, 216, 90, 14
+    DEFPUSHBUTTON "Sa&ve", IDC_KM_SAVE, 224, 238, 52, 16
+    PUSHBUTTON "&Close", IDCANCEL, 280, 238, 52, 16
+END
+
+IDD_KM_BINDING DIALOGEX 0, 0, 220, 130
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Set binding"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "", IDC_KMB_CURRENT, 10, 8, 200, 9
+    GROUPBOX   "Modifiers", -1, 10, 22, 200, 40
+    AUTOCHECKBOX "&Ctrl", IDC_KMB_CTRL, 20, 36, 44, 12
+    AUTOCHECKBOX "&Alt", IDC_KMB_ALT, 68, 36, 44, 12
+    AUTOCHECKBOX "&Shift", IDC_KMB_SHIFT, 116, 36, 44, 12
+    AUTOCHECKBOX "&Win", IDC_KMB_WIN, 164, 36, 40, 12
+    LTEXT      "&Key (e.g. t, /, up, return, delete, f5):", -1, 10, 72, 200, 9
+    EDITTEXT   IDC_KMB_KEY, 10, 84, 200, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "OK", IDOK, 104, 108, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 160, 108, 50, 14
+END
+
+IDD_KM_NEWNAME DIALOGEX 0, 0, 200, 84
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "New keymap"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "&Name (letters, digits, dash, underscore):", -1, 10, 10, 180, 9
+    EDITTEXT   IDC_KMN_NAME, 10, 24, 180, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "OK", IDOK, 84, 58, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 140, 58, 50, 14
 END
 
 IDD_POST_INFO DIALOGEX 0, 0, 320, 200
