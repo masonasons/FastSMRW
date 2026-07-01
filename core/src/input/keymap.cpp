@@ -215,6 +215,9 @@ const std::vector<ActionDef>& action_catalog() {
         {"speak_item", "Speak current item", "alt+win+space"},
         {"UndoNavigation", "Undo navigation (go back)", "alt+win+z"},
         {"refresh", "Refresh timeline", "control+alt+win+u"},
+        {"Find", "Find in timeline", ""},   // unbound by default (in-app Ctrl+F)
+        {"FindNext", "Find next", ""},      // unbound by default (in-app F3)
+        {"FindPrev", "Find previous", ""},  // unbound by default (in-app Shift+F3)
         // --- post actions ---
         {"Reply", "Reply", "control+win+r"},
         {"Quote", "Quote post", "alt+win+q"},

@@ -101,7 +101,7 @@ BEGIN
                -1, 10, 72, 220, 18
 END
 
-IDD_SET_SPEECH DIALOGEX 0, 0, 240, 180
+IDD_SET_SPEECH DIALOGEX 0, 0, 240, 210
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Speech"
 FONT 9, "Segoe UI"
@@ -111,6 +111,18 @@ BEGIN
     PUSHBUTTON "Configure &Posts...", IDC_SET_SPEECH_POSTS, 10, 36, 140, 16
     PUSHBUTTON "Configure &Users...", IDC_SET_SPEECH_USERS, 10, 58, 140, 16
     PUSHBUTTON "Configure &Notifications...", IDC_SET_SPEECH_NOTIFS, 10, 80, 140, 16
+    LTEXT      "Content &warnings:", -1, 10, 106, 96, 9
+    COMBOBOX   IDC_SET_CW_MODE, 110, 104, 120, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "Remove emoji from p&osts:", -1, 10, 126, 96, 9
+    COMBOBOX   IDC_SET_POST_EMOJI, 110, 124, 120, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "Remove emoji from &names:", -1, 10, 146, 96, 9
+    COMBOBOX   IDC_SET_NAME_EMOJI, 110, 144, 120, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "&Max usernames in a post (0 = all):", -1, 10, 166, 130, 9
+    EDITTEXT   IDC_SET_MAX_MENTIONS, 144, 164, 40, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL    "", IDC_SET_MAX_MENTIONS_SPIN, "msctls_updown32",
+               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
+    LTEXT      "Collapses a long leading @mention list (e.g. big reply chains). Custom = Mastodon :shortcode: emoji.",
+               -1, 10, 184, 224, 18
 END
 
 IDD_SPEECH_DETAIL DIALOGEX 0, 0, 264, 200
@@ -217,6 +229,17 @@ BEGIN
     EDITTEXT   IDC_KMN_NAME, 10, 24, 180, 12, ES_AUTOHSCROLL | WS_TABSTOP
     DEFPUSHBUTTON "OK", IDOK, 84, 58, 50, 14
     PUSHBUTTON "Cancel", IDCANCEL, 140, 58, 50, 14
+END
+
+IDD_FIND DIALOGEX 0, 0, 220, 78
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Find in timeline"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Find &text (author or post):", -1, 10, 10, 200, 9
+    EDITTEXT   IDC_FIND_TEXT, 10, 22, 200, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "&Find Next", IDOK, 100, 52, 55, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 160, 52, 50, 14
 END
 
 IDD_POST_INFO DIALOGEX 0, 0, 320, 200

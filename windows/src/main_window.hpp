@@ -85,6 +85,10 @@ private:
     void do_new_timeline();
     void do_add_account();
     void do_settings();
+    void do_find();      // Ctrl+F: prompt for text, then find in the current timeline
+    void do_find_next(); // F3 / invisible action: next match of the last query
+    void do_find_prev(); // Shift+F3 / invisible action: previous match of the last query
+    void find_from(int start_row, int dir); // search rows from start_row (dir +1/-1), wrapping
     void about();
 
     // Events.
@@ -131,6 +135,7 @@ private:
 
     std::vector<Timeline> timelines_;
     std::string current_account_; // which account timelines_ belongs to (per event)
+    std::wstring find_query_;      // last Find text (for Find Next)
     int current_ = 0;
     nlohmann::json settings_ = nlohmann::json::object(); // cached settings object
     std::vector<std::string> soundpacks_;

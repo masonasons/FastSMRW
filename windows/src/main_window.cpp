@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 
+#include <cwctype>
+
 #include <commctrl.h>
 #include <shellapi.h>
 
@@ -54,6 +56,9 @@ enum {
     ID_NEXT_ACCOUNT,
     ID_ADD_ACCOUNT,
     ID_KEYMAP_MANAGER,
+    ID_FIND,
+    ID_FIND_NEXT,
+    ID_FIND_PREV,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -154,6 +159,10 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tBackspace");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(timeline, MF_STRING, ID_FIND, L"&Find…\tCtrl+F");
+    AppendMenuW(timeline, MF_STRING, ID_FIND_NEXT, L"Find &Next\tF3");
+    AppendMenuW(timeline, MF_STRING, ID_FIND_PREV, L"Find &Previous\tShift+F3");
+    AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"Clea&r Timeline\tCtrl+Delete");
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_ALL, L"Clear &All Timelines\tCtrl+Shift+Delete");
     AppendMenuW(timeline, MF_STRING, ID_GO_BACK, L"Go &Back\tCtrl+Z");
@@ -223,6 +232,9 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, VK_DELETE, ID_CLEAR_TIMELINE},          // clear focused timeline
         {FVIRTKEY | FCONTROL | FSHIFT, VK_DELETE, ID_CLEAR_ALL}, // clear every timeline
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
+        {FVIRTKEY | FCONTROL, 'F', ID_FIND},         // Ctrl+F: find in timeline
+        {FVIRTKEY, VK_F3, ID_FIND_NEXT},             // F3: find next
+        {FVIRTKEY | FSHIFT, VK_F3, ID_FIND_PREV},    // Shift+F3: find previous
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
         {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
         {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_DOWN}, // jump down by movement unit
@@ -893,6 +905,92 @@ void MainWindow::do_settings() {
         dispatch_cmd({{"cmd", "update_settings"}, {"settings", store::settings_to_json(*result)}});
 }
 
+namespace {
+struct FindCtx {
+    std::wstring text;
+    bool ok = false;
+};
+INT_PTR CALLBACK find_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_INITDIALOG) {
+        SetWindowLongPtrW(dlg, DWLP_USER, static_cast<LONG_PTR>(lp));
+        auto* ctx = reinterpret_cast<FindCtx*>(lp);
+        SetDlgItemTextW(dlg, IDC_FIND_TEXT, ctx->text.c_str());
+        SendDlgItemMessageW(dlg, IDC_FIND_TEXT, EM_SETSEL, 0, -1); // select all to retype
+        return TRUE;
+    }
+    if (msg == WM_COMMAND) {
+        if (LOWORD(wp) == IDOK) {
+            auto* ctx = reinterpret_cast<FindCtx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            wchar_t buf[256];
+            GetDlgItemTextW(dlg, IDC_FIND_TEXT, buf, 256);
+            ctx->text = buf;
+            ctx->ok = true;
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        if (LOWORD(wp) == IDCANCEL) {
+            EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+std::wstring lowered(std::wstring s) {
+    for (wchar_t& c : s)
+        c = static_cast<wchar_t>(std::towlower(c));
+    return s;
+}
+} // namespace
+
+void MainWindow::do_find() {
+    FindCtx ctx;
+    ctx.text = find_query_;
+    if (DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_FIND), hwnd_, &find_proc,
+                        reinterpret_cast<LPARAM>(&ctx)) != IDOK ||
+        !ctx.ok || ctx.text.empty())
+        return;
+    find_query_ = ctx.text;
+    const int row = selected_row();
+    find_from(row < 0 ? 0 : row, 1); // from the current row (inclusive), forward
+}
+
+void MainWindow::do_find_next() {
+    if (find_query_.empty()) {
+        do_find();
+        return;
+    }
+    find_from(selected_row() + 1, 1); // from the row after the current
+}
+
+void MainWindow::do_find_prev() {
+    if (find_query_.empty()) {
+        do_find();
+        return;
+    }
+    find_from(selected_row() - 1, -1); // from the row before the current, backward
+}
+
+void MainWindow::find_from(int start_row, int dir) {
+    Timeline* tc = current();
+    if (!tc || tc->rows.empty() || find_query_.empty())
+        return;
+    const int n = static_cast<int>(tc->rows.size());
+    const std::wstring q = lowered(find_query_);
+    for (int off = 0; off < n; ++off) { // scan in `dir`, wrapping around once
+        const int i = ((start_row + dir * off) % n + n) % n;
+        if (lowered(tc->rows[static_cast<size_t>(i)].text).find(q) != std::wstring::npos) {
+            // Select normally (no updating_selection_ guard) so the move is noted
+            // to the core and the screen reader reads the matched post.
+            const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
+            ListView_SetItemState(timeline_view_, i, want, want);
+            ListView_EnsureVisible(timeline_view_, i, FALSE);
+            SetFocus(timeline_view_);
+            return;
+        }
+    }
+    announce("Not found");
+}
+
 void MainWindow::about() {
     std::wstring text = L"FastSMRW\nVersion ";
     text += to_wide(fastsm::version());
@@ -914,6 +1012,15 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_KEYMAP_MANAGER:
         open_keymap_manager(hwnd_);
+        break;
+    case ID_FIND:
+        do_find();
+        break;
+    case ID_FIND_NEXT:
+        do_find_next();
+        break;
+    case ID_FIND_PREV:
+        do_find_prev();
         break;
     case ID_QUIT:
         DestroyWindow(hwnd_);
@@ -1232,6 +1339,12 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
     } else if (a == "StopAudio") {
         if (speaker_)
             speaker_->stop();
+    } else if (a == "Find") {
+        do_find();
+    } else if (a == "FindNext") {
+        do_find_next();
+    } else if (a == "FindPrev") {
+        do_find_prev();
     }
 }
 

@@ -66,6 +66,11 @@
 #define IDC_SET_SPEECH_POSTS  334
 #define IDC_SET_SPEECH_USERS  335
 #define IDC_SET_SPEECH_NOTIFS 336
+#define IDC_SET_CW_MODE       337
+#define IDC_SET_POST_EMOJI    338
+#define IDC_SET_NAME_EMOJI    339
+#define IDC_SET_MAX_MENTIONS  344
+#define IDC_SET_MAX_MENTIONS_SPIN 345
 
 #define IDD_SPEECH_DETAIL     380
 #define IDC_SPEECH_DETAIL_LIST 381
@@ -104,6 +109,10 @@
 #define IDC_KMB_CURRENT     426
 #define IDD_KM_NEWNAME      430
 #define IDC_KMN_NAME        431
+
+// Find-in-timeline dialog.
+#define IDD_FIND            440
+#define IDC_FIND_TEXT       441
 
 // Post Info dialog.
 #define IDD_POST_INFO         360
