@@ -152,7 +152,7 @@ KeyBindings layer_keymap() {
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
         {"t", "open_thread"},        {"u", "UserTimeline"},
-        {"backspace", "CloseTimeline"},
+        {"back", "CloseTimeline"}, // canonical name for Backspace (matches vk_to_base)
     };
 }
 
