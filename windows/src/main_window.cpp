@@ -205,6 +205,7 @@ bool MainWindow::create() {
     if (!hwnd_)
         return false;
     hotkey_driver_.set_window(hwnd_);
+    keyhook_driver_.set_window(hwnd_);
 
     std::vector<ACCEL> accels = {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
@@ -299,6 +300,13 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         std::unique_ptr<std::string> s(reinterpret_cast<std::string*>(lp));
         if (s)
             on_event(*s);
+        return 0;
+    }
+
+    case WM_APP_INV_ACTION: { // keyhook fired a bound action
+        std::unique_ptr<std::string> action(reinterpret_cast<std::string*>(lp));
+        if (action)
+            dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
         return 0;
     }
 
@@ -1084,10 +1092,12 @@ void MainWindow::ev_settings(const json& e) {
 
 void MainWindow::apply_invisible() {
     invisible_mode_ = settings_.value("invisible_mode", std::string("off"));
-    if (invisible_mode_ == "hotkey")
-        dispatch_cmd({{"cmd", "get_keymap"}}); // ev_keymap will register the hotkeys
-    else
+    if (invisible_mode_ == "hotkey" || invisible_mode_ == "keyhook") {
+        dispatch_cmd({{"cmd", "get_keymap"}}); // ev_keymap installs the active driver
+    } else {
         hotkey_driver_.clear();
+        keyhook_driver_.disable();
+    }
 }
 
 void MainWindow::ev_keymap(const json& e) {
@@ -1105,10 +1115,18 @@ void MainWindow::ev_keymap(const json& e) {
     const json bindings = e.value("bindings", json::object());
     for (const auto& [key, action] : bindings.items())
         invisible_bindings_[key] = action.get<std::string>();
-    if (invisible_mode_ == "hotkey")
+    // Install whichever driver the active mode calls for; keep the other idle.
+    if (invisible_mode_ == "hotkey") {
+        keyhook_driver_.disable();
         hotkey_driver_.set_bindings(invisible_bindings_);
-    else
+    } else if (invisible_mode_ == "keyhook") {
         hotkey_driver_.clear();
+        keyhook_driver_.set_bindings(invisible_bindings_);
+        keyhook_driver_.enable();
+    } else {
+        hotkey_driver_.clear();
+        keyhook_driver_.disable();
+    }
 }
 
 void MainWindow::ev_action_catalog(const json& e) {

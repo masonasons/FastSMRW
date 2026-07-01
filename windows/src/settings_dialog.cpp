@@ -400,8 +400,9 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
 }
 
 // The invisible-interface mode combo. Index order parallels these ids.
-const char* const kInvisibleModes[] = {"off", "hotkey"};
-const wchar_t* const kInvisibleModeLabels[] = {L"Off", L"Global hotkeys"};
+const char* const kInvisibleModes[] = {"off", "hotkey", "keyhook"};
+const wchar_t* const kInvisibleModeLabels[] = {L"Off", L"Global hotkeys",
+                                               L"Low-level keyhook (captures reserved keys)"};
 
 INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {

@@ -13,6 +13,7 @@
 
 #include "compose_dialog.hpp"
 #include "invisible_hotkeys.hpp"
+#include "invisible_keyhook.hpp"
 #include "keymap_manager_dialog.hpp"
 
 namespace fastsmui {
@@ -118,7 +119,8 @@ private:
 
     // Invisible interface (global hotkeys). Bindings come from the core's keymap
     // event; the driver registers them and maps WM_HOTKEY ids back to actions.
-    HotkeyDriver hotkey_driver_;
+    HotkeyDriver hotkey_driver_;   // mode "hotkey" (RegisterHotKey)
+    KeyhookDriver keyhook_driver_; // mode "keyhook" (WH_KEYBOARD_LL)
     std::string invisible_mode_ = "off";
     std::map<std::string, std::string> invisible_bindings_; // key -> action
     std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager
