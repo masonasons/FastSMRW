@@ -34,9 +34,10 @@ public:
     // in the layer. Called on the UI thread (same as the hook proc).
     void exit_layer() { in_layer_ = false; }
 
-    // Sentinel "actions" posted via WM_APP_INV_ACTION when the layer opens/closes.
+    // Sentinel "actions" posted via WM_APP_INV_ACTION for layer open/close/help.
     static constexpr const char* kLayerEnter = "__layer_enter__";
     static constexpr const char* kLayerExit = "__layer_exit__";
+    static constexpr const char* kLayerHelp = "__layer_help__";
 
 private:
     enum class Mode { Hotkeys, Layer };

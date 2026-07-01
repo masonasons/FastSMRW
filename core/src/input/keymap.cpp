@@ -156,6 +156,18 @@ KeyBindings layer_keymap() {
     };
 }
 
+std::string layer_enter_message() { return "FastSM layer. Press slash for help."; }
+
+std::string layer_help_text() {
+    // Kept in sync with layer_keymap() above.
+    return "FastSM layer. Up and down arrows move between posts. Left and right switch "
+           "timelines. Home and end jump to the top or bottom. Page up and page down jump "
+           "twenty posts. Space speaks the current post. R replies, Q quotes, E edits, N "
+           "starts a new post. B boosts, F favorites. T opens the thread, U opens the user's "
+           "timeline. Enter shows post info, backspace closes the timeline. Slash repeats this "
+           "help. Press escape, or the activation key, to leave the layer.";
+}
+
 KeyBindings default_bindings() {
     KeyBindings out;
     for (const auto& a : action_catalog()) {

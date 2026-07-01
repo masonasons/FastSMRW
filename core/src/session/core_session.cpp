@@ -1176,7 +1176,9 @@ void CoreSession::cmd_get_layer_keymap() {
         bindings[key] = action;
     emit({{"event", "layer_keymap"},
           {"activation", settings_.invisible_layer_key},
-          {"bindings", bindings}});
+          {"bindings", bindings},
+          {"enter_message", input::layer_enter_message()},
+          {"help_message", input::layer_help_text()}});
 }
 
 void CoreSession::cmd_perform_action(const json& cmd) {

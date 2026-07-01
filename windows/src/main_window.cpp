@@ -309,7 +309,11 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         if (*action == KeyhookDriver::kLayerEnter) {
             dispatch_cmd({{"cmd", "play_earcon"}, {"name", "navigate"}});
-            announce("FastSM layer");
+            announce(layer_enter_message_);
+            return 0;
+        }
+        if (*action == KeyhookDriver::kLayerHelp) {
+            announce(layer_help_message_);
             return 0;
         }
         if (*action == KeyhookDriver::kLayerExit) {
@@ -1169,6 +1173,8 @@ void MainWindow::ev_layer_keymap(const json& e) {
     const json bindings = e.value("bindings", json::object());
     for (const auto& [key, action] : bindings.items())
         layer[key] = action.get<std::string>();
+    layer_enter_message_ = e.value("enter_message", std::string("FastSM layer"));
+    layer_help_message_ = e.value("help_message", std::string{});
     hotkey_driver_.clear();
     keyhook_driver_.set_layer(e.value("activation", std::string("control+win+space")), layer);
     keyhook_driver_.enable();

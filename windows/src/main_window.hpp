@@ -126,6 +126,8 @@ private:
     std::map<std::string, std::string> invisible_bindings_; // key -> action
     std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager
     KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open
+    std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
+    std::string layer_help_message_;                        // spoken on "/" in the layer
 
     std::vector<Timeline> timelines_;
     int current_ = 0;

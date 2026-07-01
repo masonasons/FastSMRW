@@ -131,6 +131,10 @@ LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
             post(kLayerExit);
             return 1;
         }
+        if (base == "/") { // speak the keystroke help
+            post(kLayerHelp);
+            return 1;
+        }
         auto it = g_active->layer_bindings_.find(base);
         if (it != g_active->layer_bindings_.end()) {
             post(it->second.c_str());

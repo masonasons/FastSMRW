@@ -57,6 +57,9 @@ KeyBindings default_bindings();
 // The Layer-mode keymap: bare keys (no modifiers, e.g. "up", "r") -> action,
 // used while the user is inside the "FastSM layer". Fixed (not user-editable).
 KeyBindings layer_keymap();
+// Spoken on entering the layer, and the full keystroke help (spoken on "/").
+std::string layer_enter_message();
+std::string layer_help_text();
 // Default combo that toggles the FastSM layer on/off.
 constexpr const char* kDefaultLayerKey = "control+win+space";
 
