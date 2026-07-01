@@ -258,6 +258,7 @@ void CoreSession::cmd_add_account(const json& cmd) {
                     save_config();
                     emit_accounts();
                     emit_timelines();
+                    emit_all_timelines();
                 }
                 emit({{"event", "auth_result"}, {"ok", r.ok}, {"error", r.error}});
             });
@@ -282,6 +283,7 @@ void CoreSession::cmd_add_account(const json& cmd) {
                     save_config();
                     emit_accounts();
                     emit_timelines();
+                    emit_all_timelines();
                 }
                 emit({{"event", "auth_result"}, {"ok", r.ok}, {"error", r.error}});
             });
@@ -309,6 +311,7 @@ void CoreSession::cmd_remove_account(const json& cmd) {
     update_streaming(); // start/stop streams for the new account set
     emit_accounts();
     emit_timelines();
+    emit_all_timelines();
 }
 
 void CoreSession::cmd_select_account(const json& cmd) {
@@ -326,7 +329,8 @@ void CoreSession::cmd_select_account(const json& cmd) {
     sound_.play(sound::Earcon::Navigate);
     emit_accounts();
     emit_timelines();
-    save_config(); // remember which account is selected across restarts
+    emit_all_timelines(); // push the warm rows + remembered position for the new account
+    save_config();        // remember which account is selected across restarts
 }
 
 // --- settings ---
@@ -1566,7 +1570,10 @@ void CoreSession::emit_timelines() {
                        {"dismissable", s.is_dismissable()},
                        {"user_list", s.is_user_list()}});
     }
-    emit({{"event", "timelines_changed"}, {"timelines", tls}, {"current", current_}});
+    emit({{"event", "timelines_changed"},
+          {"timelines", tls},
+          {"current", current_},
+          {"account", accounts_.selected_key()}}); // so the UI won't carry a position across accounts
 }
 
 void CoreSession::emit_timeline(int index) {

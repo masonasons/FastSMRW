@@ -130,6 +130,7 @@ private:
     std::string layer_help_message_;                        // spoken on "/" in the layer
 
     std::vector<Timeline> timelines_;
+    std::string current_account_; // which account timelines_ belongs to (per event)
     int current_ = 0;
     nlohmann::json settings_ = nlohmann::json::object(); // cached settings object
     std::vector<std::string> soundpacks_;

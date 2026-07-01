@@ -1062,6 +1062,12 @@ void MainWindow::on_event(const std::string& js) {
 
 void MainWindow::ev_timelines_changed(const json& e) {
     const size_t prev_count = timelines_.size();
+    // Timeline kinds ("home", ...) repeat across accounts, so only carry over
+    // rows/position within the SAME account (a spawn/close) -- never across an
+    // account switch, or one account's position would leak onto another's.
+    const std::string account = e.value("account", std::string{});
+    const bool same_account = account == current_account_;
+    current_account_ = account;
     std::vector<Timeline> next;
     for (const auto& t : e.value("timelines", json::array())) {
         Timeline tl;
@@ -1069,12 +1075,13 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.kind = t.value("kind", std::string{});
         tl.dismissable = t.value("dismissable", false);
         tl.user_list = t.value("user_list", false);
-        for (const auto& old : timelines_) // carry rows/position for the same timeline
-            if (old.kind == tl.kind) {
-                tl.rows = old.rows;
-                tl.selected_id = old.selected_id;
-                break;
-            }
+        if (same_account)
+            for (const auto& old : timelines_) // carry rows/position for the same timeline
+                if (old.kind == tl.kind) {
+                    tl.rows = old.rows;
+                    tl.selected_id = old.selected_id;
+                    break;
+                }
         next.push_back(std::move(tl));
     }
     timelines_ = std::move(next);
