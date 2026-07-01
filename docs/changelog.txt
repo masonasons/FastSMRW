@@ -1,8 +1,17 @@
 FastSMRW changelog
 ==================
 
-0.0.3 (in development)
+0.0.4 (in development)
 ----------------------
+
+- Press Ctrl+W to hide the FastSMRW window (bring it back with the invisible interface's show/hide key).
+- In Layer mode, press W to show or hide the window; the layer's help (slash) now lists it.
+- New assignable "Open the layer" shortcut (Keyboard Manager): bind a key to call up the invisible layer from Hotkey or Keyhook mode, the same way Ctrl+Win+Space opens it in Layer mode (unbound by default).
+- Mastodon: the compose character limit now matches your instance's real limit instead of always assuming 500.
+
+
+0.0.3
+-----
 
 - Auto-update: Application > Check for Updates downloads and installs the newest build and restarts; a new Settings > Updates page lets you pick the Stable branch (version updates only) or Latest (every new build), and whether to check automatically at startup.
 

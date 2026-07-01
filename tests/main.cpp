@@ -62,6 +62,7 @@ void test_capi_session_events();
 
 // From test_thread.cpp
 void test_mastodon_thread_fetch();
+void test_mastodon_instance_max_chars();
 
 // From test_keymap.cpp
 void test_keymap_normalize();
@@ -127,6 +128,7 @@ int main() {
     test_sse_multiline_crlf_comments();
     test_capi_session_events();
     test_mastodon_thread_fetch();
+    test_mastodon_instance_max_chars();
     test_keymap_normalize();
     test_keymap_default_and_catalog();
     test_keymap_parse_and_serialize();

@@ -27,6 +27,39 @@ struct FakeThreadHttp : net::IHttpClient {
 };
 } // namespace
 
+namespace {
+// Serves /api/v2/instance with a configuration block reporting a 1000-char limit.
+struct FakeInstanceHttp : net::IHttpClient {
+    bool saw_v2 = false;
+    net::HttpResponse send(const net::HttpRequest& req) override {
+        net::HttpResponse res;
+        if (req.url.find("/api/v2/instance") != std::string::npos) {
+            saw_v2 = true;
+            res.status = 200;
+            res.body = R"({"configuration":{"statuses":{"max_characters":1000}}})";
+        } else {
+            res.status = 404;
+        }
+        return res;
+    }
+};
+} // namespace
+
+void test_mastodon_instance_max_chars() {
+    FakeInstanceHttp http;
+    MastodonCredentials cred;
+    cred.instance_url = "https://example.social";
+    cred.access_token = "tok";
+    User me;
+    me.id = "me";
+    MastodonAccount account(cred, me, &http);
+
+    CHECK_EQ(account.max_chars(), 500); // default before loading
+    account.load_configuration();
+    CHECK(http.saw_v2);
+    CHECK_EQ(account.max_chars(), 1000); // now the instance's real limit
+}
+
 void test_mastodon_thread_fetch() {
     FakeThreadHttp http;
     MastodonCredentials cred;

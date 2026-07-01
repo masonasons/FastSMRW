@@ -61,6 +61,7 @@ enum {
     ID_FIND_NEXT,
     ID_FIND_PREV,
     ID_CHECK_UPDATES,
+    ID_HIDE_WINDOW,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -141,6 +142,7 @@ HMENU build_menu() {
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(app, MF_STRING, ID_HIDE_WINDOW, L"&Hide Window\tCtrl+W");
     AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
 
@@ -225,6 +227,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
+        {FVIRTKEY | FCONTROL, 'W', ID_HIDE_WINDOW}, // Ctrl+W: hide the window
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
         {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
         {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
@@ -333,6 +336,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
         if (*action == KeyhookDriver::kLayerExit) {
             dispatch_cmd({{"cmd", "play_earcon"}, {"name", "close"}});
+            if (overlay_layer_) { // an on-demand overlay closed: restore the base driver
+                overlay_layer_ = false;
+                install_active_driver();
+            }
             return 0;
         }
         dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
@@ -680,7 +687,7 @@ void MainWindow::do_post_info() {
 }
 
 void MainWindow::ev_post_info(const json& e) {
-    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
+    leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     const std::string id = e.value("id", std::string{});
     const std::wstring text = to_wide(e.value("text", std::string{}));
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
@@ -716,7 +723,7 @@ void MainWindow::ev_post_info(const json& e) {
 }
 
 void MainWindow::ev_user_profile(const json& e) {
-    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
+    leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     const std::wstring text = to_wide(e.value("text", std::string{}));
     const std::string account_id = e.value("account_id", std::string{});
     const std::string acct = e.value("acct", std::string{});
@@ -775,7 +782,7 @@ void MainWindow::ev_user_profile(const json& e) {
 void MainWindow::ev_user_picker(const json& e) {
     if (!e.contains("users") || !e["users"].is_array() || e["users"].empty())
         return;
-    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
+    leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     const std::string purpose = e.value("purpose", std::string{});
     const std::string row_id = e.value("id", std::string{});
     HMENU menu = CreatePopupMenu();
@@ -1028,6 +1035,12 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_FIND_PREV:
         do_find_prev();
+        break;
+    case ID_HIDE_WINDOW:
+        // Hide to the background; global hotkeys / the layer keep working, and
+        // Ctrl+Win+W (or the layer's W) brings it back. Remembered across restarts.
+        ShowWindow(hwnd_, SW_HIDE);
+        dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", false}});
         break;
     case ID_QUIT:
         DestroyWindow(hwnd_);
@@ -1346,8 +1359,10 @@ void MainWindow::ev_update_ready(const json& e) {
 
 void MainWindow::apply_invisible() {
     invisible_mode_ = settings_.value("invisible_mode", std::string("off"));
+    overlay_layer_ = false;
     if (invisible_mode_ == "hotkey" || invisible_mode_ == "keyhook") {
         dispatch_cmd({{"cmd", "get_keymap"}}); // ev_keymap installs the active driver
+        dispatch_cmd({{"cmd", "get_layer_keymap"}}); // cache it for on-demand EnterLayer
     } else if (invisible_mode_ == "layer") {
         dispatch_cmd({{"cmd", "get_layer_keymap"}}); // ev_layer_keymap installs the layer hook
     } else {
@@ -1371,7 +1386,11 @@ void MainWindow::ev_keymap(const json& e) {
     const json bindings = e.value("bindings", json::object());
     for (const auto& [key, action] : bindings.items())
         invisible_bindings_[key] = action.get<std::string>();
-    // Install whichever driver the active mode calls for; keep the other idle.
+    install_active_driver();
+}
+
+// Install whichever driver the active mode calls for; keep the other idle.
+void MainWindow::install_active_driver() {
     if (invisible_mode_ == "hotkey") {
         keyhook_driver_.disable();
         hotkey_driver_.set_bindings(invisible_bindings_);
@@ -1385,18 +1404,29 @@ void MainWindow::ev_keymap(const json& e) {
     }
 }
 
+void MainWindow::leave_layer() {
+    keyhook_driver_.exit_layer();
+    if (overlay_layer_) { // the layer was an on-demand overlay: restore the base driver
+        overlay_layer_ = false;
+        install_active_driver();
+    }
+}
+
 void MainWindow::ev_layer_keymap(const json& e) {
-    if (invisible_mode_ != "layer")
-        return;
-    std::map<std::string, std::string> layer;
+    // Cache the layer map in every mode: hotkey/keyhook mode needs it ready so the
+    // EnterLayer action can call the layer up on demand.
+    layer_bindings_.clear();
     const json bindings = e.value("bindings", json::object());
     for (const auto& [key, action] : bindings.items())
-        layer[key] = action.get<std::string>();
+        layer_bindings_[key] = action.get<std::string>();
+    layer_activation_ = e.value("activation", std::string("control+win+space"));
     layer_enter_message_ = e.value("enter_message", std::string("FastSM layer"));
     layer_help_message_ = e.value("help_message", std::string{});
-    hotkey_driver_.clear();
-    keyhook_driver_.set_layer(e.value("activation", std::string("control+win+space")), layer);
-    keyhook_driver_.enable();
+    if (invisible_mode_ == "layer") {
+        hotkey_driver_.clear();
+        keyhook_driver_.set_layer(layer_activation_, layer_bindings_);
+        keyhook_driver_.enable();
+    }
 }
 
 void MainWindow::ev_action_catalog(const json& e) {
@@ -1423,6 +1453,19 @@ void MainWindow::open_keymap_manager(HWND parent) {
 
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
+    if (a == "EnterLayer") {
+        // Call the layer up on demand from hotkey/keyhook mode. No-op if the layer
+        // is already the active mode, we're already in an overlay, or the layer map
+        // hasn't loaded yet.
+        if (invisible_mode_ == "layer" || overlay_layer_ || layer_bindings_.empty())
+            return;
+        overlay_layer_ = true;
+        hotkey_driver_.clear(); // avoid modified-key collisions while the layer is up
+        keyhook_driver_.open_layer(layer_activation_, layer_bindings_);
+        dispatch_cmd({{"cmd", "play_earcon"}, {"name", "navigate"}});
+        announce(layer_enter_message_);
+        return;
+    }
     if (a == "ToggleWindow") {
         // Pure visibility toggle, matching the Python client: shown -> hide,
         // hidden -> show + raise. Global hotkeys keep working while hidden. The
@@ -1454,7 +1497,7 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
 }
 
 void MainWindow::ev_compose_context(const json& e) {
-    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
+    leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     const std::string keep_id = selected_id();
     ComposeRequest req;
     const std::string mode = e.value("mode", std::string("new"));

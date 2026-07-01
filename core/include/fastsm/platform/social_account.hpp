@@ -109,6 +109,11 @@ public:
     // Timelines the user can open via the New Timeline dialog (Ctrl+T).
     virtual std::vector<TimelineSource> spawnable_timelines() const { return {}; }
 
+    // Refresh server-derived configuration (e.g. the instance character limit).
+    // Runs synchronously on the worker thread; default is a no-op for platforms
+    // with a fixed limit (Bluesky).
+    virtual void load_configuration() {}
+
     // Largest page the platform's API accepts per call (Mastodon 40, Bluesky 100).
     // The controller uses this so each fetch pulls as much as the server allows.
     virtual int max_page_size() const { return 40; }

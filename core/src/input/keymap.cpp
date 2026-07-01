@@ -152,6 +152,7 @@ KeyBindings layer_keymap() {
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
         {"t", "open_thread"},        {"u", "UserTimeline"},
+        {"w", "ToggleWindow"},
         {"back", "CloseTimeline"}, // canonical name for Backspace (matches vk_to_base)
     };
 }
@@ -164,8 +165,9 @@ std::string layer_help_text() {
            "timelines. Home and end jump to the top or bottom. Page up and page down jump "
            "twenty posts. Space speaks the current post. R replies, Q quotes, E edits, N "
            "starts a new post. B boosts, F favorites. T opens the thread, U opens the user's "
-           "timeline. Enter shows post info, backspace closes the timeline. Slash repeats this "
-           "help. Press escape, or the activation key, to leave the layer.";
+           "timeline. W shows or hides the window. Enter shows post info, backspace closes the "
+           "timeline. Slash repeats this help. Press escape, or the activation key, to leave the "
+           "layer.";
 }
 
 KeyBindings default_bindings() {
@@ -237,6 +239,7 @@ const std::vector<ActionDef>& action_catalog() {
         // --- timeline / app ---
         {"CloseTimeline", "Close timeline", "alt+win+'"},
         {"ToggleWindow", "Show / hide window", "control+win+w"},
+        {"EnterLayer", "Open the layer", ""}, // unbound: call up the layer from hotkey/keyhook mode
         {"Options", "Settings", "alt+win+o"},
         {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
         {"StopAudio", "Stop audio / speech", "control+win+shift+return"},

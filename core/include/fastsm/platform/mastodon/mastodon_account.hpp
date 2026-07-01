@@ -22,6 +22,7 @@ public:
     PlatformFeatures features() const override;
     std::vector<TimelineSource> default_timelines() const override;
     std::vector<TimelineSource> spawnable_timelines() const override;
+    void load_configuration() override;
 
     TimelinePage items(const TimelineSource& source, int limit,
                        const PageCursor& cursor) override;

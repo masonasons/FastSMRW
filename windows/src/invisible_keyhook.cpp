@@ -168,6 +168,15 @@ void KeyhookDriver::set_layer(const std::string& activation_key,
     in_layer_ = false;
 }
 
+void KeyhookDriver::open_layer(const std::string& activation_key,
+                               const std::map<std::string, std::string>& layer_bindings) {
+    mode_ = Mode::Layer;
+    activation_key_ = activation_key;
+    layer_bindings_ = layer_bindings;
+    in_layer_ = true; // already open: the next keystroke drives the timeline
+    enable();
+}
+
 void KeyhookDriver::enable() {
     if (hook_)
         return;

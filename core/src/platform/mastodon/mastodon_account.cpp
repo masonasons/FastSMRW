@@ -70,6 +70,27 @@ std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
             TimelineSource::favorites()};
 }
 
+void MastodonAccount::load_configuration() {
+    // Pull the instance's real maximum post length. Mastodon 4 exposes it at
+    // /api/v2/instance (configuration.statuses.max_characters); older servers at
+    // /api/v1/instance. Leave the default (500) if neither reports it.
+    for (const char* path : {"/api/v2/instance", "/api/v1/instance"}) {
+        std::string body;
+        long status = 0;
+        if (!request("GET", credentials_.instance_url + path, "", "", body, status))
+            continue;
+        const json j = json::parse(body, nullptr, false);
+        if (j.is_discarded())
+            continue;
+        const int max =
+            j.value("configuration", json::object()).value("statuses", json::object()).value("max_characters", 0);
+        if (max > 0) {
+            max_chars_ = max;
+            return;
+        }
+    }
+}
+
 bool MastodonAccount::request(const std::string& method, const std::string& url,
                               const std::string& body, const std::string& content_type,
                               std::string& out_body, long& out_status) {

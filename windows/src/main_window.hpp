@@ -110,6 +110,11 @@ private:
     // Apply the current invisible-interface mode (from settings_): (re)load the
     // keymap for hotkey mode, or tear the global hotkeys down when off.
     void apply_invisible();
+    // Install the driver for the current invisible mode from invisible_bindings_.
+    void install_active_driver();
+    // Leave the layer (e.g. a dialog opened); restores the base driver if the
+    // layer was called up on demand as an overlay from hotkey/keyhook mode.
+    void leave_layer();
     void open_keymap_manager(HWND parent);
 
     HINSTANCE inst_;
@@ -136,6 +141,9 @@ private:
     KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open
     std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
     std::string layer_help_message_;                        // spoken on "/" in the layer
+    std::map<std::string, std::string> layer_bindings_;     // cached bare-key layer map
+    std::string layer_activation_ = "control+win+space";    // cached layer toggle combo
+    bool overlay_layer_ = false; // the layer was called up on demand (EnterLayer)
 
     std::vector<Timeline> timelines_;
     std::string current_account_; // which account timelines_ belongs to (per event)

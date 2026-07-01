@@ -27,6 +27,11 @@ public:
     // activation combo exits. Enter/exit post the sentinel actions below.
     void set_layer(const std::string& activation_key,
                    const std::map<std::string, std::string>& layer_bindings);
+    // Enter the layer immediately (as if the activation key was just pressed),
+    // e.g. when a hotkey/keyhook-mode action calls the layer up on demand.
+    // Installs the hook in Layer mode with the layer already open.
+    void open_layer(const std::string& activation_key,
+                    const std::map<std::string, std::string>& layer_bindings);
     void enable();  // install the hook
     void disable(); // remove the hook
     bool active() const { return hook_ != nullptr; }

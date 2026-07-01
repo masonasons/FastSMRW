@@ -324,7 +324,9 @@ void CoreSession::cmd_add_account(const json& cmd) {
                     cred.mastodon = r.credentials;
                     auto account = std::make_unique<MastodonAccount>(r.credentials, r.me, http_.get());
                     const std::string key = account->account_key();
+                    SocialAccount* acct_ptr = account.get();
                     accounts_.add(std::move(account), cred);
+                    worker_.post([acct_ptr] { acct_ptr->load_configuration(); }); // real char limit
                     switch_account(key); // parks the old account, builds the new one
                     save_config();
                     emit_accounts();
@@ -1449,7 +1451,7 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_close_timeline();
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
     if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio" ||
-        a == "Find" || a == "FindNext" || a == "FindPrev") {
+        a == "Find" || a == "FindNext" || a == "FindPrev" || a == "EnterLayer") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }
@@ -1487,6 +1489,7 @@ void CoreSession::rebuild_timelines() {
     current_ = 0;
     const auto saved = load_open_timelines();
     for (SocialAccount* account : accounts_.accounts()) {
+        worker_.post([account] { account->load_configuration(); }); // refresh char limit
         const std::string key = account->account_key();
         std::vector<TimelineSource> sources;
         if (auto it = saved.find(key); it != saved.end() && !it->second.empty())
