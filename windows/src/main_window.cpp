@@ -305,8 +305,20 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_APP_INV_ACTION: { // keyhook fired a bound action
         std::unique_ptr<std::string> action(reinterpret_cast<std::string*>(lp));
-        if (action)
+        if (action) {
             dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
+            // The keyhook swallowed the combo's non-modifier key, so the foreground
+            // app saw Alt/Win pressed with no real key -> it drops into menu / Start
+            // mode ("stuck Alt"). Inject an inert Ctrl tap to mask that, matching
+            // AutoHotkey's menu-mask. Injected -> our hook ignores it.
+            INPUT mask[2] = {};
+            mask[0].type = INPUT_KEYBOARD;
+            mask[0].ki.wVk = VK_LCONTROL;
+            mask[1].type = INPUT_KEYBOARD;
+            mask[1].ki.wVk = VK_LCONTROL;
+            mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(2, mask, sizeof(INPUT));
+        }
         return 0;
     }
 
@@ -368,6 +380,11 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     case WM_DESTROY:
+        // Remove the global input hooks while we're still alive and pumping, so a
+        // modifier held during close (e.g. Alt+F4) isn't left stuck by the hook
+        // being torn down mid-keypress at process exit.
+        keyhook_driver_.disable();
+        hotkey_driver_.clear();
         PostQuitMessage(0);
         return 0;
     }
@@ -1241,12 +1258,8 @@ void MainWindow::ev_spawnable(const json& e) {
 }
 
 void MainWindow::announce(const std::string& message) {
-    std::wstring title = L"FastSMRW";
-    if (!message.empty()) {
-        title += L" — ";
-        title += to_wide(message);
-    }
-    SetWindowTextW(hwnd_, title.c_str());
+    // Speak via the screen reader / TTS only; the window title stays "FastSMRW"
+    // (it used to mirror the last announcement, which just cluttered the title bar).
     if (speaker_ && !message.empty())
         speaker_->speak(message, true);
 }
