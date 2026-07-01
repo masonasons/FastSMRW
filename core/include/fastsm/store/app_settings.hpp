@@ -24,6 +24,7 @@ struct AppSettings {
     // Invisible interface (Windows): control the client from any window.
     std::string invisible_mode = "off";       // "off" | "hotkey" | "keyhook"
     std::string invisible_keymap = "default";  // active keymap name
+    bool window_shown = true;                  // remembered across restarts (ToggleWindow)
     present::SpeechSettings speech = present::SpeechSettings::defaults();
 
     static constexpr int kFetchPagesMin = 1;

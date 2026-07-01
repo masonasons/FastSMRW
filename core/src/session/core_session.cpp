@@ -208,6 +208,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_delete_keymap(cmd);
     else if (c == "perform_action")
         cmd_perform_action(cmd);
+    else if (c == "set_window_shown")
+        cmd_set_window_shown(cmd);
 }
 
 // --- lifecycle / accounts ---
@@ -1125,6 +1127,11 @@ void CoreSession::invisible_goto_edge(bool top) {
     tc->note_selection(id);
     emit({{"event", "select_row"}, {"id", id}});
     invisible_speak_index(dest);
+}
+
+void CoreSession::cmd_set_window_shown(const json& cmd) {
+    settings_.window_shown = cmd.value("shown", true);
+    save_config(); // lightweight: just persist, no re-render
 }
 
 void CoreSession::cmd_perform_action(const json& cmd) {

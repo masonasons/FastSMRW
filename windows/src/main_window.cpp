@@ -1137,19 +1137,20 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
     if (a == "ToggleWindow") {
         // Pure visibility toggle, matching the Python client: shown -> hide,
-        // hidden -> show + raise. Global hotkeys keep working while hidden.
-        if (IsWindowVisible(hwnd_)) {
-            ShowWindow(hwnd_, SW_HIDE);
-        } else {
-            ShowWindow(hwnd_, SW_SHOW);
+        // hidden -> show + raise. Global hotkeys keep working while hidden. The
+        // shown/hidden state is remembered across restarts.
+        const bool show = !IsWindowVisible(hwnd_);
+        ShowWindow(hwnd_, show ? SW_SHOW : SW_HIDE);
+        if (show)
             SetForegroundWindow(hwnd_);
-        }
+        dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", show}});
     } else if (a == "Options") {
         do_settings();
     } else if (a == "KeymapManager") {
         if (!IsWindowVisible(hwnd_)) {
             ShowWindow(hwnd_, SW_SHOW);
             SetForegroundWindow(hwnd_);
+            dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", true}});
         }
         open_keymap_manager(hwnd_);
     } else if (a == "StopAudio") {

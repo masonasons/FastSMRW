@@ -7,6 +7,7 @@
 #include <commctrl.h>
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -27,6 +28,25 @@ std::filesystem::path exe_dir() {
     wchar_t buf[MAX_PATH];
     const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
     return std::filesystem::path(std::wstring(buf, n)).parent_path();
+}
+
+// Whether to show the window at startup: honor the remembered ToggleWindow state,
+// but never start hidden unless an invisible mode is on (else there'd be no way
+// to bring it back).
+bool should_show_at_startup() {
+    try {
+        std::ifstream in(fastsm::store::config_dir() / "config.json");
+        if (!in)
+            return true;
+        nlohmann::json cfg;
+        in >> cfg;
+        const nlohmann::json s = cfg.value("settings", nlohmann::json::object());
+        const bool shown = s.value("window_shown", true);
+        const bool invisible = s.value("invisible_mode", std::string("off")) != "off";
+        return shown || !invisible;
+    } catch (...) {
+        return true;
+    }
 }
 } // namespace
 
@@ -57,7 +77,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     window.set_core(core);
     fastsm_core_set_event_sink(core, &MainWindow::event_sink, &window);
 
-    ShowWindow(window.hwnd(), nCmdShow);
+    ShowWindow(window.hwnd(), should_show_at_startup() ? nCmdShow : SW_HIDE);
     UpdateWindow(window.hwnd());
 
     const std::string start = R"({"cmd":"start"})";
