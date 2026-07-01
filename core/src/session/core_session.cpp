@@ -254,9 +254,8 @@ void CoreSession::cmd_add_account(const json& cmd) {
                     auto account = std::make_unique<MastodonAccount>(r.credentials, r.me, http_.get());
                     const std::string key = account->account_key();
                     accounts_.add(std::move(account), cred);
-                    accounts_.select(key);
+                    switch_account(key); // parks the old account, builds the new one
                     save_config();
-                    rebuild_timelines();
                     emit_accounts();
                     emit_timelines();
                 }
@@ -279,9 +278,8 @@ void CoreSession::cmd_add_account(const json& cmd) {
                         std::make_unique<BlueskyAccount>(r.credentials, r.session, r.me, http_.get());
                     const std::string key = account->account_key();
                     accounts_.add(std::move(account), cred);
-                    accounts_.select(key);
+                    switch_account(key); // parks the old account, builds the new one
                     save_config();
-                    rebuild_timelines();
                     emit_accounts();
                     emit_timelines();
                 }
@@ -292,9 +290,23 @@ void CoreSession::cmd_add_account(const json& cmd) {
 }
 
 void CoreSession::cmd_remove_account(const json& cmd) {
-    accounts_.remove(cmd.value("key", std::string{}));
+    const std::string removed = cmd.value("key", std::string{});
+    const bool was_selected = removed == accounts_.selected_key();
+    accounts_.remove(removed); // may auto-select the first remaining account
     save_config();
-    rebuild_timelines();
+    parked_.erase(removed);
+    if (was_selected) {
+        timelines_.clear(); // drop the removed account's (displayed) timelines
+        current_ = 0;
+        const std::string now = accounts_.selected_key();
+        if (auto it = parked_.find(now); it != parked_.end()) {
+            timelines_ = std::move(it->second);
+            parked_.erase(it);
+        } else {
+            timelines_ = build_timelines_for(accounts_.selected());
+        }
+        update_streaming();
+    }
     emit_accounts();
     emit_timelines();
 }
@@ -310,9 +322,8 @@ void CoreSession::cmd_select_account(const json& cmd) {
     const int n = static_cast<int>(accts.size());
     const std::string dir = cmd.value("dir", std::string{});
     const int target = dir == "prev" ? (idx - 1 + n) % n : (idx + 1) % n;
-    accounts_.select(accts[static_cast<size_t>(target)]->account_key());
+    switch_account(accts[static_cast<size_t>(target)]->account_key()); // swap, don't rebuild
     sound_.play(sound::Earcon::Navigate);
-    rebuild_timelines();
     emit_accounts();
     emit_timelines();
     save_config(); // remember which account is selected across restarts
@@ -440,7 +451,7 @@ void CoreSession::spawn_source(const TimelineSource& src) {
             return;
         }
     }
-    timelines_.push_back(make_controller(src));
+    timelines_.push_back(make_controller(accounts_.selected(), src));
     current_ = static_cast<int>(timelines_.size()) - 1;
     TimelineController* p = timelines_.back().get();
     p->set_origin_key(origin);
@@ -1264,13 +1275,14 @@ void CoreSession::cmd_perform_action(const json& cmd) {
 
 // --- helpers ---
 
-void CoreSession::rebuild_timelines() {
-    timelines_.clear();
-    current_ = 0;
-    if (SocialAccount* account = accounts_.selected())
-        for (const TimelineSource& src : account->default_timelines())
-            timelines_.push_back(make_controller(src));
-    for (auto& tc : timelines_) {
+std::vector<std::unique_ptr<TimelineController>>
+CoreSession::build_timelines_for(SocialAccount* account) {
+    std::vector<std::unique_ptr<TimelineController>> v;
+    if (!account)
+        return v;
+    for (const TimelineSource& src : account->default_timelines())
+        v.push_back(make_controller(account, src));
+    for (auto& tc : v) {
         // Restore the remembered reading position before the cache load emits, so
         // the UI lands where the user left off (kept across the following refresh).
         if (auto it = positions_.find(tc->cache_key()); it != positions_.end())
@@ -1278,13 +1290,57 @@ void CoreSession::rebuild_timelines() {
         tc->load_cached();
         tc->refresh();
     }
+    return v;
+}
+
+void CoreSession::rebuild_timelines() {
+    // Build (and keep warm) timelines for EVERY account: the selected one is
+    // displayed, the rest are parked and refreshed in the background.
+    timelines_.clear();
+    parked_.clear();
+    current_ = 0;
+    for (SocialAccount* account : accounts_.accounts()) {
+        auto v = build_timelines_for(account);
+        if (account->account_key() == accounts_.selected_key())
+            timelines_ = std::move(v);
+        else
+            parked_[account->account_key()] = std::move(v);
+    }
     update_streaming();
 }
 
-std::unique_ptr<TimelineController> CoreSession::make_controller(const TimelineSource& src) {
-    SocialAccount* acc = accounts_.selected();
-    const int page = acc ? acc->max_page_size() : 40;
-    auto tc = std::make_unique<TimelineController>(acc, src, &cache_, &worker_, &loop_, page);
+void CoreSession::switch_account(const std::string& new_key) {
+    const std::string old = accounts_.selected_key();
+    if (new_key.empty() || new_key == old)
+        return;
+    if (!timelines_.empty())
+        parked_[old] = std::move(timelines_); // park the account we're leaving
+    timelines_.clear();
+    accounts_.select(new_key);
+    current_ = 0;
+    if (auto it = parked_.find(new_key); it != parked_.end()) {
+        timelines_ = std::move(it->second); // unpark the warm timelines
+        parked_.erase(it);
+    } else {
+        timelines_ = build_timelines_for(accounts_.selected());
+    }
+    for (auto& tc : timelines_)
+        tc->refresh(); // freshen the account we just switched to
+    update_streaming();
+}
+
+void CoreSession::refresh_all_accounts() {
+    for (auto& tc : timelines_)
+        tc->refresh();
+    for (auto& [key, v] : parked_)
+        for (auto& tc : v)
+            tc->refresh();
+}
+
+std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* account,
+                                                                 const TimelineSource& src) {
+    const int page = account ? account->max_page_size() : 40;
+    auto tc = std::make_unique<TimelineController>(account, src, &cache_, &worker_, &loop_, page);
     tc->set_max_refresh_pages(settings_.fetch_pages);
     TimelineController* p = tc.get();
     tc->on_change = [this, p] {
@@ -1409,22 +1465,31 @@ void CoreSession::update_streaming() {
 }
 
 void CoreSession::auto_refresh_loop() {
+    // Two cadences: the user's auto-refresh interval refreshes the displayed
+    // account (fast, opt-in); a gentle always-on background poll keeps EVERY
+    // account warm so switching is fresh and other accounts don't go stale. Both
+    // just post refreshes to the core loop; the worker runs them serially, so
+    // even many accounts never spike the CPU.
+    constexpr int kBackgroundPollSeconds = 120;
     int elapsed = 0;
+    int bg_elapsed = 0;
     while (auto_refresh_running_.load()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         if (!auto_refresh_running_.load())
             break;
         const int interval = auto_refresh_seconds_.load();
-        if (interval <= 0) {
-            elapsed = 0;
-            continue;
-        }
-        if (++elapsed >= interval) {
+        if (interval > 0 && ++elapsed >= interval) {
             elapsed = 0;
             loop_.post([this] {
                 for (auto& tc : timelines_)
                     tc->refresh();
             });
+        } else if (interval <= 0) {
+            elapsed = 0;
+        }
+        if (++bg_elapsed >= kBackgroundPollSeconds) {
+            bg_elapsed = 0;
+            loop_.post([this] { refresh_all_accounts(); });
         }
     }
 }

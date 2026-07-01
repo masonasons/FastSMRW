@@ -118,9 +118,15 @@ private:
     // "<n> of <count>" for the current position in a timeline (or "empty").
     std::string timeline_position_text(const TimelineController* tc) const;
 
-    void rebuild_timelines();
+    void rebuild_timelines(); // (re)build timelines for every account
+    // Build + warm (cache load + refresh) one account's timelines.
+    std::vector<std::unique_ptr<TimelineController>> build_timelines_for(SocialAccount* account);
+    // Switch the displayed account: park the current, unpark (or build) the target.
+    void switch_account(const std::string& new_key);
+    void refresh_all_accounts(); // refresh the current + every parked account
     void spawn_source(const TimelineSource& src); // open a timeline (or focus it)
-    std::unique_ptr<TimelineController> make_controller(const TimelineSource& src);
+    std::unique_ptr<TimelineController> make_controller(SocialAccount* account,
+                                                        const TimelineSource& src);
     TimelineController* current() const;
     int index_of(const TimelineController* tc) const;
     const TimelineItem* find_item(const TimelineController* tc, const std::string& id) const;
@@ -155,7 +161,10 @@ private:
     store::TimelineCache cache_;
     AccountStore accounts_;
     store::AppSettings settings_;
-    std::vector<std::unique_ptr<TimelineController>> timelines_;
+    std::vector<std::unique_ptr<TimelineController>> timelines_; // the displayed account
+    // Every other account's timelines, kept alive + refreshed in the background so
+    // switching accounts is instant and warm (keyed by account_key).
+    std::map<std::string, std::vector<std::unique_ptr<TimelineController>>> parked_;
     // Closed timelines kept alive (with in-flight async) until shutdown.
     std::vector<std::unique_ptr<TimelineController>> retired_;
     int current_ = 0;
