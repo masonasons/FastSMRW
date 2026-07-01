@@ -47,6 +47,8 @@ AppSettings settings_from_json(const json& root) {
     settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 0);
     settings.streaming_enabled = root.value("streaming_enabled", false);
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
+    settings.invisible_mode = root.value("invisible_mode", std::string("off"));
+    settings.invisible_keymap = root.value("invisible_keymap", std::string("default"));
 
     SpeechSettings speech;
     if (auto it = root.find("speech"); it != root.end() && it->is_object()) {
@@ -76,6 +78,8 @@ json settings_to_json(const AppSettings& settings) {
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
+    root["invisible_mode"] = settings.invisible_mode;
+    root["invisible_keymap"] = settings.invisible_keymap;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
     root["speech"]["notification"] = items_to_json(settings.speech.notification);

@@ -92,6 +92,23 @@ private:
     void cmd_remove_account(const nlohmann::json& cmd);
     void cmd_play_earcon(const nlohmann::json& cmd);
 
+    // --- invisible interface (global hotkeys / keyhook / layer) ---
+    void cmd_get_action_catalog();
+    void cmd_get_keymap(const nlohmann::json& cmd);   // {name?} -> resolved bindings
+    void cmd_set_active_keymap(const nlohmann::json& cmd);
+    void cmd_save_keymap(const nlohmann::json& cmd);  // {name, overrides, unbinds}
+    void cmd_delete_keymap(const nlohmann::json& cmd);
+    void cmd_perform_action(const nlohmann::json& cmd); // {action}
+    // Keymap file location + loading (files live in <config>/keymaps/*.keymap).
+    std::filesystem::path keymaps_dir() const;
+    std::vector<std::string> list_keymaps() const;    // "default" + user keymaps
+    void emit_keymap(const std::string& name);
+    // Invisible navigation helpers: move the current timeline's position without a
+    // visible list, emitting select_row (list follows if shown) + a spoken label.
+    void invisible_step(int delta);
+    void invisible_goto_edge(bool top);
+    void invisible_speak_index(int visible_index);
+
     void rebuild_timelines();
     void spawn_source(const TimelineSource& src); // open a timeline (or focus it)
     std::unique_ptr<TimelineController> make_controller(const TimelineSource& src);

@@ -1,10 +1,14 @@
 #include "fastsm/session/core_session.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <set>
 
 #include "fastsm/auth/bluesky_auth.hpp"
+#include "fastsm/input/keymap.hpp"
 #include "fastsm/auth/mastodon_auth.hpp"
 #include "fastsm/platform/bluesky/bluesky_account.hpp"
 #include "fastsm/platform/mastodon/mastodon_account.hpp"
@@ -192,6 +196,18 @@ void CoreSession::handle(const json& cmd) {
         cmd_remove_account(cmd);
     else if (c == "play_earcon")
         cmd_play_earcon(cmd);
+    else if (c == "get_action_catalog")
+        cmd_get_action_catalog();
+    else if (c == "get_keymap")
+        cmd_get_keymap(cmd);
+    else if (c == "set_active_keymap")
+        cmd_set_active_keymap(cmd);
+    else if (c == "save_keymap")
+        cmd_save_keymap(cmd);
+    else if (c == "delete_keymap")
+        cmd_delete_keymap(cmd);
+    else if (c == "perform_action")
+        cmd_perform_action(cmd);
 }
 
 // --- lifecycle / accounts ---
@@ -939,6 +955,223 @@ void CoreSession::cmd_play_earcon(const json& cmd) {
         sound_.play(sound::Earcon::Error);
     else
         sound_.play_named(name);
+}
+
+// --- invisible interface ---
+
+std::filesystem::path CoreSession::keymaps_dir() const {
+    return config_path_.parent_path() / "keymaps";
+}
+
+std::vector<std::string> CoreSession::list_keymaps() const {
+    std::vector<std::string> names{"default"};
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(keymaps_dir(), ec)) {
+        std::error_code ec2;
+        if (!entry.is_regular_file(ec2))
+            continue;
+        const auto& p = entry.path();
+        if (p.extension() == ".keymap") {
+            const std::string name = p.stem().string();
+            if (name != "default")
+                names.push_back(name);
+        }
+    }
+    std::sort(names.begin() + 1, names.end()); // keep "default" first
+    return names;
+}
+
+void CoreSession::cmd_get_action_catalog() {
+    json arr = json::array();
+    for (const auto& a : input::action_catalog())
+        arr.push_back({{"id", a.id}, {"label", a.label}, {"default_key", a.default_key}});
+    emit({{"event", "action_catalog"}, {"actions", arr}});
+}
+
+void CoreSession::emit_keymap(const std::string& name) {
+    input::ParsedKeymap custom;
+    if (!name.empty() && name != "default") {
+        std::ifstream in(keymaps_dir() / (name + ".keymap"), std::ios::binary);
+        if (in) {
+            std::string text((std::istreambuf_iterator<char>(in)),
+                             std::istreambuf_iterator<char>());
+            custom = input::parse_keymap(text);
+        }
+    }
+    const input::KeyBindings eff = input::resolve_bindings(custom);
+    json bindings = json::object();
+    for (const auto& [key, action] : eff)
+        bindings[key] = action;
+    emit({{"event", "keymap"},
+          {"name", name},
+          {"mode", settings_.invisible_mode},
+          {"bindings", bindings},
+          {"keymaps", list_keymaps()}});
+}
+
+void CoreSession::cmd_get_keymap(const json& cmd) {
+    emit_keymap(cmd.value("name", settings_.invisible_keymap));
+}
+
+void CoreSession::cmd_set_active_keymap(const json& cmd) {
+    settings_.invisible_keymap = cmd.value("name", std::string("default"));
+    save_config();
+    emit_keymap(settings_.invisible_keymap);
+}
+
+void CoreSession::cmd_save_keymap(const json& cmd) {
+    const std::string name = cmd.value("name", std::string{});
+    if (name.empty() || name == "default")
+        return; // default is read-only
+    std::map<std::string, std::string> overrides;
+    for (const auto& [action, key] : cmd.value("overrides", json::object()).items())
+        overrides[action] = key.get<std::string>();
+    std::set<std::string> unbinds;
+    for (const auto& u : cmd.value("unbinds", json::array()))
+        unbinds.insert(u.get<std::string>());
+    std::error_code ec;
+    std::filesystem::create_directories(keymaps_dir(), ec);
+    std::ofstream out(keymaps_dir() / (name + ".keymap"), std::ios::binary | std::ios::trunc);
+    if (out)
+        out << input::serialize_keymap(overrides, unbinds);
+    emit_keymap(name);
+}
+
+void CoreSession::cmd_delete_keymap(const json& cmd) {
+    const std::string name = cmd.value("name", std::string{});
+    if (name.empty() || name == "default")
+        return;
+    std::error_code ec;
+    std::filesystem::remove(keymaps_dir() / (name + ".keymap"), ec);
+    if (settings_.invisible_keymap == name) {
+        settings_.invisible_keymap = "default";
+        save_config();
+    }
+    emit_keymap(settings_.invisible_keymap);
+}
+
+void CoreSession::invisible_speak_index(int visible_index) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const auto& items = tc->items();
+    if (visible_index < 0 || visible_index >= static_cast<int>(items.size()))
+        return;
+    emit_announce(present::accessibility_label(items[static_cast<size_t>(visible_index)],
+                                               util::now_unix()));
+}
+
+void CoreSession::invisible_step(int delta) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const auto& items = tc->items();
+    if (items.empty()) {
+        sound_.play(sound::Earcon::Boundary);
+        return;
+    }
+    int idx = tc->visible_index_of(tc->selected_id());
+    if (idx < 0)
+        idx = 0;
+    int dest = idx + delta;
+    if (dest < 0)
+        dest = 0;
+    if (dest > static_cast<int>(items.size()) - 1)
+        dest = static_cast<int>(items.size()) - 1;
+    if (dest == idx)
+        sound_.play(sound::Earcon::Boundary); // hit an edge; still (re)speak for orientation
+    const std::string id = items[static_cast<size_t>(dest)].id();
+    tc->note_selection(id);
+    emit({{"event", "select_row"}, {"id", id}}); // visible list follows if the window is shown
+    invisible_speak_index(dest);
+}
+
+void CoreSession::invisible_goto_edge(bool top) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const auto& items = tc->items();
+    if (items.empty()) {
+        sound_.play(sound::Earcon::Boundary);
+        return;
+    }
+    const int dest = top ? 0 : static_cast<int>(items.size()) - 1;
+    const std::string id = items[static_cast<size_t>(dest)].id();
+    tc->note_selection(id);
+    emit({{"event", "select_row"}, {"id", id}});
+    invisible_speak_index(dest);
+}
+
+void CoreSession::cmd_perform_action(const json& cmd) {
+    const std::string a = cmd.value("action", std::string{});
+    if (a.empty())
+        return;
+    // Navigation / timeline / account switching (works with the window hidden).
+    if (a == "next_item")
+        return invisible_step(1);
+    if (a == "prev_item")
+        return invisible_step(-1);
+    if (a == "next_item_jump")
+        return invisible_step(20);
+    if (a == "prev_item_jump")
+        return invisible_step(-20);
+    if (a == "top_item")
+        return invisible_goto_edge(true);
+    if (a == "bottom_item")
+        return invisible_goto_edge(false);
+    if (a == "next_timeline")
+        return cmd_select_timeline({{"dir", "next"}});
+    if (a == "prev_timeline")
+        return cmd_select_timeline({{"dir", "prev"}});
+    if (a == "speak_item") {
+        if (TimelineController* tc = current())
+            invisible_speak_index(tc->visible_index_of(tc->selected_id()));
+        return;
+    }
+    if (a == "undo_navigation")
+        return cmd_go_back();
+    if (a == "refresh")
+        return cmd_refresh();
+    if (a == "next_account" || a == "prev_account") {
+        cmd_select_account({{"dir", a == "prev_account" ? "prev" : "next"}});
+        if (SocialAccount* ac = accounts_.selected())
+            emit_announce(ac->me().acct);
+        return;
+    }
+    // Actions on the current row (reuse the same handlers the UI uses).
+    TimelineController* tc = current();
+    const std::string row = tc ? tc->selected_id() : std::string{};
+    if (a == "boost_toggle")
+        return cmd_toggle_boost({{"id", row}});
+    if (a == "favorite_toggle")
+        return cmd_toggle_favorite({{"id", row}});
+    if (a == "reply")
+        return cmd_compose_context({{"mode", "reply"}, {"id", row}});
+    if (a == "quote")
+        return cmd_compose_context({{"mode", "quote"}, {"id", row}});
+    if (a == "edit")
+        return cmd_compose_context({{"mode", "edit"}, {"id", row}});
+    if (a == "post")
+        return cmd_compose_context({{"mode", "new"}});
+    if (a == "post_info")
+        return cmd_post_info({{"id", row}});
+    if (a == "open_url")
+        return cmd_open_status({{"id", row}});
+    if (a == "open_thread")
+        return cmd_open_thread({{"id", row}});
+    if (a == "open_user_timeline")
+        return cmd_open_user_timeline({{"id", row}});
+    if (a == "open_user_profile")
+        return cmd_open_user_profile({{"id", row}});
+    if (a == "close_timeline")
+        return cmd_close_timeline();
+    // UI-only actions the app carries out (window/dialogs/stop speech).
+    if (a == "toggle_window" || a == "settings" || a == "keymap_manager" || a == "stop_audio") {
+        emit({{"event", "invisible_ui_action"}, {"action", a}});
+        return;
+    }
+    // follow_toggle / mute_toggle / block_toggle need relationship round-trips;
+    // deferred to a later phase.
 }
 
 // --- helpers ---

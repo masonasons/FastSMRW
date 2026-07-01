@@ -21,6 +21,9 @@ struct AppSettings {
     bool show_mentions_in_notifications = true;
     int auto_refresh_seconds = 0; // 0 = off; otherwise poll interval
     bool streaming_enabled = false; // real-time streaming (Mastodon)
+    // Invisible interface (Windows): control the client from any window.
+    std::string invisible_mode = "off";       // "off" | "hotkey" | "keyhook"
+    std::string invisible_keymap = "default";  // active keymap name
     present::SpeechSettings speech = present::SpeechSettings::defaults();
 
     static constexpr int kFetchPagesMin = 1;
