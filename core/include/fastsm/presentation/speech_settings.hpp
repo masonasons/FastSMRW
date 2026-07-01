@@ -101,4 +101,51 @@ private:
     static SpeechSettings current_;
 };
 
+// --- Text presentation (how post text and names are cleaned up) --------------
+
+// Which emoji to strip from a piece of text (post body or a name), mirroring the
+// Mac port's EmojiRemoval.
+enum class EmojiRemoval {
+    None,     // leave emoji as-is
+    Unicode,  // strip standard 😀 emoji
+    Mastodon, // strip custom :shortcode: emoji
+    Both,     // strip both
+};
+
+// How a content warning (spoiler) is presented, mirroring the desktop FastSM's
+// cw_mode.
+enum class CwMode {
+    Hide,   // show the warning only, hide the post text behind it
+    Show,   // show the warning followed by the post text
+    Ignore, // ignore the warning, show the post text only
+};
+
+const char* emoji_removal_key(EmojiRemoval m);
+bool emoji_removal_from_key(std::string_view key, EmojiRemoval& out);
+const char* cw_mode_key(CwMode m);
+bool cw_mode_from_key(std::string_view key, CwMode& out);
+
+struct TextPresentation {
+    CwMode cw = CwMode::Hide;                     // content-warning handling
+    EmojiRemoval post_emoji = EmojiRemoval::None; // strip emoji from post text
+    EmojiRemoval name_emoji = EmojiRemoval::None; // strip emoji from display names
+    int max_mentions = 0; // collapse a leading @mention run beyond this (0 = all)
+
+    bool operator==(const TextPresentation& o) const {
+        return cw == o.cw && post_emoji == o.post_emoji && name_emoji == o.name_emoji &&
+               max_mentions == o.max_mentions;
+    }
+};
+
+// The current text-presentation configuration, read by the presenters. Set by
+// the settings store on load/change, alongside SpeechConfig.
+class TextConfig {
+public:
+    static const TextPresentation& current();
+    static void set_current(TextPresentation settings);
+
+private:
+    static TextPresentation current_;
+};
+
 } // namespace fastsm::present

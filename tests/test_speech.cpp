@@ -46,6 +46,10 @@ void test_settings_roundtrip() {
     store::AppConfig cfg;
     cfg.settings.sounds_enabled = false;
     cfg.settings.soundpack = "MyPack";
+    cfg.settings.text.cw = CwMode::Ignore;
+    cfg.settings.text.post_emoji = EmojiRemoval::Both;
+    cfg.settings.text.name_emoji = EmojiRemoval::Unicode;
+    cfg.settings.text.max_mentions = 3;
     cfg.settings.speech = SpeechSettings::defaults();
     for (auto& it : cfg.settings.speech.status)
         if (it.field == StatusSpeechField::Handle)
@@ -56,6 +60,10 @@ void test_settings_roundtrip() {
 
     CHECK(!loaded.settings.sounds_enabled);
     CHECK_EQ(loaded.settings.soundpack, std::string("MyPack"));
+    CHECK(loaded.settings.text.cw == CwMode::Ignore);
+    CHECK(loaded.settings.text.post_emoji == EmojiRemoval::Both);
+    CHECK(loaded.settings.text.name_emoji == EmojiRemoval::Unicode);
+    CHECK_EQ(loaded.settings.text.max_mentions, 3);
     bool handle_on = false;
     for (const auto& it : loaded.settings.speech.status)
         if (it.field == StatusSpeechField::Handle)

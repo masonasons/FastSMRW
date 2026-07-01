@@ -27,11 +27,14 @@ struct AppSettings {
     std::string invisible_layer_key = "control+win+space"; // combo that toggles the layer
     bool window_shown = true;                  // remembered across restarts (ToggleWindow)
     present::SpeechSettings speech = present::SpeechSettings::defaults();
+    present::TextPresentation text; // content-warning / demojify / mention-collapse
 
     static constexpr int kFetchPagesMin = 1;
     static constexpr int kFetchPagesMax = 10;
     static constexpr int kCacheLimitMin = 100;
     static constexpr int kCacheLimitMax = 20000;
+    static constexpr int kMaxMentionsMin = 0;
+    static constexpr int kMaxMentionsMax = 20;
     // Auto-refresh choices offered in Settings (seconds); 0 = Off. Mac parity.
     static constexpr int kAutoRefreshOptions[] = {0, 30, 60, 120, 300};
 };

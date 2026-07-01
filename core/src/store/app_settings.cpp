@@ -53,6 +53,14 @@ AppSettings settings_from_json(const json& root) {
         root.value("invisible_layer_key", std::string("control+win+space"));
     settings.window_shown = root.value("window_shown", true);
 
+    if (CwMode cw; cw_mode_from_key(root.value("cw_mode", std::string("hide")), cw))
+        settings.text.cw = cw;
+    if (EmojiRemoval e; emoji_removal_from_key(root.value("post_emoji_removal", std::string("none")), e))
+        settings.text.post_emoji = e;
+    if (EmojiRemoval e; emoji_removal_from_key(root.value("name_emoji_removal", std::string("none")), e))
+        settings.text.name_emoji = e;
+    settings.text.max_mentions = root.value("max_usernames_in_post", 0);
+
     SpeechSettings speech;
     if (auto it = root.find("speech"); it != root.end() && it->is_object()) {
         if (auto s = it->find("status"); s != it->end())
@@ -85,6 +93,10 @@ json settings_to_json(const AppSettings& settings) {
     root["invisible_keymap"] = settings.invisible_keymap;
     root["invisible_layer_key"] = settings.invisible_layer_key;
     root["window_shown"] = settings.window_shown;
+    root["cw_mode"] = cw_mode_key(settings.text.cw);
+    root["post_emoji_removal"] = emoji_removal_key(settings.text.post_emoji);
+    root["name_emoji_removal"] = emoji_removal_key(settings.text.name_emoji);
+    root["max_usernames_in_post"] = settings.text.max_mentions;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
     root["speech"]["notification"] = items_to_json(settings.speech.notification);

@@ -1334,8 +1334,9 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_open_user_profile({{"id", row}});
     if (a == "CloseTimeline")
         return cmd_close_timeline();
-    // UI-only actions the app carries out (window/dialogs/stop speech).
-    if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio") {
+    // UI-only actions the app carries out (window/dialogs/find/stop speech).
+    if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio" ||
+        a == "Find" || a == "FindNext" || a == "FindPrev") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }
@@ -1460,6 +1461,7 @@ void CoreSession::apply_settings() {
     sound_.set_enabled(settings_.sounds_enabled);
     sound_.set_soundpack(settings_.soundpack);
     present::SpeechConfig::set_current(settings_.speech);
+    present::TextConfig::set_current(settings_.text);
     cache_.set_max_entries(settings_.cache_limit);
     const bool show_mentions = settings_.show_mentions_in_notifications;
     for (auto& tc : timelines_) {

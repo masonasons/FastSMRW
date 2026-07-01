@@ -238,4 +238,58 @@ SpeechSettings SpeechConfig::current_ = SpeechSettings::defaults();
 const SpeechSettings& SpeechConfig::current() { return current_; }
 void SpeechConfig::set_current(SpeechSettings settings) { current_ = std::move(settings); }
 
+// --- Text presentation -------------------------------------------------------
+
+const char* emoji_removal_key(EmojiRemoval m) {
+    switch (m) {
+    case EmojiRemoval::None:
+        return "none";
+    case EmojiRemoval::Unicode:
+        return "unicode";
+    case EmojiRemoval::Mastodon:
+        return "mastodon";
+    case EmojiRemoval::Both:
+        return "both";
+    }
+    return "none";
+}
+
+bool emoji_removal_from_key(std::string_view key, EmojiRemoval& out) {
+    for (auto m : {EmojiRemoval::None, EmojiRemoval::Unicode, EmojiRemoval::Mastodon,
+                   EmojiRemoval::Both}) {
+        if (key == emoji_removal_key(m)) {
+            out = m;
+            return true;
+        }
+    }
+    return false;
+}
+
+const char* cw_mode_key(CwMode m) {
+    switch (m) {
+    case CwMode::Hide:
+        return "hide";
+    case CwMode::Show:
+        return "show";
+    case CwMode::Ignore:
+        return "ignore";
+    }
+    return "hide";
+}
+
+bool cw_mode_from_key(std::string_view key, CwMode& out) {
+    for (auto m : {CwMode::Hide, CwMode::Show, CwMode::Ignore}) {
+        if (key == cw_mode_key(m)) {
+            out = m;
+            return true;
+        }
+    }
+    return false;
+}
+
+TextPresentation TextConfig::current_ = TextPresentation{};
+
+const TextPresentation& TextConfig::current() { return current_; }
+void TextConfig::set_current(TextPresentation settings) { current_ = std::move(settings); }
+
 } // namespace fastsm::present

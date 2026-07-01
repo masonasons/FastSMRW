@@ -323,12 +323,55 @@ void edit_speech(HWND parent, const std::wstring& title,
     items = std::move(out);
 }
 
-// Speech page: three buttons that open the reusable detail modal per category.
+// Content-warning modes and emoji-removal modes, index order parallel to these.
+const present::CwMode kCwModes[] = {present::CwMode::Hide, present::CwMode::Show,
+                                    present::CwMode::Ignore};
+const wchar_t* const kCwModeLabels[] = {L"Hide post text (show warning only)",
+                                        L"Show warning, then post text",
+                                        L"Ignore warning (show post text)"};
+const present::EmojiRemoval kEmojiModes[] = {present::EmojiRemoval::None,
+                                             present::EmojiRemoval::Unicode,
+                                             present::EmojiRemoval::Mastodon,
+                                             present::EmojiRemoval::Both};
+const wchar_t* const kEmojiModeLabels[] = {L"Off", L"Unicode emoji",
+                                           L"Custom (:shortcode:)", L"Both"};
+
+template <class T, size_t N>
+void fill_combo(HWND dlg, int id, const wchar_t* const (&labels)[N], const T (&values)[N],
+                T current) {
+    HWND combo = GetDlgItem(dlg, id);
+    int sel = 0;
+    for (size_t i = 0; i < N; ++i) {
+        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(labels[i]));
+        if (values[i] == current)
+            sel = static_cast<int>(i);
+    }
+    SendMessageW(combo, CB_SETCURSEL, sel, 0);
+}
+
+template <class T, size_t N>
+T read_combo(HWND dlg, int id, const T (&values)[N], T fallback) {
+    const int sel = static_cast<int>(SendDlgItemMessageW(dlg, id, CB_GETCURSEL, 0, 0));
+    return (sel >= 0 && sel < static_cast<int>(N)) ? values[sel] : fallback;
+}
+
+// Speech page: per-category speech-detail buttons plus content-warning, emoji
+// removal, and leading-mention collapse — how post text and names read.
 INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
-    case WM_INITDIALOG:
-        on_init(dlg, lp);
+    case WM_INITDIALOG: {
+        Ctx* ctx = on_init(dlg, lp);
+        fill_combo(dlg, IDC_SET_CW_MODE, kCwModeLabels, kCwModes, ctx->settings.text.cw);
+        fill_combo(dlg, IDC_SET_POST_EMOJI, kEmojiModeLabels, kEmojiModes,
+                   ctx->settings.text.post_emoji);
+        fill_combo(dlg, IDC_SET_NAME_EMOJI, kEmojiModeLabels, kEmojiModes,
+                   ctx->settings.text.name_emoji);
+        HWND spin = GetDlgItem(dlg, IDC_SET_MAX_MENTIONS_SPIN);
+        SendMessageW(spin, UDM_SETRANGE32, AppSettings::kMaxMentionsMin,
+                     AppSettings::kMaxMentionsMax);
+        SendMessageW(spin, UDM_SETPOS32, 0, ctx->settings.text.max_mentions);
         return TRUE;
+    }
     case WM_COMMAND: {
         Ctx* ctx = ctx_of(dlg);
         if (!ctx)
@@ -347,6 +390,22 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         }
         break;
     }
+    case WM_NOTIFY:
+        if (is_apply(lp)) {
+            Ctx* ctx = ctx_of(dlg);
+            ctx->settings.text.cw = read_combo(dlg, IDC_SET_CW_MODE, kCwModes, present::CwMode::Hide);
+            ctx->settings.text.post_emoji =
+                read_combo(dlg, IDC_SET_POST_EMOJI, kEmojiModes, present::EmojiRemoval::None);
+            ctx->settings.text.name_emoji =
+                read_combo(dlg, IDC_SET_NAME_EMOJI, kEmojiModes, present::EmojiRemoval::None);
+            int v = static_cast<int>(GetDlgItemInt(dlg, IDC_SET_MAX_MENTIONS, nullptr, FALSE));
+            ctx->settings.text.max_mentions =
+                std::clamp(v, AppSettings::kMaxMentionsMin, AppSettings::kMaxMentionsMax);
+            ctx->applied = true;
+            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            return TRUE;
+        }
+        break;
     }
     return FALSE;
 }
