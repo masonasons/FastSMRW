@@ -73,20 +73,6 @@ std::string vk_to_base(DWORD vk) {
 
 bool down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
-// A bare Win+key combo, swallowed, would let the shell open the Start menu on the
-// Win keyup (it never saw the swallowed key). Injecting an inert Ctrl tap while
-// Win is held clears that "Win alone" state. Injected events carry LLKHF_INJECTED
-// so our own hook ignores them.
-void mask_start_menu() {
-    INPUT in[2] = {};
-    in[0].type = INPUT_KEYBOARD;
-    in[0].ki.wVk = VK_CONTROL;
-    in[1].type = INPUT_KEYBOARD;
-    in[1].ki.wVk = VK_CONTROL;
-    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(2, in, sizeof(INPUT));
-}
-
 } // namespace
 
 KeyhookDriver::~KeyhookDriver() { disable(); }
@@ -116,9 +102,11 @@ LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
         if (!(kb->flags & LLKHF_INJECTED) && !is_modifier_vk(kb->vkCode)) {
             const std::string action = g_active->lookup(kb->vkCode);
             if (!action.empty()) {
-                if ((down(VK_LWIN) || down(VK_RWIN)) && !down(VK_CONTROL) && !down(VK_MENU) &&
-                    !down(VK_SHIFT))
-                    mask_start_menu(); // bare Win+key: stop the Start menu popping
+                // Keep the hook proc fast and side-effect-free: never call SendInput
+                // here (doing so made Windows ignore the swallow and let e.g. the
+                // Win+arrow Snap through). Bare Win+key bindings can still pop the
+                // Start menu on keyup; the shipped keymaps pair Win with Alt/Ctrl,
+                // which don't. A UI-thread mask can be added later if needed.
                 PostMessageW(g_active->hwnd_, WM_APP_INV_ACTION, 0,
                              reinterpret_cast<LPARAM>(new std::string(action)));
                 return 1; // swallow: don't let the shell / focused app see it
