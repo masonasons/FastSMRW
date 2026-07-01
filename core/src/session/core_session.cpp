@@ -103,7 +103,7 @@ CoreSession::CoreSession(Paths paths, std::unique_ptr<net::IHttpClient> http,
                          std::function<void(const std::string&)> emit)
     : config_path_(paths.config_dir / "config.json"),
       bundled_keymaps_dir_(paths.bundled_keymaps), emit_(std::move(emit)), http_(std::move(http)),
-      cache_(paths.config_dir / "cache"), accounts_(http_.get()), stream_(http_.get(), &loop_) {
+      cache_(paths.config_dir / "cache"), accounts_(http_.get()) {
     sound_.set_bundled_packs_dir(paths.bundled_soundpacks);
     sound_.set_user_packs_dir(paths.config_dir / "soundpacks");
     auto_refresh_thread_ = std::thread([this] { auto_refresh_loop(); });
@@ -113,7 +113,7 @@ CoreSession::~CoreSession() {
     auto_refresh_running_.store(false);
     if (auto_refresh_thread_.joinable())
         auto_refresh_thread_.join();
-    stream_.stop(); // join the streaming thread while http_/loop_ are still alive
+    streams_.clear(); // join all streaming threads while http_/loop_ are still alive
 }
 
 void CoreSession::dispatch(const std::string& command_json) {
@@ -305,8 +305,8 @@ void CoreSession::cmd_remove_account(const json& cmd) {
         } else {
             timelines_ = build_timelines_for(accounts_.selected());
         }
-        update_streaming();
     }
+    update_streaming(); // start/stop streams for the new account set
     emit_accounts();
     emit_timelines();
 }
@@ -1449,46 +1449,62 @@ void CoreSession::save_positions() const {
         std::filesystem::remove(tmp, ec);
 }
 
+std::vector<std::unique_ptr<TimelineController>>*
+CoreSession::timelines_for_account(const std::string& key) {
+    if (key == accounts_.selected_key())
+        return &timelines_;
+    auto it = parked_.find(key);
+    return it != parked_.end() ? &it->second : nullptr;
+}
+
 void CoreSession::update_streaming() {
-    SocialAccount* account = accounts_.selected();
-    if (!settings_.streaming_enabled || !account) {
-        stream_.stop();
+    if (!settings_.streaming_enabled) {
+        streams_.clear(); // stop + join every stream
         return;
     }
-    stream_.start(account, [this](StreamItem item) {
-        for (auto& tc : timelines_)
-            if (tc->source().kind == item.target) {
-                tc->ingest_realtime(std::move(item.item));
-                break;
-            }
-    });
+    // Ensure one live stream per streaming-capable account (started once, left
+    // running across account switches). The callback routes each event to the
+    // owning account's timelines by key, whether displayed or parked.
+    std::set<std::string> live;
+    for (SocialAccount* account : accounts_.accounts()) {
+        const std::string key = account->account_key();
+        live.insert(key);
+        if (!account->user_stream_request())
+            continue; // this platform/account doesn't stream (e.g. Bluesky)
+        auto& client = streams_[key];
+        if (client)
+            continue; // already streaming
+        client = std::make_unique<StreamingClient>(http_.get(), &loop_);
+        client->start(account, [this, key](StreamItem item) {
+            if (auto* tls = timelines_for_account(key))
+                for (auto& tc : *tls)
+                    if (tc->source().kind == item.target) {
+                        tc->ingest_realtime(std::move(item.item));
+                        break;
+                    }
+        });
+    }
+    for (auto it = streams_.begin(); it != streams_.end();) // drop streams for gone accounts
+        it = live.count(it->first) ? std::next(it) : streams_.erase(it);
 }
 
 void CoreSession::auto_refresh_loop() {
-    // Two cadences: the user's auto-refresh interval refreshes the displayed
-    // account (fast, opt-in); a gentle always-on background poll keeps EVERY
-    // account warm so switching is fresh and other accounts don't go stale. Both
-    // just post refreshes to the core loop; the worker runs them serially, so
-    // even many accounts never spike the CPU.
-    constexpr int kBackgroundPollSeconds = 120;
+    // The user's auto-refresh interval polls EVERY account (displayed + parked),
+    // so background accounts stay as fresh as the one on screen. Refreshes are
+    // posted to the core loop and the worker runs them serially, so even many
+    // accounts never spike the CPU.
     int elapsed = 0;
-    int bg_elapsed = 0;
     while (auto_refresh_running_.load()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         if (!auto_refresh_running_.load())
             break;
         const int interval = auto_refresh_seconds_.load();
-        if (interval > 0 && ++elapsed >= interval) {
+        if (interval <= 0) {
             elapsed = 0;
-            loop_.post([this] {
-                for (auto& tc : timelines_)
-                    tc->refresh();
-            });
-        } else if (interval <= 0) {
-            elapsed = 0;
+            continue;
         }
-        if (++bg_elapsed >= kBackgroundPollSeconds) {
-            bg_elapsed = 0;
+        if (++elapsed >= interval) {
+            elapsed = 0;
             loop_.post([this] { refresh_all_accounts(); });
         }
     }

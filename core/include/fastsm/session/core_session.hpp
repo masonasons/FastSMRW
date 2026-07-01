@@ -124,6 +124,9 @@ private:
     // Switch the displayed account: park the current, unpark (or build) the target.
     void switch_account(const std::string& new_key);
     void refresh_all_accounts(); // refresh the current + every parked account
+    // The timelines for an account (the live list if displayed, else its parked
+    // list), or nullptr if the account isn't loaded.
+    std::vector<std::unique_ptr<TimelineController>>* timelines_for_account(const std::string& key);
     void spawn_source(const TimelineSource& src); // open a timeline (or focus it)
     std::unique_ptr<TimelineController> make_controller(SocialAccount* account,
                                                         const TimelineSource& src);
@@ -176,14 +179,16 @@ private:
     std::atomic<bool> auto_refresh_running_{true};
     std::thread auto_refresh_thread_;
 
-    // Threads/clients last. Destruction order (reverse) is stream_, worker_,
+    // Threads/clients last. Destruction order (reverse) is streams_, worker_,
     // loop_: worker_ (I/O) joins before loop_ (state) since worker tasks post to
     // loop_; the streaming + auto-refresh threads are stopped explicitly in the
-    // destructor before any member is torn down. loop_ precedes stream_ so
-    // stream_ can be constructed with &loop_.
+    // destructor before any member is torn down. loop_ precedes streams_ so the
+    // stream clients can be constructed with &loop_.
     runtime::WorkerQueue loop_;   // owns engine state; the controllers' IMainExecutor
     runtime::WorkerQueue worker_; // blocking network/cache I/O
-    StreamingClient stream_;
+    // One live streaming connection per streaming-capable account (keyed by
+    // account_key), so all accounts stream at once, not just the displayed one.
+    std::map<std::string, std::unique_ptr<StreamingClient>> streams_;
 };
 
 } // namespace fastsm
