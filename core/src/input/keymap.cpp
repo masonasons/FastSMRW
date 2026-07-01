@@ -170,14 +170,14 @@ const std::vector<ActionDef>& action_catalog() {
     // RegisterHotKey. The Win32 driver maps these strings to VK codes.
     static const std::vector<ActionDef> catalog = {
         // --- navigation ---
-        {"next_item", "Next item", "alt+win+down"},
-        {"prev_item", "Previous item", "alt+win+up"},
+        {"next_item", "Next item", "control+alt+win+down"},
+        {"prev_item", "Previous item", "control+alt+win+up"},
         {"next_item_jump", "Jump forward (20 items)", "control+win+pagedown"},
         {"prev_item_jump", "Jump back (20 items)", "control+win+pageup"},
         {"top_item", "Top of timeline", "alt+win+home"},
         {"bottom_item", "Bottom of timeline", "alt+win+end"},
-        {"next_timeline", "Next timeline", "alt+win+right"},
-        {"prev_timeline", "Previous timeline", "alt+win+left"},
+        {"next_timeline", "Next timeline", "control+alt+win+right"},
+        {"prev_timeline", "Previous timeline", "control+alt+win+left"},
         {"next_account", "Next account", "control+shift+win+pagedown"},
         {"prev_account", "Previous account", "control+shift+win+pageup"},
         {"speak_item", "Speak current item", "alt+win+space"},

@@ -7,7 +7,9 @@ FastSMRW changelog
 - New: an Invisible interface. Settings has a new "Invisible interface" tab where
   you can turn on Global hotkeys to drive FastSMRW from any window - move through
   your timeline, reply, boost, favorite, switch timelines and accounts, and more,
-  without switching to the app. Navigation speaks the post you land on. (Still to
+  without switching to the app. Navigation speaks the post you land on, and
+  switching timelines announces the timeline and your place in it (e.g. "Home,
+  1 of 500"). (Still to
   come: a low-level keyhook mode that can also grab key combos Windows reserves
   for itself - like Win+arrows - plus a full keyboard manager to customize the
   shortcuts.)

@@ -108,6 +108,8 @@ private:
     void invisible_step(int delta);
     void invisible_goto_edge(bool top);
     void invisible_speak_index(int visible_index);
+    // "<n> of <count>" for the current position in a timeline (or "empty").
+    std::string timeline_position_text(const TimelineController* tc) const;
 
     void rebuild_timelines();
     void spawn_source(const TimelineSource& src); // open a timeline (or focus it)

@@ -348,8 +348,22 @@ void CoreSession::cmd_select_timeline(const json& cmd) {
         return;
     current_ = target;
     emit_timelines();
-    if (TimelineController* tc = current())
-        emit_announce(tc->source().title());
+    if (TimelineController* tc = current()) {
+        std::string msg = tc->source().title();
+        if (cmd.value("speak_position", false)) // invisible interface: add "n of count"
+            msg += ", " + timeline_position_text(tc);
+        emit_announce(msg);
+    }
+}
+
+std::string CoreSession::timeline_position_text(const TimelineController* tc) const {
+    const auto& items = tc->items();
+    if (items.empty())
+        return "empty";
+    int idx = tc->visible_index_of(tc->selected_id());
+    if (idx < 0)
+        idx = 0;
+    return std::to_string(idx + 1) + " of " + std::to_string(items.size());
 }
 
 void CoreSession::cmd_refresh() {
@@ -1121,9 +1135,9 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     if (a == "bottom_item")
         return invisible_goto_edge(false);
     if (a == "next_timeline")
-        return cmd_select_timeline({{"dir", "next"}});
+        return cmd_select_timeline({{"dir", "next"}, {"speak_position", true}});
     if (a == "prev_timeline")
-        return cmd_select_timeline({{"dir", "prev"}});
+        return cmd_select_timeline({{"dir", "prev"}, {"speak_position", true}});
     if (a == "speak_item") {
         if (TimelineController* tc = current())
             invisible_speak_index(tc->visible_index_of(tc->selected_id()));
