@@ -79,6 +79,8 @@
 #define IDC_SET_CONFIRM_FAV   352
 #define IDC_SET_CONFIRM_CLEAR 353
 #define IDC_SET_CONFIRM_BLOCK 354
+#define IDD_SET_INVISIBLE   355
+#define IDC_SET_INVIS_MODE  356
 
 // Post Info dialog.
 #define IDD_POST_INFO         360

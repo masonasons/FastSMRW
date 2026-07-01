@@ -153,6 +153,19 @@ BEGIN
     AUTOCHECKBOX "Bloc&king a user", IDC_SET_CONFIRM_BLOCK, 10, 72, 200, 12
 END
 
+IDD_SET_INVISIBLE DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Invisible interface"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Control FastSMRW from any window using global keyboard shortcuts.",
+               -1, 10, 10, 224, 18
+    LTEXT      "&Mode:", -1, 10, 34, 40, 9
+    COMBOBOX   IDC_SET_INVIS_MODE, 52, 32, 162, 80, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "Global hotkeys use Windows to register each shortcut. Some keys Windows reserves cannot be captured this way; a low-level keyhook (coming soon) will.",
+               -1, 10, 52, 224, 26
+END
+
 IDD_POST_INFO DIALOGEX 0, 0, 320, 200
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Post"

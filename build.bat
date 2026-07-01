@@ -133,7 +133,7 @@ echo Compiling resources...
 rc /nologo /I windows\resources /fo "%BUILD%\app.res" windows\resources\app.rc
 if errorlevel 1 goto error
 echo Compiling and linking FastSMRW.exe...
-set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\win_speech.cpp"
+set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\invisible_hotkeys.cpp windows\src\win_speech.cpp"
 cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib winmm.lib %USPEECH_LIB%
 if errorlevel 1 goto error
 

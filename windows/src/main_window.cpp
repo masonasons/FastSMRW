@@ -202,6 +202,7 @@ bool MainWindow::create() {
                             this);
     if (!hwnd_)
         return false;
+    hotkey_driver_.set_window(hwnd_);
 
     std::vector<ACCEL> accels = {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
@@ -302,6 +303,14 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SETFOCUS:
         SetFocus(timeline_view_);
         return 0;
+
+    case WM_HOTKEY: {
+        // A global invisible-interface hotkey fired: run its core action.
+        const std::string action = hotkey_driver_.action_for(static_cast<int>(wp));
+        if (!action.empty())
+            dispatch_cmd({{"cmd", "perform_action"}, {"action", action}});
+        return 0;
+    }
 
     case WM_COMMAND:
         if (HIWORD(wp) == 0 || HIWORD(wp) == 1) { // menu or accelerator
@@ -989,6 +998,10 @@ void MainWindow::on_event(const std::string& js) {
         ev_user_picker(e);
     else if (ev == "select_row")
         restore_selection(e.value("id", std::string{}));
+    else if (ev == "keymap")
+        ev_keymap(e);
+    else if (ev == "invisible_ui_action")
+        ev_invisible_ui_action(e);
     else if (ev == "open_url")
         ShellExecuteW(nullptr, L"open", to_wide(e.value("url", std::string{})).c_str(), nullptr,
                       nullptr, SW_SHOW);
@@ -1056,6 +1069,47 @@ void MainWindow::ev_settings(const json& e) {
     soundpacks_.clear();
     for (const auto& p : e.value("soundpacks", json::array()))
         soundpacks_.push_back(p.get<std::string>());
+    apply_invisible();
+}
+
+void MainWindow::apply_invisible() {
+    invisible_mode_ = settings_.value("invisible_mode", std::string("off"));
+    if (invisible_mode_ == "hotkey")
+        dispatch_cmd({{"cmd", "get_keymap"}}); // ev_keymap will register the hotkeys
+    else
+        hotkey_driver_.clear();
+}
+
+void MainWindow::ev_keymap(const json& e) {
+    invisible_bindings_.clear();
+    // Bind to a named object first: iterating .items() on the temporary returned
+    // by value() would dangle (the proxy outlives the temporary).
+    const json bindings = e.value("bindings", json::object());
+    for (const auto& [key, action] : bindings.items())
+        invisible_bindings_[key] = action.get<std::string>();
+    if (invisible_mode_ == "hotkey")
+        hotkey_driver_.set_bindings(invisible_bindings_);
+    else
+        hotkey_driver_.clear();
+}
+
+void MainWindow::ev_invisible_ui_action(const json& e) {
+    const std::string a = e.value("action", std::string{});
+    if (a == "toggle_window") {
+        if (IsWindowVisible(hwnd_) && GetForegroundWindow() == hwnd_) {
+            ShowWindow(hwnd_, SW_HIDE);
+        } else {
+            ShowWindow(hwnd_, SW_SHOW);
+            SetForegroundWindow(hwnd_);
+        }
+    } else if (a == "settings") {
+        do_settings();
+    } else if (a == "keymap_manager") {
+        announce("Keyboard manager is coming soon."); // Phase 2
+    } else if (a == "stop_audio") {
+        if (speaker_)
+            speaker_->stop();
+    }
 }
 
 void MainWindow::ev_compose_context(const json& e) {

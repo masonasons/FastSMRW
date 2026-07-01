@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "fastsm/speech/speaker.hpp"
 
 #include "compose_dialog.hpp"
+#include "invisible_hotkeys.hpp"
 
 namespace fastsmui {
 
@@ -93,6 +95,11 @@ private:
     void ev_post_info(const nlohmann::json& e);
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
+    void ev_keymap(const nlohmann::json& e);
+    void ev_invisible_ui_action(const nlohmann::json& e);
+    // Apply the current invisible-interface mode (from settings_): (re)load the
+    // keymap for hotkey mode, or tear the global hotkeys down when off.
+    void apply_invisible();
 
     HINSTANCE inst_;
     fastsm_core* core_ = nullptr;
@@ -105,6 +112,12 @@ private:
     std::vector<std::string> rendered_ids_;  // last rendered row ids (reload guard)
     bool updating_selection_ = false;
     bool load_pending_ = false; // a load_older is in flight (avoid spamming)
+
+    // Invisible interface (global hotkeys). Bindings come from the core's keymap
+    // event; the driver registers them and maps WM_HOTKEY ids back to actions.
+    HotkeyDriver hotkey_driver_;
+    std::string invisible_mode_ = "off";
+    std::map<std::string, std::string> invisible_bindings_; // key -> action
 
     std::vector<Timeline> timelines_;
     int current_ = 0;

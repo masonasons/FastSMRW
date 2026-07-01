@@ -397,6 +397,40 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     return FALSE;
 }
 
+// The invisible-interface mode combo. Index order parallels these ids.
+const char* const kInvisibleModes[] = {"off", "hotkey"};
+const wchar_t* const kInvisibleModeLabels[] = {L"Off", L"Global hotkeys"};
+
+INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        Ctx* ctx = on_init(dlg, lp);
+        HWND combo = GetDlgItem(dlg, IDC_SET_INVIS_MODE);
+        int sel = 0;
+        for (int i = 0; i < static_cast<int>(std::size(kInvisibleModes)); ++i) {
+            SendMessageW(combo, CB_ADDSTRING, 0,
+                         reinterpret_cast<LPARAM>(kInvisibleModeLabels[i]));
+            if (ctx->settings.invisible_mode == kInvisibleModes[i])
+                sel = i;
+        }
+        SendMessageW(combo, CB_SETCURSEL, sel, 0);
+        return TRUE;
+    }
+    case WM_NOTIFY:
+        if (is_apply(lp)) {
+            const int sel = static_cast<int>(
+                SendDlgItemMessageW(dlg, IDC_SET_INVIS_MODE, CB_GETCURSEL, 0, 0));
+            if (sel >= 0 && sel < static_cast<int>(std::size(kInvisibleModes)))
+                ctx_of(dlg)->settings.invisible_mode = kInvisibleModes[sel];
+            ctx_of(dlg)->applied = true;
+            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 PROPSHEETPAGEW make_page(HINSTANCE inst, int dlg, DLGPROC proc, Ctx* ctx) {
     PROPSHEETPAGEW page{};
     page.dwSize = sizeof(page);
@@ -423,6 +457,7 @@ std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
         make_page(inst, IDD_SET_SPEECH, SpeechProc, &ctx),
         make_page(inst, IDD_SET_ADVANCED, AdvancedProc, &ctx),
         make_page(inst, IDD_SET_CONFIRM, ConfirmProc, &ctx),
+        make_page(inst, IDD_SET_INVISIBLE, InvisibleProc, &ctx),
     };
 
     PROPSHEETHEADERW hdr{};

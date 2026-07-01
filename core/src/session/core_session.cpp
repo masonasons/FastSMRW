@@ -1024,7 +1024,8 @@ void CoreSession::cmd_save_keymap(const json& cmd) {
     if (name.empty() || name == "default")
         return; // default is read-only
     std::map<std::string, std::string> overrides;
-    for (const auto& [action, key] : cmd.value("overrides", json::object()).items())
+    const json overrides_json = cmd.value("overrides", json::object()); // avoid dangling .items()
+    for (const auto& [action, key] : overrides_json.items())
         overrides[action] = key.get<std::string>();
     std::set<std::string> unbinds;
     for (const auto& u : cmd.value("unbinds", json::array()))

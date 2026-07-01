@@ -4,6 +4,14 @@ FastSMRW changelog
 0.0.3 (in development)
 ----------------------
 
+- New: an Invisible interface. Settings has a new "Invisible interface" tab where
+  you can turn on Global hotkeys to drive FastSMRW from any window - move through
+  your timeline, reply, boost, favorite, switch timelines and accounts, and more,
+  without switching to the app. Navigation speaks the post you land on. (Still to
+  come: a low-level keyhook mode that can also grab key combos Windows reserves
+  for itself - like Win+arrows - plus a full keyboard manager to customize the
+  shortcuts.)
+
 - When a refresh brings in new posts that don't connect to what you already had
   (you were away a while), the app now remembers the gap and fills it in
   automatically as you scroll down into it - so the timeline stays continuous
