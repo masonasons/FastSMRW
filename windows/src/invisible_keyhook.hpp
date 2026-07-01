@@ -20,20 +20,37 @@ public:
     ~KeyhookDriver();
 
     void set_window(HWND hwnd) { hwnd_ = hwnd; }
-    // Replace the active key-string -> action bindings.
-    void set_bindings(const std::map<std::string, std::string>& key_to_action);
+    // Hotkey mode: bound key-strings (with modifiers) are swallowed + fire actions.
+    void set_hotkeys(const std::map<std::string, std::string>& key_to_action);
+    // Layer mode: `activation_key` toggles a modal layer in which bare keys from
+    // `layer_bindings` fire actions and everything is swallowed; Escape or the
+    // activation combo exits. Enter/exit post the sentinel actions below.
+    void set_layer(const std::string& activation_key,
+                   const std::map<std::string, std::string>& layer_bindings);
     void enable();  // install the hook
     void disable(); // remove the hook
     bool active() const { return hook_ != nullptr; }
+    // Drop out of the layer (e.g. an action opened a modal dialog). No-op if not
+    // in the layer. Called on the UI thread (same as the hook proc).
+    void exit_layer() { in_layer_ = false; }
+
+    // Sentinel "actions" posted via WM_APP_INV_ACTION when the layer opens/closes.
+    static constexpr const char* kLayerEnter = "__layer_enter__";
+    static constexpr const char* kLayerExit = "__layer_exit__";
 
 private:
+    enum class Mode { Hotkeys, Layer };
     static LRESULT CALLBACK hook_proc(int code, WPARAM wp, LPARAM lp);
-    // Returns the bound action for a physical key event, or "" if none.
-    std::string lookup(DWORD vk) const;
+    std::string key_string(DWORD vk) const;  // canonical modifiered key for a VK
+    std::string lookup(DWORD vk) const;      // hotkeys-mode action for a VK, or ""
 
     HWND hwnd_ = nullptr;
     HHOOK hook_ = nullptr;
-    std::map<std::string, std::string> bindings_; // canonical key -> action
+    Mode mode_ = Mode::Hotkeys;
+    std::map<std::string, std::string> bindings_;       // hotkeys: canonical key -> action
+    std::map<std::string, std::string> layer_bindings_; // layer: bare base key -> action
+    std::string activation_key_;                        // layer toggle combo
+    bool in_layer_ = false;
 };
 
 } // namespace fastsmui

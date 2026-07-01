@@ -164,9 +164,10 @@ BEGIN
     COMBOBOX   IDC_SET_INVIS_MODE, 52, 32, 162, 80, CBS_DROPDOWNLIST | WS_TABSTOP
     LTEXT      "Global hotkeys use Windows to register each shortcut. Some keys Windows reserves cannot be captured this way; a low-level keyhook (coming soon) will.",
                -1, 10, 52, 224, 26
-    PUSHBUTTON "&Keyboard Manager...", IDC_SET_INVIS_MANAGER, 10, 84, 120, 14
-    LTEXT      "Customize which keys do what, and share keymaps with the desktop client.",
-               -1, 10, 102, 224, 18
+    PUSHBUTTON "&Keyboard Manager...", IDC_SET_INVIS_MANAGER, 10, 84, 140, 14
+    PUSHBUTTON "Change &layer activation key...", IDC_SET_INVIS_LAYERKEY, 10, 84, 140, 14
+    LTEXT      "In Layer mode, this key opens the FastSM layer; then arrows and letters drive the timeline until you press Escape.",
+               -1, 10, 102, 224, 26
 END
 
 IDD_KEYMAP_MANAGER DIALOGEX 0, 0, 340, 260

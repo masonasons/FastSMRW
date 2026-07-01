@@ -54,6 +54,12 @@ std::string serialize_keymap(const std::map<std::string, std::string>& action_to
 // The default bindings (key -> action) built from the catalog's default_key.
 KeyBindings default_bindings();
 
+// The Layer-mode keymap: bare keys (no modifiers, e.g. "up", "r") -> action,
+// used while the user is inside the "FastSM layer". Fixed (not user-editable).
+KeyBindings layer_keymap();
+// Default combo that toggles the FastSM layer on/off.
+constexpr const char* kDefaultLayerKey = "control+win+space";
+
 // Effective bindings = defaults, with any action redefined or unbound in the
 // custom keymap removed from the defaults, then the custom bindings layered on
 // top. Mirrors the Python loader's inheritance.

@@ -303,22 +303,31 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
-    case WM_APP_INV_ACTION: { // keyhook fired a bound action
+    case WM_APP_INV_ACTION: { // keyhook fired a bound action (or a layer enter/exit)
         std::unique_ptr<std::string> action(reinterpret_cast<std::string*>(lp));
-        if (action) {
-            dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
-            // The keyhook swallowed the combo's non-modifier key, so the foreground
-            // app saw Alt/Win pressed with no real key -> it drops into menu / Start
-            // mode ("stuck Alt"). Inject an inert Ctrl tap to mask that, matching
-            // AutoHotkey's menu-mask. Injected -> our hook ignores it.
-            INPUT mask[2] = {};
-            mask[0].type = INPUT_KEYBOARD;
-            mask[0].ki.wVk = VK_LCONTROL;
-            mask[1].type = INPUT_KEYBOARD;
-            mask[1].ki.wVk = VK_LCONTROL;
-            mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
-            SendInput(2, mask, sizeof(INPUT));
+        if (!action)
+            return 0;
+        if (*action == KeyhookDriver::kLayerEnter) {
+            dispatch_cmd({{"cmd", "play_earcon"}, {"name", "navigate"}});
+            announce("FastSM layer");
+            return 0;
         }
+        if (*action == KeyhookDriver::kLayerExit) {
+            dispatch_cmd({{"cmd", "play_earcon"}, {"name", "close"}});
+            return 0;
+        }
+        dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
+        // The keyhook swallowed the combo's non-modifier key, so the foreground
+        // app saw Alt/Win pressed with no real key -> it drops into menu / Start
+        // mode ("stuck Alt"). Inject an inert Ctrl tap to mask that, matching
+        // AutoHotkey's menu-mask. Injected -> our hook ignores it.
+        INPUT mask[2] = {};
+        mask[0].type = INPUT_KEYBOARD;
+        mask[0].ki.wVk = VK_LCONTROL;
+        mask[1].type = INPUT_KEYBOARD;
+        mask[1].ki.wVk = VK_LCONTROL;
+        mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(2, mask, sizeof(INPUT));
         return 0;
     }
 
@@ -652,6 +661,7 @@ void MainWindow::do_post_info() {
 }
 
 void MainWindow::ev_post_info(const json& e) {
+    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
     const std::string id = e.value("id", std::string{});
     const std::wstring text = to_wide(e.value("text", std::string{}));
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
@@ -687,6 +697,7 @@ void MainWindow::ev_post_info(const json& e) {
 }
 
 void MainWindow::ev_user_profile(const json& e) {
+    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
     const std::wstring text = to_wide(e.value("text", std::string{}));
     const std::string account_id = e.value("account_id", std::string{});
     const std::string acct = e.value("acct", std::string{});
@@ -745,6 +756,7 @@ void MainWindow::ev_user_profile(const json& e) {
 void MainWindow::ev_user_picker(const json& e) {
     if (!e.contains("users") || !e["users"].is_array() || e["users"].empty())
         return;
+    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
     const std::string purpose = e.value("purpose", std::string{});
     const std::string row_id = e.value("id", std::string{});
     HMENU menu = CreatePopupMenu();
@@ -1031,6 +1043,8 @@ void MainWindow::on_event(const std::string& js) {
         restore_selection(e.value("id", std::string{}));
     else if (ev == "keymap")
         ev_keymap(e);
+    else if (ev == "layer_keymap")
+        ev_layer_keymap(e);
     else if (ev == "action_catalog")
         ev_action_catalog(e);
     else if (ev == "invisible_ui_action")
@@ -1111,6 +1125,8 @@ void MainWindow::apply_invisible() {
     invisible_mode_ = settings_.value("invisible_mode", std::string("off"));
     if (invisible_mode_ == "hotkey" || invisible_mode_ == "keyhook") {
         dispatch_cmd({{"cmd", "get_keymap"}}); // ev_keymap installs the active driver
+    } else if (invisible_mode_ == "layer") {
+        dispatch_cmd({{"cmd", "get_layer_keymap"}}); // ev_layer_keymap installs the layer hook
     } else {
         hotkey_driver_.clear();
         keyhook_driver_.disable();
@@ -1138,12 +1154,24 @@ void MainWindow::ev_keymap(const json& e) {
         hotkey_driver_.set_bindings(invisible_bindings_);
     } else if (invisible_mode_ == "keyhook") {
         hotkey_driver_.clear();
-        keyhook_driver_.set_bindings(invisible_bindings_);
+        keyhook_driver_.set_hotkeys(invisible_bindings_);
         keyhook_driver_.enable();
     } else {
         hotkey_driver_.clear();
         keyhook_driver_.disable();
     }
+}
+
+void MainWindow::ev_layer_keymap(const json& e) {
+    if (invisible_mode_ != "layer")
+        return;
+    std::map<std::string, std::string> layer;
+    const json bindings = e.value("bindings", json::object());
+    for (const auto& [key, action] : bindings.items())
+        layer[key] = action.get<std::string>();
+    hotkey_driver_.clear();
+    keyhook_driver_.set_layer(e.value("activation", std::string("control+win+space")), layer);
+    keyhook_driver_.enable();
 }
 
 void MainWindow::ev_action_catalog(const json& e) {
@@ -1195,6 +1223,7 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
 }
 
 void MainWindow::ev_compose_context(const json& e) {
+    keyhook_driver_.exit_layer(); // a modal dialog is opening; leave the layer
     const std::string keep_id = selected_id();
     ComposeRequest req;
     const std::string mode = e.value("mode", std::string("new"));

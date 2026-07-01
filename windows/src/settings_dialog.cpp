@@ -9,6 +9,7 @@
 #include <shellapi.h>
 
 #include "../resources/resource.h"
+#include "keymap_manager_dialog.hpp"
 #include "utf.hpp"
 
 #include "fastsm/presentation/speech_settings.hpp"
@@ -400,9 +401,21 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
 }
 
 // The invisible-interface mode combo. Index order parallels these ids.
-const char* const kInvisibleModes[] = {"off", "hotkey", "keyhook"};
-const wchar_t* const kInvisibleModeLabels[] = {L"Off", L"Global hotkeys",
-                                               L"Low-level keyhook (captures reserved keys)"};
+const char* const kInvisibleModes[] = {"off", "hotkey", "keyhook", "layer"};
+const wchar_t* const kInvisibleModeLabels[] = {
+    L"Off", L"Global hotkeys", L"Low-level keyhook (captures reserved keys)",
+    L"Layer (a key opens a FastSM layer)"};
+
+// Layer mode shows the "change activation key" button; the other modes show the
+// Keyboard Manager button (they use editable keymaps, Layer doesn't).
+void update_invisible_buttons(HWND dlg) {
+    const int sel =
+        static_cast<int>(SendDlgItemMessageW(dlg, IDC_SET_INVIS_MODE, CB_GETCURSEL, 0, 0));
+    const bool layer = sel >= 0 && sel < static_cast<int>(std::size(kInvisibleModes)) &&
+                       std::string("layer") == kInvisibleModes[sel];
+    ShowWindow(GetDlgItem(dlg, IDC_SET_INVIS_LAYERKEY), layer ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(dlg, IDC_SET_INVIS_MANAGER), layer ? SW_HIDE : SW_SHOW);
+}
 
 INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
@@ -417,13 +430,28 @@ INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 sel = i;
         }
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
+        update_invisible_buttons(dlg);
         return TRUE;
     }
     case WM_COMMAND:
+        if (LOWORD(wp) == IDC_SET_INVIS_MODE && HIWORD(wp) == CBN_SELCHANGE) {
+            update_invisible_buttons(dlg);
+            return TRUE;
+        }
         if (LOWORD(wp) == IDC_SET_INVIS_MANAGER) {
             Ctx* ctx = ctx_of(dlg);
             if (ctx && ctx->open_manager)
                 ctx->open_manager(dlg);
+            return TRUE;
+        }
+        if (LOWORD(wp) == IDC_SET_INVIS_LAYERKEY) {
+            Ctx* ctx = ctx_of(dlg);
+            if (ctx) {
+                auto key = capture_key_binding(dlg, GetModuleHandleW(nullptr),
+                                               ctx->settings.invisible_layer_key);
+                if (key)
+                    ctx->settings.invisible_layer_key = *key;
+            }
             return TRUE;
         }
         break;

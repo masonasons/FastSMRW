@@ -100,6 +100,7 @@ private:
     void cmd_save_keymap(const nlohmann::json& cmd);  // {name, overrides, unbinds}
     void cmd_delete_keymap(const nlohmann::json& cmd);
     void cmd_perform_action(const nlohmann::json& cmd); // {action}
+    void cmd_get_layer_keymap();                        // layer bindings + activation combo
     void cmd_set_window_shown(const nlohmann::json& cmd); // persist window visibility
     // Keymap file location + loading. User keymaps live in <config>/keymaps and are
     // editable; built-in keymaps ship in the app's keymaps folder and are read-only.

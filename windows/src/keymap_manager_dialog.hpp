@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -83,5 +84,11 @@ private:
 // Render a canonical key-string ("control+shift+win+r") for display
 // ("Ctrl+Shift+Win+R"). Empty string -> "(unbound)".
 std::wstring format_key_display(const std::string& key);
+
+// Show the modal key-capture dialog (modifier checkboxes + a base key), prefilled
+// from `current_key`. Returns the chosen canonical key-string, or nullopt if
+// cancelled. Used both by the manager and to set the layer activation key.
+std::optional<std::string> capture_key_binding(HWND parent, HINSTANCE inst,
+                                               const std::string& current_key);
 
 } // namespace fastsmui

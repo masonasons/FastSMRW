@@ -22,8 +22,9 @@ struct AppSettings {
     int auto_refresh_seconds = 0; // 0 = off; otherwise poll interval
     bool streaming_enabled = false; // real-time streaming (Mastodon)
     // Invisible interface (Windows): control the client from any window.
-    std::string invisible_mode = "off";       // "off" | "hotkey" | "keyhook"
+    std::string invisible_mode = "off";       // "off" | "hotkey" | "keyhook" | "layer"
     std::string invisible_keymap = "default";  // active keymap name
+    std::string invisible_layer_key = "control+win+space"; // combo that toggles the layer
     bool window_shown = true;                  // remembered across restarts (ToggleWindow)
     present::SpeechSettings speech = present::SpeechSettings::defaults();
 

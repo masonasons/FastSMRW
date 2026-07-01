@@ -81,7 +81,8 @@
 #define IDC_SET_CONFIRM_BLOCK 354
 #define IDD_SET_INVISIBLE   355
 #define IDC_SET_INVIS_MODE  356
-#define IDC_SET_INVIS_MANAGER 357
+#define IDC_SET_INVIS_LAYERKEY 357
+#define IDC_SET_INVIS_MANAGER 358
 
 // Keyboard Manager dialog + its binding-capture sub-dialog.
 #define IDD_KEYMAP_MANAGER  400

@@ -139,6 +139,23 @@ std::string serialize_keymap(const std::map<std::string, std::string>& action_to
     return out;
 }
 
+KeyBindings layer_keymap() {
+    // Bare keys mapped to actions while inside the layer. Escape and the
+    // activation combo exit the layer (handled by the driver, not here).
+    return {
+        {"up", "prev_item"},         {"down", "next_item"},
+        {"left", "prev_tl"},         {"right", "next_tl"},
+        {"home", "top_item"},        {"end", "bottom_item"},
+        {"pageup", "prev_item_jump"}, {"pagedown", "next_item_jump"},
+        {"space", "speak_item"},     {"return", "View"},
+        {"r", "Reply"},              {"b", "BoostToggle"},
+        {"f", "LikeToggle"},         {"q", "Quote"},
+        {"e", "Edit"},               {"n", "Post"},
+        {"t", "open_thread"},        {"u", "UserTimeline"},
+        {"backspace", "CloseTimeline"},
+    };
+}
+
 KeyBindings default_bindings() {
     KeyBindings out;
     for (const auto& a : action_catalog()) {

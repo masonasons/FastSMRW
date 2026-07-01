@@ -98,6 +98,7 @@ private:
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
     void ev_keymap(const nlohmann::json& e);
+    void ev_layer_keymap(const nlohmann::json& e);
     void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
     // Apply the current invisible-interface mode (from settings_): (re)load the

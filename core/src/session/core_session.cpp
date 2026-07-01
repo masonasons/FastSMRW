@@ -210,6 +210,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_perform_action(cmd);
     else if (c == "set_window_shown")
         cmd_set_window_shown(cmd);
+    else if (c == "get_layer_keymap")
+        cmd_get_layer_keymap();
 }
 
 // --- lifecycle / accounts ---
@@ -1166,6 +1168,15 @@ void CoreSession::invisible_goto_edge(bool top) {
 void CoreSession::cmd_set_window_shown(const json& cmd) {
     settings_.window_shown = cmd.value("shown", true);
     save_config(); // lightweight: just persist, no re-render
+}
+
+void CoreSession::cmd_get_layer_keymap() {
+    json bindings = json::object();
+    for (const auto& [key, action] : input::layer_keymap())
+        bindings[key] = action;
+    emit({{"event", "layer_keymap"},
+          {"activation", settings_.invisible_layer_key},
+          {"bindings", bindings}});
 }
 
 void CoreSession::cmd_perform_action(const json& cmd) {

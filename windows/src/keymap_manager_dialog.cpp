@@ -188,6 +188,17 @@ INT_PTR CALLBACK binding_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 
 } // namespace
 
+std::optional<std::string> capture_key_binding(HWND parent, HINSTANCE inst,
+                                               const std::string& current_key) {
+    BindingCtx ctx;
+    ctx.current_key = current_key;
+    if (DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_KM_BINDING), parent, &binding_proc,
+                        reinterpret_cast<LPARAM>(&ctx)) == IDOK &&
+        ctx.ok && !ctx.result.empty())
+        return ctx.result;
+    return std::nullopt;
+}
+
 std::wstring format_key_display(const std::string& key) {
     if (key.empty())
         return L"(unbound)";

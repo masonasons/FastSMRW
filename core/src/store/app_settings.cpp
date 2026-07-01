@@ -49,6 +49,8 @@ AppSettings settings_from_json(const json& root) {
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.invisible_mode = root.value("invisible_mode", std::string("off"));
     settings.invisible_keymap = root.value("invisible_keymap", std::string("default"));
+    settings.invisible_layer_key =
+        root.value("invisible_layer_key", std::string("control+win+space"));
     settings.window_shown = root.value("window_shown", true);
 
     SpeechSettings speech;
@@ -81,6 +83,7 @@ json settings_to_json(const AppSettings& settings) {
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["invisible_mode"] = settings.invisible_mode;
     root["invisible_keymap"] = settings.invisible_keymap;
+    root["invisible_layer_key"] = settings.invisible_layer_key;
     root["window_shown"] = settings.window_shown;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);

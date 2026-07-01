@@ -8,6 +8,7 @@ FastSMRW changelog
 - New Keyboard Manager (Application menu, or the Invisible interface tab): create, edit, unbind, and share custom keymaps; files are interchangeable with the desktop client.
 - Ctrl+Win+W (invisible interface) shows or hides the FastSMRW window from anywhere, and the app remembers whether it was hidden across restarts.
 - New Low-level keyhook mode (Invisible interface tab): captures shortcuts the Windows shell reserves - like Win+arrows - that global hotkeys can't grab.
+- New Layer mode (Invisible interface tab): press an activation key (default Ctrl+Win+Space) to open a FastSM layer where bare arrows and letters drive the timeline from any window; Escape exits, and opening a dialog leaves the layer. Set the key with the "Change layer activation key" button.
 - The Keyboard Manager now includes read-only built-in keymaps shipped with the app (drop .keymap files in the program's keymaps folder); Windows 10 and 8.1 keymaps are included.
 - Fixed the Alt key sometimes staying stuck down after closing the app while holding Alt (e.g. Alt+F4) with the keyhook active.
 - The window title bar no longer shows the last spoken message.
