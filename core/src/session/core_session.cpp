@@ -1507,7 +1507,12 @@ void CoreSession::rebuild_timelines() {
 
 void CoreSession::switch_account(const std::string& new_key) {
     const std::string old = accounts_.selected_key();
-    if (new_key.empty() || new_key == old)
+    if (new_key.empty())
+        return;
+    // Adding the first account auto-selects it (so new_key == old already), but
+    // its timelines haven't been built yet -- fall through and build them. Only
+    // short-circuit a genuine no-op switch to the already-shown account.
+    if (new_key == old && !timelines_.empty())
         return;
     if (!timelines_.empty())
         parked_[old] = std::move(timelines_); // park the account we're leaving

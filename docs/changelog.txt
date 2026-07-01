@@ -1,8 +1,15 @@
 FastSMRW changelog
 ==================
 
-0.0.4 (in development)
+0.0.5 (in development)
 ----------------------
+
+- Fixed: adding your first account now loads it right away instead of showing nothing until you restart.
+- Fixed: switching the Add Account type between Mastodon and Bluesky no longer leaves "bsky.social" filling in as your Mastodon instance.
+
+
+0.0.4
+-----
 
 - Press Ctrl+W to hide the FastSMRW window (bring it back with the invisible interface's show/hide key).
 - In Layer mode, press W to show or hide the window; the layer's help (slash) now lists it.

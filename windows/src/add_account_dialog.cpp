@@ -23,8 +23,17 @@ void update_fields(HWND dlg, int platform) {
     ShowWindow(GetDlgItem(dlg, IDC_HANDLE_EDIT), show);
     ShowWindow(GetDlgItem(dlg, IDC_APPPASS_LABEL), show);
     ShowWindow(GetDlgItem(dlg, IDC_APPPASS_EDIT), show);
-    if (bluesky && GetWindowTextLengthW(GetDlgItem(dlg, IDC_SERVICE_EDIT)) == 0)
-        SetDlgItemTextW(dlg, IDC_SERVICE_EDIT, L"bsky.social");
+    // Auto-fill Bluesky's default service, but don't let it linger as a bogus
+    // Mastodon instance when you toggle back (the field is shared).
+    if (bluesky) {
+        if (GetWindowTextLengthW(GetDlgItem(dlg, IDC_SERVICE_EDIT)) == 0)
+            SetDlgItemTextW(dlg, IDC_SERVICE_EDIT, L"bsky.social");
+    } else {
+        wchar_t buf[32] = {0};
+        GetDlgItemTextW(dlg, IDC_SERVICE_EDIT, buf, 32);
+        if (wcscmp(buf, L"bsky.social") == 0)
+            SetDlgItemTextW(dlg, IDC_SERVICE_EDIT, L"");
+    }
 }
 
 INT_PTR CALLBACK AddProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
