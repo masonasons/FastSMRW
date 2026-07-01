@@ -119,6 +119,42 @@
 #define IDD_FIND            440
 #define IDC_FIND_TEXT       441
 
+// Client Filters dialog (per-timeline display filter).
+#define IDD_CLIENT_FILTER   450
+#define IDC_CF_ORIGINAL     451
+#define IDC_CF_REPLIES      452
+#define IDC_CF_REPLIES_ME   453
+#define IDC_CF_THREADS      454
+#define IDC_CF_BOOSTS       455
+#define IDC_CF_QUOTES       456
+#define IDC_CF_MEDIA        457
+#define IDC_CF_NO_MEDIA     458
+#define IDC_CF_MY_POSTS     459
+#define IDC_CF_MY_REPLIES   460
+#define IDC_CF_TEXT         461
+#define IDC_CF_CLEAR        462
+
+// Server Filters manager (Mastodon /api/v2/filters).
+#define IDD_SERVER_FILTERS  470
+#define IDC_SF_LIST         471
+#define IDC_SF_ADD          472
+#define IDC_SF_EDIT         473
+#define IDC_SF_DELETE       474
+#define IDC_SF_STATUS       475
+
+// Add/Edit server filter sub-dialog.
+#define IDD_EDIT_FILTER     480
+#define IDC_EF_TITLE        481
+#define IDC_EF_KEYWORDS     482
+#define IDC_EF_WHOLE_WORD   483
+#define IDC_EF_CTX_HOME     484
+#define IDC_EF_CTX_NOTIF    485
+#define IDC_EF_CTX_PUBLIC   486
+#define IDC_EF_CTX_THREAD   487
+#define IDC_EF_CTX_ACCOUNT  488
+#define IDC_EF_ACTION       489
+#define IDC_EF_EXPIRES      490
+
 // Post Info dialog.
 #define IDD_POST_INFO         360
 #define IDC_POSTINFO_TEXT     361

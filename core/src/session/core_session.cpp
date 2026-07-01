@@ -30,6 +30,67 @@ namespace {
 // The GitHub repo the in-app updater checks.
 constexpr const char* kUpdateRepo = "masonasons/FastSMRW";
 
+json client_filter_to_json(const ClientFilter& f) {
+    return {{"original", f.original},         {"replies", f.replies},
+            {"replies_to_me", f.replies_to_me}, {"threads", f.threads},
+            {"boosts", f.boosts},             {"quotes", f.quotes},
+            {"media", f.media},               {"no_media", f.no_media},
+            {"my_posts", f.my_posts},         {"my_replies", f.my_replies},
+            {"text", f.text}};
+}
+
+ClientFilter client_filter_from_json(const json& j) {
+    ClientFilter f;
+    f.original = j.value("original", true);
+    f.replies = j.value("replies", true);
+    f.replies_to_me = j.value("replies_to_me", true);
+    f.threads = j.value("threads", true);
+    f.boosts = j.value("boosts", true);
+    f.quotes = j.value("quotes", true);
+    f.media = j.value("media", true);
+    f.no_media = j.value("no_media", true);
+    f.my_posts = j.value("my_posts", true);
+    f.my_replies = j.value("my_replies", true);
+    f.text = j.value("text", std::string{});
+    return f;
+}
+
+json server_filter_to_json(const ServerFilter& f) {
+    json ctx = json::array();
+    for (const auto& c : f.context)
+        ctx.push_back(c);
+    json kws = json::array();
+    for (const auto& k : f.keywords)
+        kws.push_back({{"id", k.id}, {"keyword", k.keyword}, {"whole_word", k.whole_word}});
+    json j = {{"id", f.id},   {"title", f.title}, {"action", f.action},
+              {"context", ctx}, {"keywords", kws}};
+    if (f.expires_at)
+        j["expires_at"] = *f.expires_at;
+    return j;
+}
+
+ServerFilter server_filter_from_json(const json& j) {
+    ServerFilter f;
+    f.id = j.value("id", std::string{});
+    f.title = j.value("title", std::string{});
+    f.action = j.value("action", std::string("warn"));
+    f.expires_in = j.value("expires_in", 0);
+    if (auto it = j.find("context"); it != j.end() && it->is_array())
+        for (const auto& c : *it)
+            if (c.is_string())
+                f.context.push_back(c.get<std::string>());
+    if (auto it = j.find("keywords"); it != j.end() && it->is_array())
+        for (const auto& k : *it) {
+            ServerFilterKeyword kw;
+            kw.id = k.value("id", std::string{});
+            kw.keyword = k.value("keyword", std::string{});
+            kw.whole_word = k.value("whole_word", true);
+            if (!kw.keyword.empty())
+                f.keywords.push_back(std::move(kw));
+        }
+    return f;
+}
+
 PostDraft draft_from_json(const json& d) {
     PostDraft draft;
     draft.text = d.value("text", std::string{});
@@ -283,6 +344,18 @@ void CoreSession::handle(const json& cmd) {
         cmd_check_for_update(cmd);
     else if (c == "download_update")
         cmd_download_update(cmd);
+    else if (c == "get_client_filter")
+        cmd_get_client_filter();
+    else if (c == "set_client_filter")
+        cmd_set_client_filter(cmd);
+    else if (c == "clear_client_filter")
+        cmd_clear_client_filter();
+    else if (c == "list_server_filters")
+        cmd_list_server_filters();
+    else if (c == "save_server_filter")
+        cmd_save_server_filter(cmd);
+    else if (c == "delete_server_filter")
+        cmd_delete_server_filter(cmd);
 }
 
 // --- lifecycle / accounts ---
@@ -295,6 +368,7 @@ void CoreSession::cmd_start() {
             settings_ = config.settings;
             apply_settings();
             load_positions(); // remembered reading positions (before timelines build)
+            load_client_filters(); // per-timeline client filters (before timelines build)
             rebuild_timelines();
             emit_accounts();
             emit_timelines();
@@ -1583,17 +1657,29 @@ const TimelineItem* CoreSession::find_item(const TimelineController* tc, const s
 
 void CoreSession::apply_timeline_settings(TimelineController& tc) {
     tc.set_max_refresh_pages(settings_.fetch_pages);
-    // Optionally hide mention notifications from the Notifications timeline (e.g.
-    // when a separate Mentions timeline is open).
-    if (tc.source().kind == TimelineSource::Kind::Notifications) {
-        if (settings_.show_mentions_in_notifications)
-            tc.set_filter(nullptr);
-        else
-            tc.set_filter([](const TimelineItem& item) {
-                const Notification* n = item.notification();
-                return !(n && n->type == Notification::Kind::Mention);
-            });
-    }
+    // Compose the display filter (raw rows are untouched; only visible_ changes):
+    //  1. server-side "hide" filters (Mastodon) always apply, everywhere;
+    //  2. optionally hide mention notifications from the Notifications timeline;
+    //  3. the per-timeline client-side filter, if one is saved.
+    const bool hide_mentions = tc.source().kind == TimelineSource::Kind::Notifications &&
+                               !settings_.show_mentions_in_notifications;
+    ClientFilter client;
+    if (auto it = client_filters_.find(tc.cache_key()); it != client_filters_.end())
+        client = it->second;
+    const bool has_client = client.is_active();
+    const std::string me_id = tc.account() ? tc.account()->me().id : std::string{};
+    tc.set_filter([hide_mentions, has_client, client, me_id](const TimelineItem& item) {
+        if (const Status* s = item.status(); s && s->any_filter_hides())
+            return false; // server-side hide
+        if (hide_mentions) {
+            const Notification* n = item.notification();
+            if (n && n->type == Notification::Kind::Mention)
+                return false;
+        }
+        if (has_client && !client_filter_should_show(client, item, me_id))
+            return false;
+        return true;
+    });
 }
 
 void CoreSession::apply_settings() {
@@ -1618,6 +1704,140 @@ void CoreSession::save_config() {
     config.settings = settings_;
     const auto path = config_path_;
     worker_.post([config, path] { store::AppConfigStore(path).save(config); });
+}
+
+// --- filters ---
+
+void CoreSession::emit_client_filter() {
+    TimelineController* tc = current();
+    ClientFilter f;
+    if (tc)
+        if (auto it = client_filters_.find(tc->cache_key()); it != client_filters_.end())
+            f = it->second;
+    emit({{"event", "client_filter"},
+          {"available", tc != nullptr},
+          {"filter", client_filter_to_json(f)}});
+}
+
+void CoreSession::cmd_get_client_filter() { emit_client_filter(); }
+
+void CoreSession::cmd_set_client_filter(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    ClientFilter f = client_filter_from_json(cmd.value("filter", json::object()));
+    const std::string key = tc->cache_key();
+    if (f.is_active())
+        client_filters_[key] = f;
+    else
+        client_filters_.erase(key); // an all-pass filter is the same as none
+    save_client_filters();
+    apply_timeline_settings(*tc); // set_filter re-applies + emits the visible list
+}
+
+void CoreSession::cmd_clear_client_filter() {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    client_filters_.erase(tc->cache_key());
+    save_client_filters();
+    apply_timeline_settings(*tc);
+}
+
+void CoreSession::cmd_list_server_filters() {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || !acct->supports_server_filters()) {
+        emit({{"event", "server_filters"}, {"supported", false}, {"filters", json::array()}});
+        return;
+    }
+    worker_.post([this, acct] {
+        auto filters = acct->list_server_filters();
+        loop_.post([this, filters = std::move(filters)]() mutable {
+            json arr = json::array();
+            for (const auto& f : filters)
+                arr.push_back(server_filter_to_json(f));
+            emit({{"event", "server_filters"}, {"supported", true}, {"filters", arr}});
+        });
+    });
+}
+
+void CoreSession::cmd_save_server_filter(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || !acct->supports_server_filters())
+        return;
+    ServerFilter f = server_filter_from_json(cmd.value("filter", json::object()));
+    const bool is_update = !f.id.empty();
+    worker_.post([this, acct, f, is_update] {
+        const bool ok = is_update ? acct->update_server_filter(f) : acct->create_server_filter(f);
+        auto filters = acct->list_server_filters();
+        loop_.post([this, ok, is_update, filters = std::move(filters)]() mutable {
+            json arr = json::array();
+            for (const auto& x : filters)
+                arr.push_back(server_filter_to_json(x));
+            emit({{"event", "server_filters"}, {"supported", true}, {"filters", arr}});
+            emit_announce(ok ? (is_update ? "Filter updated." : "Filter created.")
+                             : "Couldn't save the filter.");
+        });
+    });
+}
+
+void CoreSession::cmd_delete_server_filter(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || !acct->supports_server_filters())
+        return;
+    const std::string id = cmd.value("id", std::string{});
+    if (id.empty())
+        return;
+    worker_.post([this, acct, id] {
+        const bool ok = acct->delete_server_filter(id);
+        auto filters = acct->list_server_filters();
+        loop_.post([this, ok, filters = std::move(filters)]() mutable {
+            json arr = json::array();
+            for (const auto& x : filters)
+                arr.push_back(server_filter_to_json(x));
+            emit({{"event", "server_filters"}, {"supported", true}, {"filters", arr}});
+            emit_announce(ok ? "Filter deleted." : "Couldn't delete the filter.");
+        });
+    });
+}
+
+std::filesystem::path CoreSession::client_filters_path() const {
+    return config_path_.parent_path() / "client_filters.json";
+}
+
+void CoreSession::load_client_filters() {
+    client_filters_.clear();
+    std::ifstream in(client_filters_path(), std::ios::binary);
+    if (!in)
+        return;
+    try {
+        json root;
+        in >> root;
+        if (root.is_object())
+            for (const auto& [key, j] : root.items())
+                if (j.is_object())
+                    client_filters_[key] = client_filter_from_json(j);
+    } catch (...) {
+    }
+}
+
+void CoreSession::save_client_filters() const {
+    json root = json::object();
+    for (const auto& [key, f] : client_filters_)
+        root[key] = client_filter_to_json(f);
+    const std::string blob = root.dump();
+    const std::filesystem::path path = client_filters_path();
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+        out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec)
+        std::filesystem::remove(tmp, ec);
 }
 
 std::filesystem::path CoreSession::positions_path() const {

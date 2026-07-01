@@ -4,6 +4,9 @@ FastSMRW changelog
 0.0.5 (in development)
 ----------------------
 
+- Client filters (Timeline menu, or Ctrl+Shift+F): pick which kinds of posts a timeline shows - originals, replies, replies to you, threads, boosts, quotes, with/without media, your own posts - and hide anything not containing some text; hidden posts are just hidden, so new ones still arrive and stay filtered.
+- Server filters (Application > Server Filters, Mastodon): create, edit and delete your account's keyword filters with their contexts, hide-or-warn action and expiry; posts your server marks as filtered are hidden, or read out with a "Filtered" note.
+
 - New Speech option "Repeat the item when you hit the top or bottom of a timeline": with the invisible interface or layer, choose whether bumping an edge re-speaks the current post (still plays the boundary sound either way).
 - Portable mode: put a "userdata" folder next to FastSMRW.exe and all your settings, accounts and cache are stored there instead of in AppData, so you can carry FastSM on a USB stick.
 - Fixed: adding your first account now loads it right away instead of showing nothing until you restart.

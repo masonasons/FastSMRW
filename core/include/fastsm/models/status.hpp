@@ -13,6 +13,13 @@
 
 namespace fastsm {
 
+// A server-side filter (Mastodon /api/v2/filters) that matched this status, as
+// reported by the server in the status's `filtered` array.
+struct StatusFilterMatch {
+    std::string title;  // the filter's human-readable title
+    bool hide = false;  // filter_action: true = "hide", false = "warn"
+};
+
 // A post/status. Boosts and quotes reference another Status via shared_ptr to
 // break the recursion (the Swift core uses a boxed indirect enum).
 struct Status {
@@ -38,6 +45,7 @@ struct Status {
     bool favourited = false;
     bool boosted = false;
     std::optional<std::string> application_name; // posting client ("via ...")
+    std::vector<StatusFilterMatch> filtered;     // server-side filters that matched (Mastodon)
     std::optional<std::string> instance_url;     // remote instance, if fetched abroad
     std::string url;                             // canonical web URL (open in browser)
     Platform platform = Platform::Mastodon;
@@ -49,6 +57,15 @@ struct Status {
 
     bool is_boost() const { return reblog != nullptr; }
     bool has_content_warning() const { return spoiler_text && !spoiler_text->empty(); }
+
+    // True if any server-side filter with action "hide" matched (the row should be
+    // removed from the visible list). Considers the boosted post too.
+    bool any_filter_hides() const {
+        for (const auto& f : filtered)
+            if (f.hide)
+                return true;
+        return reblog ? reblog->any_filter_hides() : false;
+    }
 
     // The status to actually display: the boosted one if this is a boost.
     const Status& display_status() const { return reblog ? *reblog : *this; }

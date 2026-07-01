@@ -6,6 +6,7 @@
 #include "fastsm/models/media.hpp"
 #include "fastsm/models/notification.hpp"
 #include "fastsm/models/platform.hpp"
+#include "fastsm/models/server_filter.hpp"
 #include "fastsm/models/status.hpp"
 #include "fastsm/models/timeline_item.hpp"
 #include "fastsm/models/user.hpp"

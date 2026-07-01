@@ -18,6 +18,8 @@
 
 namespace fastsmui {
 
+class ServerFiltersDialog; // manager modal; non-null while open (like keymap_mgr_)
+
 // The main application window: a left "Timelines" list and a right virtual
 // "Timeline" posts list. It is a pure client of the core's C ABI: it dispatches
 // JSON commands and renders JSON events; it holds no engine logic, only a cache
@@ -105,6 +107,8 @@ private:
     void ev_layer_keymap(const nlohmann::json& e);
     void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
+    void ev_client_filter(const nlohmann::json& e);  // open the per-timeline client filter dialog
+    void ev_server_filters(const nlohmann::json& e); // open / refresh the server filters manager
     void ev_update_status(const nlohmann::json& e); // check result -> prompt / announce
     void ev_update_ready(const nlohmann::json& e);  // downloaded -> swap + restart
     // Apply the current invisible-interface mode (from settings_): (re)load the
@@ -139,6 +143,7 @@ private:
     std::map<std::string, std::string> invisible_bindings_; // key -> action
     std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager
     KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open
+    ServerFiltersDialog* server_filters_mgr_ = nullptr;     // non-null while its modal is open
     std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
     std::string layer_help_message_;                        // spoken on "/" in the layer
     std::map<std::string, std::string> layer_bindings_;     // cached bare-key layer map

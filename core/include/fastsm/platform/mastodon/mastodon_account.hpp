@@ -44,6 +44,12 @@ public:
     bool unblock(const std::string& id) override;
     bool set_show_boosts(const std::string& id, bool show) override;
 
+    bool supports_server_filters() const override { return true; }
+    std::vector<ServerFilter> list_server_filters() override;
+    bool create_server_filter(const ServerFilter& filter) override;
+    bool update_server_filter(const ServerFilter& filter) override;
+    bool delete_server_filter(const std::string& id) override;
+
     std::optional<StreamRequest> user_stream_request() const override;
     std::optional<StreamItem> parse_stream_event(const std::string& event,
                                                  const std::string& data) const override;

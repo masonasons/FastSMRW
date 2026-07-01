@@ -132,6 +132,18 @@ Status map_status(const json& j) {
         if (std::string name = str(*it, "name"); !name.empty())
             s.application_name = name;
     }
+    // Server-side filters that matched this status (Mastodon /api/v2/filters).
+    if (auto it = j.find("filtered"); it != j.end() && it->is_array()) {
+        for (const auto& fr : *it) {
+            auto f = fr.find("filter");
+            if (f == fr.end() || !f->is_object())
+                continue;
+            StatusFilterMatch m;
+            m.title = str(*f, "title");
+            m.hide = str(*f, "filter_action") == "hide";
+            s.filtered.push_back(std::move(m));
+        }
+    }
     if (auto it = j.find("media_attachments"); it != j.end() && it->is_array()) {
         for (const auto& m : *it)
             s.media_attachments.push_back(map_media(m));

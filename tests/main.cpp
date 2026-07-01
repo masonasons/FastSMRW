@@ -75,6 +75,12 @@ void test_update_version_compare();
 void test_update_stable_branch();
 void test_update_latest_branch();
 
+// From test_filters.cpp
+void test_client_filter_post_types();
+void test_client_filter_media_and_me();
+void test_client_filter_text();
+void test_server_filter_metadata();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -136,6 +142,10 @@ int main() {
     test_update_version_compare();
     test_update_stable_branch();
     test_update_latest_branch();
+    test_client_filter_post_types();
+    test_client_filter_media_and_me();
+    test_client_filter_text();
+    test_server_filter_metadata();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

@@ -544,6 +544,123 @@ bool MastodonAccount::set_show_boosts(const std::string& id, bool show) {
                    "application/x-www-form-urlencoded", body, status);
 }
 
+// --- Server-side filters (Mastodon /api/v2/filters) ---
+
+namespace {
+
+ServerFilter parse_server_filter(const json& j) {
+    ServerFilter f;
+    f.id = j.value("id", std::string{});
+    f.title = j.value("title", std::string{});
+    f.action = j.value("filter_action", std::string("warn"));
+    if (auto it = j.find("context"); it != j.end() && it->is_array())
+        for (const auto& c : *it)
+            if (c.is_string())
+                f.context.push_back(c.get<std::string>());
+    if (auto it = j.find("expires_at"); it != j.end() && it->is_string())
+        f.expires_at = util::parse_iso8601(it->get<std::string>());
+    if (auto it = j.find("keywords"); it != j.end() && it->is_array())
+        for (const auto& k : *it) {
+            ServerFilterKeyword kw;
+            kw.id = k.value("id", std::string{});
+            kw.keyword = k.value("keyword", std::string{});
+            kw.whole_word = k.value("whole_word", true);
+            f.keywords.push_back(std::move(kw));
+        }
+    return f;
+}
+
+// Build the shared title/context/action/expiry params for create & update.
+void append_filter_fields(std::vector<std::pair<std::string, std::string>>& p,
+                          const ServerFilter& f) {
+    p.push_back({"title", f.title});
+    p.push_back({"filter_action", f.action});
+    for (const auto& c : f.context)
+        p.push_back({"context[]", c});
+    // Only send expires_in when setting a window. Sending it empty risks being
+    // read as 0 (immediately expired), so "never" simply omits it.
+    if (f.expires_in > 0)
+        p.push_back({"expires_in", std::to_string(f.expires_in)});
+}
+
+} // namespace
+
+std::vector<ServerFilter> MastodonAccount::list_server_filters() {
+    const std::string url = credentials_.instance_url + "/api/v2/filters";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return {};
+    std::vector<ServerFilter> out;
+    try {
+        const json arr = json::parse(body);
+        if (arr.is_array())
+            for (const auto& j : arr)
+                out.push_back(parse_server_filter(j));
+    } catch (...) {
+    }
+    return out;
+}
+
+bool MastodonAccount::create_server_filter(const ServerFilter& filter) {
+    std::vector<std::pair<std::string, std::string>> p;
+    append_filter_fields(p, filter);
+    int i = 0;
+    for (const auto& kw : filter.keywords) {
+        const std::string base = "keywords_attributes[" + std::to_string(i++) + "]";
+        p.push_back({base + "[keyword]", kw.keyword});
+        p.push_back({base + "[whole_word]", kw.whole_word ? "true" : "false"});
+    }
+    const std::string url = credentials_.instance_url + "/api/v2/filters";
+    std::string body;
+    long status = 0;
+    return request("POST", url, util::form_encode(p), "application/x-www-form-urlencoded", body,
+                   status);
+}
+
+bool MastodonAccount::update_server_filter(const ServerFilter& filter) {
+    // Replace the keyword set wholesale (like FastSM): destroy every existing
+    // keyword, then add the current ones fresh. Fetch the live filter to learn
+    // the existing keyword ids.
+    const std::string base_url = credentials_.instance_url + "/api/v2/filters/" + filter.id;
+    std::vector<std::pair<std::string, std::string>> p;
+    append_filter_fields(p, filter);
+    int i = 0;
+    {
+        std::string body;
+        long status = 0;
+        if (request("GET", base_url, "", "", body, status)) {
+            try {
+                const ServerFilter live = parse_server_filter(json::parse(body));
+                for (const auto& kw : live.keywords) {
+                    if (kw.id.empty())
+                        continue;
+                    const std::string b = "keywords_attributes[" + std::to_string(i++) + "]";
+                    p.push_back({b + "[id]", kw.id});
+                    p.push_back({b + "[_destroy]", "true"});
+                }
+            } catch (...) {
+            }
+        }
+    }
+    for (const auto& kw : filter.keywords) {
+        const std::string b = "keywords_attributes[" + std::to_string(i++) + "]";
+        p.push_back({b + "[keyword]", kw.keyword});
+        p.push_back({b + "[whole_word]", kw.whole_word ? "true" : "false"});
+    }
+    std::string body;
+    long status = 0;
+    return request("PUT", base_url, util::form_encode(p), "application/x-www-form-urlencoded", body,
+                   status);
+}
+
+bool MastodonAccount::delete_server_filter(const std::string& id) {
+    const std::string url = credentials_.instance_url + "/api/v2/filters/" + id;
+    std::string body;
+    long status = 0;
+    return request("DELETE", url, "", "", body, status);
+}
+
 std::optional<StreamRequest> MastodonAccount::user_stream_request() const {
     // The user stream delivers home-timeline updates + notifications over SSE.
     StreamRequest r;

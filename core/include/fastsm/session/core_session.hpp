@@ -18,6 +18,7 @@
 #include "fastsm/store/account_store.hpp"
 #include "fastsm/store/app_settings.hpp"
 #include "fastsm/store/timeline_cache.hpp"
+#include "fastsm/timeline/client_filter.hpp"
 #include "fastsm/timeline/movement.hpp"
 #include "fastsm/timeline/streaming_client.hpp"
 #include "fastsm/timeline/timeline_controller.hpp"
@@ -94,6 +95,19 @@ private:
     void cmd_remove_account(const nlohmann::json& cmd);
     void cmd_play_earcon(const nlohmann::json& cmd);
 
+    // --- filters (per-timeline client-side + Mastodon server-side) ---
+    void cmd_get_client_filter();               // emit the current timeline's client filter
+    void cmd_set_client_filter(const nlohmann::json& cmd); // {filter} -> save + apply
+    void cmd_clear_client_filter();             // drop the current timeline's client filter
+    void cmd_list_server_filters();             // emit server_filters {supported, filters}
+    void cmd_save_server_filter(const nlohmann::json& cmd);   // create or update
+    void cmd_delete_server_filter(const nlohmann::json& cmd); // {id}
+    void emit_client_filter();                  // client_filter event for the current timeline
+    // Per-timeline client filters (cache_key -> filter), remembered across restarts.
+    std::filesystem::path client_filters_path() const;
+    void load_client_filters();
+    void save_client_filters() const;
+
     // --- invisible interface (global hotkeys / keyhook / layer) ---
     void cmd_get_action_catalog();
     void cmd_get_keymap(const nlohmann::json& cmd);   // {name?} -> resolved bindings
@@ -169,6 +183,7 @@ private:
     std::filesystem::path config_path_;
     std::filesystem::path bundled_keymaps_dir_; // read-only keymaps shipped with the app
     std::map<std::string, std::string> positions_; // cache_key -> remembered selected id
+    std::map<std::string, ClientFilter> client_filters_; // cache_key -> per-timeline client filter
     std::function<void(const std::string&)> emit_;
 
     std::unique_ptr<net::IHttpClient> http_;

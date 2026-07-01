@@ -9,7 +9,9 @@
 #include "../resources/resource.h"
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
+#include "client_filters_dialog.hpp"
 #include "new_timeline_dialog.hpp"
+#include "server_filters_dialog.hpp"
 #include "post_info_dialog.hpp"
 #include "user_profile_dialog.hpp"
 #include "settings_dialog.hpp"
@@ -62,6 +64,8 @@ enum {
     ID_FIND_PREV,
     ID_CHECK_UPDATES,
     ID_HIDE_WINDOW,
+    ID_CLIENT_FILTER,
+    ID_SERVER_FILTER,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -137,6 +141,7 @@ HMENU build_menu() {
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+,");
     AppendMenuW(app, MF_STRING, ID_KEYMAP_MANAGER, L"&Keyboard Manager…");
+    AppendMenuW(app, MF_STRING, ID_SERVER_FILTER, L"Ser&ver Filters…");
     AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
@@ -167,6 +172,8 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_STRING, ID_FIND, L"&Find…\tCtrl+F");
     AppendMenuW(timeline, MF_STRING, ID_FIND_NEXT, L"Find &Next\tF3");
     AppendMenuW(timeline, MF_STRING, ID_FIND_PREV, L"Find &Previous\tShift+F3");
+    AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(timeline, MF_STRING, ID_CLIENT_FILTER, L"C&lient Filters…\tCtrl+Shift+F");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"Clea&r Timeline\tCtrl+Delete");
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_ALL, L"Clear &All Timelines\tCtrl+Shift+Delete");
@@ -239,6 +246,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL | FSHIFT, VK_DELETE, ID_CLEAR_ALL}, // clear every timeline
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
         {FVIRTKEY | FCONTROL, 'F', ID_FIND},         // Ctrl+F: find in timeline
+        {FVIRTKEY | FCONTROL | FSHIFT, 'F', ID_CLIENT_FILTER}, // Ctrl+Shift+F: client filters
         {FVIRTKEY, VK_F3, ID_FIND_NEXT},             // F3: find next
         {FVIRTKEY | FSHIFT, VK_F3, ID_FIND_PREV},    // Shift+F3: find previous
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
@@ -1023,6 +1031,12 @@ void MainWindow::handle_command(int id) {
     case ID_KEYMAP_MANAGER:
         open_keymap_manager(hwnd_);
         break;
+    case ID_CLIENT_FILTER:
+        dispatch_cmd({{"cmd", "get_client_filter"}}); // core replies with client_filter -> dialog
+        break;
+    case ID_SERVER_FILTER:
+        dispatch_cmd({{"cmd", "list_server_filters"}}); // core replies with server_filters -> dialog
+        break;
     case ID_CHECK_UPDATES:
         announce("Checking for updates…");
         dispatch_cmd({{"cmd", "check_for_update"}, {"silent", false}});
@@ -1180,6 +1194,10 @@ void MainWindow::on_event(const std::string& js) {
         ev_action_catalog(e);
     else if (ev == "invisible_ui_action")
         ev_invisible_ui_action(e);
+    else if (ev == "client_filter")
+        ev_client_filter(e);
+    else if (ev == "server_filters")
+        ev_server_filters(e);
     else if (ev == "update_status")
         ev_update_status(e);
     else if (ev == "update_ready")
@@ -1449,6 +1467,60 @@ void MainWindow::open_keymap_manager(HWND parent) {
     keymap_mgr_ = &dlg;
     dlg.run(parent);
     keymap_mgr_ = nullptr;
+}
+
+void MainWindow::ev_client_filter(const json& e) {
+    if (!e.value("available", false)) {
+        announce("Open a timeline first to filter it.");
+        return;
+    }
+    const json f = e.value("filter", json::object());
+    ClientFilterValues v;
+    v.original = f.value("original", true);
+    v.replies = f.value("replies", true);
+    v.replies_to_me = f.value("replies_to_me", true);
+    v.threads = f.value("threads", true);
+    v.boosts = f.value("boosts", true);
+    v.quotes = f.value("quotes", true);
+    v.media = f.value("media", true);
+    v.no_media = f.value("no_media", true);
+    v.my_posts = f.value("my_posts", true);
+    v.my_replies = f.value("my_replies", true);
+    v.text = to_wide(f.value("text", std::string{}));
+    switch (show_client_filter_dialog(hwnd_, inst_, v)) {
+    case ClientFilterAction::Apply: {
+        json nf = {{"original", v.original},         {"replies", v.replies},
+                   {"replies_to_me", v.replies_to_me}, {"threads", v.threads},
+                   {"boosts", v.boosts},             {"quotes", v.quotes},
+                   {"media", v.media},               {"no_media", v.no_media},
+                   {"my_posts", v.my_posts},         {"my_replies", v.my_replies},
+                   {"text", to_utf8(v.text)}};
+        dispatch_cmd({{"cmd", "set_client_filter"}, {"filter", nf}});
+        announce("Filter applied.");
+        break;
+    }
+    case ClientFilterAction::Clear:
+        dispatch_cmd({{"cmd", "clear_client_filter"}});
+        announce("Filter cleared.");
+        break;
+    case ClientFilterAction::Cancel:
+        break;
+    }
+}
+
+void MainWindow::ev_server_filters(const json& e) {
+    if (server_filters_mgr_) { // manager is open: live-refresh its list
+        server_filters_mgr_->on_server_filters(e);
+        return;
+    }
+    if (!e.value("supported", false)) {
+        announce("Server filters are only available for Mastodon accounts.");
+        return;
+    }
+    ServerFiltersDialog dlg(inst_, [this](const json& cmd) { dispatch_cmd(cmd); });
+    server_filters_mgr_ = &dlg;
+    dlg.run(hwnd_, e);
+    server_filters_mgr_ = nullptr;
 }
 
 void MainWindow::ev_invisible_ui_action(const json& e) {

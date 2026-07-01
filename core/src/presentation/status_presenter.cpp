@@ -165,6 +165,18 @@ std::optional<std::string> status_field_string(StatusSpeechField field, const St
     return std::nullopt;
 }
 
+namespace {
+// Titles of the server-side filters that matched (warn action), unwrapping a
+// boost. Hide-action rows are removed before display, so what remains is "warn".
+void collect_filter_titles(const Status& s, std::vector<std::string>& out) {
+    for (const auto& f : s.filtered)
+        if (!f.title.empty())
+            out.push_back(f.title);
+    if (s.reblog)
+        collect_filter_titles(*s.reblog, out);
+}
+} // namespace
+
 std::string accessibility_label(const Status& s, std::int64_t now,
                                 const std::vector<SpeechItem<StatusSpeechField>>& fields) {
     std::vector<std::string> parts;
@@ -174,7 +186,14 @@ std::string accessibility_label(const Status& s, std::int64_t now,
         if (auto str = status_field_string(item.field, s, now); str && !str->empty())
             parts.push_back(std::move(*str));
     }
-    return join(parts, ", ");
+    std::string label = join(parts, ", ");
+    std::vector<std::string> titles;
+    collect_filter_titles(s, titles);
+    if (!titles.empty()) {
+        std::string prefix = "Filtered: " + join(titles, ", ");
+        return label.empty() ? prefix : prefix + ". " + label;
+    }
+    return label;
 }
 
 std::string accessibility_label(const Status& s, std::int64_t now) {

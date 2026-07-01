@@ -153,6 +153,17 @@ public:
     // Show or hide a followed account's boosts in the home timeline.
     virtual bool set_show_boosts(const std::string&, bool) { return false; }
 
+    // --- Server-side keyword filters (optional; Mastodon /api/v2/filters) ---
+    // Whether this platform exposes managed server filters at all (Mastodon yes,
+    // Bluesky no). The UI shows an "only for Mastodon" notice when false.
+    virtual bool supports_server_filters() const { return false; }
+    // CRUD; all run synchronously on the worker thread. list returns the current
+    // set; create/update/delete return success.
+    virtual std::vector<ServerFilter> list_server_filters() { return {}; }
+    virtual bool create_server_filter(const ServerFilter&) { return false; }
+    virtual bool update_server_filter(const ServerFilter&) { return false; }
+    virtual bool delete_server_filter(const std::string&) { return false; }
+
     // --- Real-time streaming (optional; Mastodon SSE user stream) ---
 
     // The long-lived request to open for the user's real-time stream, or nullopt
