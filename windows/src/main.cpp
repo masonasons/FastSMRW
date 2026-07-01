@@ -68,6 +68,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     nlohmann::json cfg;
     cfg["config_dir"] = to_utf8(fastsm::store::config_dir().wstring());
     cfg["soundpacks_dir"] = to_utf8((exe_dir() / L"soundpacks").wstring());
+    cfg["keymaps_dir"] = to_utf8((exe_dir() / L"keymaps").wstring()); // bundled built-in keymaps
     cfg["user_agent"] = "FastSMRW/0.0.1";
     const std::string cfg_str = cfg.dump();
 

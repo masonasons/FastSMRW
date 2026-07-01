@@ -192,7 +192,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"Edit", "Edit post", "alt+win+e"},
         {"Post", "New post", "alt+win+n"},
         {"BoostToggle", "Boost / Unboost", "control+shift+win+r"},
-        {"LikeToggle", "Like / Unlike", "alt+win+k"},
+        {"LikeToggle", "Like / Unlike", "alt+win+i"},
         {"View", "Post info", "alt+win+v"},
         {"Url", "Open post URL", "alt+win+return"},
         {"open_thread", "View thread", "alt+win+t"},

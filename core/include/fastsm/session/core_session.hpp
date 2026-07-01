@@ -34,6 +34,7 @@ public:
     struct Paths {
         std::filesystem::path config_dir;         // holds config.json + cache/ + soundpacks/
         std::filesystem::path bundled_soundpacks; // packs shipped with the app
+        std::filesystem::path bundled_keymaps;    // read-only keymaps shipped with the app
     };
 
     CoreSession(Paths paths, std::unique_ptr<net::IHttpClient> http,
@@ -100,9 +101,12 @@ private:
     void cmd_delete_keymap(const nlohmann::json& cmd);
     void cmd_perform_action(const nlohmann::json& cmd); // {action}
     void cmd_set_window_shown(const nlohmann::json& cmd); // persist window visibility
-    // Keymap file location + loading (files live in <config>/keymaps/*.keymap).
-    std::filesystem::path keymaps_dir() const;
-    std::vector<std::string> list_keymaps() const;    // "default" + user keymaps
+    // Keymap file location + loading. User keymaps live in <config>/keymaps and are
+    // editable; built-in keymaps ship in the app's keymaps folder and are read-only.
+    std::filesystem::path keymaps_dir() const; // the user (editable) keymaps dir
+    bool is_user_keymap(const std::string& name) const; // has an editable user file
+    std::optional<std::filesystem::path> keymap_file(const std::string& name) const; // user, else bundled
+    std::vector<std::string> list_keymaps() const; // "default" + user + built-in keymaps
     void emit_keymap(const std::string& name);
     // Invisible navigation helpers: move the current timeline's position without a
     // visible list, emitting select_row (list follows if shown) + a spoken label.
@@ -135,6 +139,7 @@ private:
     nlohmann::json row_json(const TimelineItem& item, std::int64_t now) const;
 
     std::filesystem::path config_path_;
+    std::filesystem::path bundled_keymaps_dir_; // read-only keymaps shipped with the app
     std::function<void(const std::string&)> emit_;
 
     std::unique_ptr<net::IHttpClient> http_;

@@ -51,7 +51,10 @@ private:
     // (key, source) for an action: source is "default", "custom", or "unbound".
     std::pair<std::string, std::string> effective(const std::string& action) const;
     std::string selected_action() const;
-    bool editable() const { return !current_name_.empty() && current_name_ != "default"; }
+    bool is_builtin(const std::string& name) const {
+        return name == "default" || builtins_.count(name) > 0;
+    }
+    bool editable() const { return !current_name_.empty() && !is_builtin(current_name_); }
     void switch_keymap(const std::string& name); // request + edit another keymap
     void do_set_binding();
     void do_unbind();
@@ -68,6 +71,7 @@ private:
 
     HWND dlg_ = nullptr;
     std::vector<std::string> keymaps_{"default"};
+    std::set<std::string> builtins_;       // read-only keymaps (default + shipped built-ins)
     std::string current_name_;             // keymap being edited
     std::string requested_name_;           // name of the last get_keymap we sent
     std::map<std::string, std::string> overrides_; // action -> key (custom layer)

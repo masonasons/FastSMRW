@@ -39,6 +39,7 @@ fastsm_core* fastsm_core_create(const char* config_json) {
     fastsm::CoreSession::Paths paths;
     paths.config_dir = to_path(cfg.value("config_dir", std::string{}));
     paths.bundled_soundpacks = to_path(cfg.value("soundpacks_dir", std::string{}));
+    paths.bundled_keymaps = to_path(cfg.value("keymaps_dir", std::string{}));
     const std::string user_agent = cfg.value("user_agent", std::string("FastSMRW/0.0.1"));
 
     std::unique_ptr<fastsm::net::IHttpClient> http;

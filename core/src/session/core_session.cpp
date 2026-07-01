@@ -101,9 +101,9 @@ json features_json(const PlatformFeatures& f) {
 
 CoreSession::CoreSession(Paths paths, std::unique_ptr<net::IHttpClient> http,
                          std::function<void(const std::string&)> emit)
-    : config_path_(paths.config_dir / "config.json"), emit_(std::move(emit)),
-      http_(std::move(http)), cache_(paths.config_dir / "cache"), accounts_(http_.get()),
-      stream_(http_.get(), &loop_) {
+    : config_path_(paths.config_dir / "config.json"),
+      bundled_keymaps_dir_(paths.bundled_keymaps), emit_(std::move(emit)), http_(std::move(http)),
+      cache_(paths.config_dir / "cache"), accounts_(http_.get()), stream_(http_.get(), &loop_) {
     sound_.set_bundled_packs_dir(paths.bundled_soundpacks);
     sound_.set_user_packs_dir(paths.config_dir / "soundpacks");
     auto_refresh_thread_ = std::thread([this] { auto_refresh_loop(); });
@@ -979,22 +979,47 @@ std::filesystem::path CoreSession::keymaps_dir() const {
     return config_path_.parent_path() / "keymaps";
 }
 
-std::vector<std::string> CoreSession::list_keymaps() const {
-    std::vector<std::string> names{"default"};
+bool CoreSession::is_user_keymap(const std::string& name) const {
+    if (name.empty() || name == "default")
+        return false;
     std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(keymaps_dir(), ec)) {
-        std::error_code ec2;
-        if (!entry.is_regular_file(ec2))
-            continue;
-        const auto& p = entry.path();
-        if (p.extension() == ".keymap") {
-            const std::string name = p.stem().string();
-            if (name != "default")
-                names.push_back(name);
-        }
+    return std::filesystem::exists(keymaps_dir() / (name + ".keymap"), ec);
+}
+
+std::optional<std::filesystem::path> CoreSession::keymap_file(const std::string& name) const {
+    if (name.empty() || name == "default")
+        return std::nullopt;
+    std::error_code ec;
+    const auto user = keymaps_dir() / (name + ".keymap");
+    if (std::filesystem::exists(user, ec))
+        return user; // user copy wins (shadows a built-in of the same name)
+    if (!bundled_keymaps_dir_.empty()) {
+        const auto builtin = bundled_keymaps_dir_ / (name + ".keymap");
+        if (std::filesystem::exists(builtin, ec))
+            return builtin;
     }
-    std::sort(names.begin() + 1, names.end()); // keep "default" first
-    return names;
+    return std::nullopt;
+}
+
+std::vector<std::string> CoreSession::list_keymaps() const {
+    std::set<std::string> names; // sorted + deduped (user shadows built-in of same name)
+    auto scan = [&](const std::filesystem::path& dir) {
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            std::error_code ec2;
+            if (entry.is_regular_file(ec2) && entry.path().extension() == ".keymap") {
+                const std::string name = entry.path().stem().string();
+                if (name != "default")
+                    names.insert(name);
+            }
+        }
+    };
+    scan(keymaps_dir()); // user (editable)
+    if (!bundled_keymaps_dir_.empty())
+        scan(bundled_keymaps_dir_); // built-in (read-only)
+    std::vector<std::string> out{"default"};
+    out.insert(out.end(), names.begin(), names.end());
+    return out;
 }
 
 void CoreSession::cmd_get_action_catalog() {
@@ -1006,8 +1031,8 @@ void CoreSession::cmd_get_action_catalog() {
 
 void CoreSession::emit_keymap(const std::string& name) {
     input::ParsedKeymap custom;
-    if (!name.empty() && name != "default") {
-        std::ifstream in(keymaps_dir() / (name + ".keymap"), std::ios::binary);
+    if (auto path = keymap_file(name)) { // user copy, else built-in
+        std::ifstream in(*path, std::ios::binary);
         if (in) {
             std::string text((std::istreambuf_iterator<char>(in)),
                              std::istreambuf_iterator<char>());
@@ -1026,13 +1051,22 @@ void CoreSession::emit_keymap(const std::string& name) {
     json unbinds = json::array();
     for (const auto& a : custom.unbinds)
         unbinds.push_back(a);
+    // Which listed keymaps are read-only (default + built-ins shipped with the app,
+    // i.e. everything without an editable user file).
+    const std::vector<std::string> all = list_keymaps();
+    json builtins = json::array();
+    for (const auto& n : all)
+        if (!is_user_keymap(n))
+            builtins.push_back(n);
     emit({{"event", "keymap"},
           {"name", name},
           {"mode", settings_.invisible_mode},
           {"bindings", bindings},
           {"overrides", overrides},
           {"unbinds", unbinds},
-          {"keymaps", list_keymaps()}});
+          {"keymaps", all},
+          {"builtins", builtins},
+          {"editable", is_user_keymap(name)}});
 }
 
 void CoreSession::cmd_get_keymap(const json& cmd) {

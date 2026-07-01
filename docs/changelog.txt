@@ -8,6 +8,7 @@ FastSMRW changelog
 - New Keyboard Manager (Application menu, or the Invisible interface tab): create, edit, unbind, and share custom keymaps; files are interchangeable with the desktop client.
 - Ctrl+Win+W (invisible interface) shows or hides the FastSMRW window from anywhere, and the app remembers whether it was hidden across restarts.
 - New Low-level keyhook mode (Invisible interface tab): captures shortcuts the Windows shell reserves - like Win+arrows - that global hotkeys can't grab.
+- The Keyboard Manager now includes read-only built-in keymaps shipped with the app (drop .keymap files in the program's keymaps folder); Windows 10 and 8.1 keymaps are included.
 - Gaps left when you were away are now remembered and filled in automatically as you scroll down into them, so the timeline stays continuous.
 - The scroll position for loading older posts is saved in the cache, so it keeps working after a restart or account switch.
 - Timelines now load older posts automatically as you reach the bottom (seamless infinite scroll), in every timeline that supports it.

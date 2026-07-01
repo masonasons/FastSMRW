@@ -329,6 +329,11 @@ INT_PTR KeymapManagerDialog::handle(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 
 void KeymapManagerDialog::on_keymap(const json& e) {
     const std::string name = e.value("name", std::string{});
+    if (e.contains("builtins")) {
+        builtins_.clear();
+        for (const auto& n : e["builtins"])
+            builtins_.insert(n.get<std::string>());
+    }
     if (e.contains("keymaps")) {
         keymaps_.clear();
         for (const auto& n : e["keymaps"])
@@ -359,7 +364,7 @@ void KeymapManagerDialog::populate_keymap_combo() {
     int sel = 0;
     for (size_t i = 0; i < keymaps_.size(); ++i) {
         std::wstring label = to_wide(keymaps_[i]);
-        if (keymaps_[i] == "default")
+        if (is_builtin(keymaps_[i]))
             label += L" (built-in)";
         SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
         if (keymaps_[i] == current_name_)

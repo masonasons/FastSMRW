@@ -1,0 +1,5 @@
+alt+win+down=next_item
+alt+win+left=prev_tl
+alt+win+right=next_tl
+alt+win+up=prev_item
+alt+win+k=LikeToggle

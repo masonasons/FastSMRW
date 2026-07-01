@@ -75,5 +75,5 @@ void test_keymap_inheritance() {
     // refresh's default key is gone (unbound).
     CHECK(eff.find("control+alt+win+u") == eff.end());
     // An untouched default (Like) still present.
-    CHECK_EQ(eff["alt+win+k"], std::string("LikeToggle"));
+    CHECK_EQ(eff["alt+win+i"], std::string("LikeToggle"));
 }
