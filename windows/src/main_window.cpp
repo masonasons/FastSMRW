@@ -1136,7 +1136,9 @@ void MainWindow::open_keymap_manager(HWND parent) {
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
     if (a == "ToggleWindow") {
-        if (IsWindowVisible(hwnd_) && GetForegroundWindow() == hwnd_) {
+        // Pure visibility toggle, matching the Python client: shown -> hide,
+        // hidden -> show + raise. Global hotkeys keep working while hidden.
+        if (IsWindowVisible(hwnd_)) {
             ShowWindow(hwnd_, SW_HIDE);
         } else {
             ShowWindow(hwnd_, SW_SHOW);
