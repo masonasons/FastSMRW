@@ -18,6 +18,7 @@
 #include "fastsm/presentation/status_presenter.hpp"
 #include "fastsm/store/app_config.hpp"
 #include "fastsm/update/update_checker.hpp"
+#include "fastsm/util/base64.hpp"
 #include "fastsm/util/date_parsing.hpp"
 
 #include "fastsm/store/settings_json.hpp"
@@ -94,6 +95,17 @@ ServerFilter server_filter_from_json(const json& j) {
 PostDraft draft_from_json(const json& d) {
     PostDraft draft;
     draft.text = d.value("text", std::string{});
+    // Selected reply recipients (Mastodon): prepend "@a @b " to the text. The UI
+    // sends only the handles the user left checked in the recipient list.
+    if (auto m = d.find("mentions"); m != d.end() && m->is_array()) {
+        std::vector<std::string> accts;
+        for (const auto& a : *m)
+            if (a.is_string())
+                accts.push_back(a.get<std::string>());
+        const std::string prefix = present::mention_prefix(accts);
+        if (!prefix.empty())
+            draft.text = prefix + draft.text;
+    }
     if (d.contains("reply_to_id"))
         draft.reply_to_id = d.value("reply_to_id", std::string{});
     if (d.contains("reply_to_url"))
@@ -108,6 +120,19 @@ PostDraft draft_from_json(const json& d) {
         draft.visibility = static_cast<Visibility>(d.value("visibility", 0));
     if (d.contains("scheduled_at"))
         draft.scheduled_at = d.value("scheduled_at", std::int64_t{0});
+    // Media attachments (bytes arrive base64-encoded from the UI, which read the
+    // files). Alt text rides along as `alt`.
+    if (auto at = d.find("attachments"); at != d.end() && at->is_array()) {
+        for (const auto& a : *at) {
+            MediaUpload m;
+            m.filename = a.value("filename", std::string{});
+            m.mime = a.value("mime", std::string{});
+            m.alt = a.value("alt", std::string{});
+            m.bytes = util::base64_decode(a.value("data", std::string{}));
+            if (!m.bytes.empty())
+                draft.attachments.push_back(std::move(m));
+        }
+    }
     if (auto p = d.find("poll"); p != d.end() && p->is_object()) {
         PollDraft poll;
         if (auto opts = p->find("options"); opts != p->end() && opts->is_array())
@@ -162,7 +187,8 @@ std::string relationship_message(const std::string& action, const std::string& h
 json features_json(const PlatformFeatures& f) {
     return {{"visibility", f.visibility},     {"content_warning", f.content_warning},
             {"quote_posts", f.quote_posts},   {"polls", f.polls},
-            {"editing", f.editing},           {"scheduling", f.scheduling}};
+            {"editing", f.editing},           {"scheduling", f.scheduling},
+            {"media", f.media}};
 }
 
 // Stable name for a timeline kind, for persisting the set of open timelines.
@@ -185,6 +211,9 @@ const char* kind_name(TimelineSource::Kind k) {
     case K::SearchPeople: return "searchPeople";
     case K::RemoteLocal: return "remoteLocal";
     case K::RemoteUser: return "remoteUser";
+    case K::List: return "list";
+    case K::Mutes: return "mutes";
+    case K::Blocks: return "blocks";
     }
     return "home";
 }
@@ -207,7 +236,20 @@ std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
     if (s == "searchPeople") return K::SearchPeople;
     if (s == "remoteLocal") return K::RemoteLocal;
     if (s == "remoteUser") return K::RemoteUser;
+    if (s == "list") return K::List;
+    if (s == "mutes") return K::Mutes;
+    if (s == "blocks") return K::Blocks;
     return std::nullopt;
+}
+
+json lists_to_json(const std::vector<TimelineList>& lists) {
+    json arr = json::array();
+    for (const auto& l : lists)
+        arr.push_back({{"id", l.id},
+                       {"title", l.title},
+                       {"replies_policy", l.replies_policy},
+                       {"exclusive", l.exclusive}});
+    return arr;
 }
 
 json source_to_json(const TimelineSource& s) {
@@ -358,6 +400,18 @@ void CoreSession::handle(const json& cmd) {
         cmd_save_server_filter(cmd);
     else if (c == "delete_server_filter")
         cmd_delete_server_filter(cmd);
+    else if (c == "get_user_lists")
+        cmd_get_user_lists(cmd);
+    else if (c == "set_user_list")
+        cmd_set_user_list(cmd);
+    else if (c == "list_lists")
+        cmd_list_lists();
+    else if (c == "create_list")
+        cmd_create_list(cmd);
+    else if (c == "rename_list")
+        cmd_rename_list(cmd);
+    else if (c == "delete_list")
+        cmd_delete_list(cmd);
 }
 
 // --- lifecycle / accounts ---
@@ -594,9 +648,161 @@ void CoreSession::cmd_get_spawnable() {
             tls.push_back({{"kind", "remote_user"},
                            {"title", "Remote User Timeline"},
                            {"input", "User (e.g. name@instance.social)"}});
+            // The account's lists, offered from cache (refreshed below for next time).
+            // Each carries its list id in "param", which the UI echoes back on spawn.
+            if (auto it = lists_by_account_.find(account->account_key());
+                it != lists_by_account_.end()) {
+                for (const auto& l : it->second) {
+                    const std::string ck = "list:" + l.id;
+                    bool open = false;
+                    for (auto& tc : timelines_)
+                        if (tc->source().cache_key() == ck) {
+                            open = true;
+                            break;
+                        }
+                    if (!open)
+                        tls.push_back(
+                            {{"kind", "list"}, {"param", l.id}, {"title", "List: " + l.title}});
+                }
+            }
+            refresh_lists(account); // keep the list cache warm for the next Ctrl+T
         }
     }
     emit({{"event", "spawnable_timelines"}, {"timelines", tls}});
+}
+
+void CoreSession::refresh_lists(SocialAccount* account) {
+    if (!account || account->platform() != Platform::Mastodon)
+        return;
+    const std::string key = account->account_key();
+    worker_.post([this, account, key] {
+        auto lists = account->lists();
+        loop_.post([this, key, lists = std::move(lists)]() mutable {
+            lists_by_account_[key] = std::move(lists);
+        });
+    });
+}
+
+void CoreSession::emit_lists() {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || acct->platform() != Platform::Mastodon) {
+        emit({{"event", "lists"}, {"supported", false}, {"lists", json::array()}});
+        return;
+    }
+    worker_.post([this, acct] {
+        auto lists = acct->lists();
+        const std::string key = acct->account_key();
+        loop_.post([this, key, lists = std::move(lists)]() mutable {
+            lists_by_account_[key] = lists; // keep the Ctrl+T cache fresh too
+            emit({{"event", "lists"}, {"supported", true}, {"lists", lists_to_json(lists)}});
+        });
+    });
+}
+
+void CoreSession::cmd_list_lists() { emit_lists(); }
+
+// Run a list mutation on the worker, then re-fetch the lists, refresh the cache,
+// emit the updated set, and announce the outcome.
+void CoreSession::run_list_mutation(SocialAccount* acct, std::function<bool()> op,
+                                    std::string ok_msg, std::string fail_msg) {
+    const std::string key = acct->account_key();
+    worker_.post([this, acct, key, op = std::move(op), ok_msg = std::move(ok_msg),
+                  fail_msg = std::move(fail_msg)]() mutable {
+        const bool ok = op();
+        auto lists = acct->lists();
+        loop_.post([this, key, ok, lists = std::move(lists), ok_msg = std::move(ok_msg),
+                    fail_msg = std::move(fail_msg)]() mutable {
+            lists_by_account_[key] = lists;
+            emit({{"event", "lists"}, {"supported", true}, {"lists", lists_to_json(lists)}});
+            emit_announce(ok ? ok_msg : fail_msg);
+        });
+    });
+}
+
+void CoreSession::cmd_create_list(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string title = cmd.value("title", std::string{});
+    if (!acct || acct->platform() != Platform::Mastodon || title.empty())
+        return;
+    const std::string rp = cmd.value("replies_policy", std::string("list"));
+    const bool excl = cmd.value("exclusive", false);
+    run_list_mutation(
+        acct, [acct, title, rp, excl] { return acct->create_list(title, rp, excl); },
+        "List created.", "Couldn't create the list.");
+}
+
+void CoreSession::cmd_rename_list(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string id = cmd.value("id", std::string{});
+    const std::string title = cmd.value("title", std::string{});
+    if (!acct || acct->platform() != Platform::Mastodon || id.empty() || title.empty())
+        return;
+    const std::string rp = cmd.value("replies_policy", std::string("list"));
+    const bool excl = cmd.value("exclusive", false);
+    run_list_mutation(
+        acct, [acct, id, title, rp, excl] { return acct->update_list(id, title, rp, excl); },
+        "List updated.", "Couldn't update the list.");
+}
+
+void CoreSession::cmd_delete_list(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string id = cmd.value("id", std::string{});
+    if (!acct || acct->platform() != Platform::Mastodon || id.empty())
+        return;
+    // If the deleted list is open as a timeline, closing is left to the user; the
+    // timeline just stops receiving new items.
+    run_list_mutation(acct, [acct, id] { return acct->delete_list(id); }, "List deleted.",
+                      "Couldn't delete the list.");
+}
+
+void CoreSession::cmd_get_user_lists(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string account_id = cmd.value("account_id", std::string{});
+    const std::string acctname = cmd.value("acct", std::string{});
+    if (!acct || acct->platform() != Platform::Mastodon || account_id.empty()) {
+        emit({{"event", "user_lists"}, {"supported", false}, {"lists", json::array()}});
+        return;
+    }
+    worker_.post([this, acct, account_id, acctname] {
+        auto all = acct->lists();
+        auto member = acct->account_lists(account_id);
+        loop_.post([this, account_id, acctname, all = std::move(all),
+                    member = std::move(member)]() mutable {
+            json arr = json::array();
+            for (const auto& l : all) {
+                bool in = false;
+                for (const auto& m : member)
+                    if (m.id == l.id) {
+                        in = true;
+                        break;
+                    }
+                arr.push_back({{"id", l.id}, {"title", l.title}, {"member", in}});
+            }
+            emit({{"event", "user_lists"},
+                  {"supported", true},
+                  {"account_id", account_id},
+                  {"acct", acctname},
+                  {"lists", arr}});
+        });
+    });
+}
+
+void CoreSession::cmd_set_user_list(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string list_id = cmd.value("list_id", std::string{});
+    const std::string account_id = cmd.value("account_id", std::string{});
+    const bool add = cmd.value("add", false);
+    if (!acct || acct->platform() != Platform::Mastodon || list_id.empty() || account_id.empty())
+        return;
+    worker_.post([this, acct, list_id, account_id, add] {
+        const bool ok = acct->set_list_membership(list_id, account_id, add);
+        loop_.post([this, ok, add] {
+            if (!ok)
+                emit_announce(add
+                                  ? "Couldn't add to the list; you may need to follow them first."
+                                  : "Couldn't remove from the list.");
+        });
+    });
 }
 
 void CoreSession::spawn_source(const TimelineSource& src) {
@@ -681,6 +887,29 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
         }
         return;
     }
+    // A Mastodon list: the entry carried its id in "param"; look up its title
+    // from the cached list set for a nice "List: <name>" heading.
+    if (kind == "list") {
+        const std::string id = cmd.value("param", std::string{});
+        if (id.empty())
+            return;
+        std::string title = "List";
+        if (SocialAccount* a = accounts_.selected())
+            if (auto it = lists_by_account_.find(a->account_key()); it != lists_by_account_.end())
+                for (const auto& l : it->second)
+                    if (l.id == id) {
+                        title = l.title;
+                        break;
+                    }
+        spawn_source(TimelineSource::list(id, "List: " + title));
+        return;
+    }
+    if (kind == "mutes" || kind == "blocks") {
+        if (accounts_.selected()->platform() != Platform::Mastodon) {
+            emit_announce("Muted and blocked lists are only available for Mastodon accounts.");
+            return;
+        }
+    }
     if (auto src = source_from_kind(kind))
         spawn_source(*src);
 }
@@ -757,10 +986,11 @@ void CoreSession::emit_user_profile(const User& u) {
     const User user = u;
     const std::string handle = u.acct.empty() ? u.username : u.acct;
     const bool can_hide_boosts = acct && acct->features().hide_boosts;
+    const bool can_use_lists = acct && acct->platform() == Platform::Mastodon;
     // Off-thread: enrich a sparse row (Bluesky) via fetch_profile, compose the
     // text, and fetch the relationship, then emit. Profiling a mention still
     // works (everything is keyed by id).
-    worker_.post([this, acct, user, handle, can_hide_boosts] {
+    worker_.post([this, acct, user, handle, can_hide_boosts, can_use_lists] {
         User full = user;
         if (acct && !user.id.empty())
             if (auto p = acct->fetch_profile(user.id))
@@ -769,14 +999,15 @@ void CoreSession::emit_user_profile(const User& u) {
         std::optional<Relationship> rel;
         if (acct && !user.id.empty())
             rel = acct->relationship(user.id);
-        loop_.post([this, full, text, handle, rel, can_hide_boosts] {
+        loop_.post([this, full, text, handle, rel, can_hide_boosts, can_use_lists] {
             json e = {{"event", "user_profile"},
                       {"text", text},
                       {"account_id", full.id},
                       {"acct", handle},
                       {"url", full.url},
                       {"has_relationship", rel.has_value()},
-                      {"can_hide_boosts", can_hide_boosts}};
+                      {"can_hide_boosts", can_hide_boosts},
+                      {"can_use_lists", can_use_lists}};
             if (rel) {
                 e["following"] = rel->following;
                 e["muting"] = rel->muting;
@@ -1088,8 +1319,14 @@ void CoreSession::cmd_compose_context(const json& cmd) {
     if (mode == "reply" && target) {
         ctx["title"] = "Reply";
         ctx["context_label"] = "Replying to " + target->account.best_name() + ": " + target->text;
-        if (account->platform() == Platform::Mastodon)
-            ctx["prefill_text"] = present::mention_prefix(*target, account->me());
+        // Recipients as a togglable checklist (Mastodon). The UI mentions only the
+        // ones left checked; the mention text is no longer baked into the body.
+        if (account->platform() == Platform::Mastodon) {
+            json parts = json::array();
+            for (const auto& p : present::reply_participants(*target, account->me()))
+                parts.push_back({{"acct", p.acct}, {"display_name", p.display_name}});
+            ctx["reply_participants"] = parts;
+        }
         if (target->visibility)
             ctx["default_visibility"] = static_cast<int>(*target->visibility);
         if (target->spoiler_text)
@@ -1596,6 +1833,7 @@ void CoreSession::rebuild_timelines() {
     const auto saved = load_open_timelines();
     for (SocialAccount* account : accounts_.accounts()) {
         worker_.post([account] { account->load_configuration(); }); // refresh char limit
+        refresh_lists(account); // warm each account's list cache for Ctrl+T
         const std::string key = account->account_key();
         std::vector<TimelineSource> sources;
         if (auto it = saved.find(key); it != saved.end() && !it->second.empty())
@@ -1686,6 +1924,7 @@ const TimelineItem* CoreSession::find_item(const TimelineController* tc, const s
 
 void CoreSession::apply_timeline_settings(TimelineController& tc) {
     tc.set_max_refresh_pages(settings_.fetch_pages);
+    tc.set_reversed(settings_.reverse_timelines); // newest-at-bottom for time-ordered feeds
     // Compose the display filter (raw rows are untouched; only visible_ changes):
     //  1. server-side "hide" filters (Mastodon) always apply, everywhere;
     //  2. optionally hide mention notifications from the Notifications timeline;
@@ -2038,6 +2277,10 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::bookmarks();
     if (kind == "favourites")
         return TimelineSource::favorites();
+    if (kind == "mutes")
+        return TimelineSource::mutes();
+    if (kind == "blocks")
+        return TimelineSource::blocks();
     return std::nullopt;
 }
 
@@ -2103,6 +2346,7 @@ void CoreSession::emit_timeline(int index) {
     emit({{"event", "timeline_updated"},
           {"index", index},
           {"selected_id", tc->selected_id()},
+          {"reversed", tc->reversed()}, // UI flips its load-older direction + default row
           {"rows", std::move(rows)}});
 }
 

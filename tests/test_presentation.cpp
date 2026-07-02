@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "fastsm/presentation/reply_helper.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
 
 using namespace fastsm;
@@ -200,6 +201,34 @@ void test_presenter_stats_nonzero() {
     CHECK_EQ(present::accessibility_label(s, now), std::string("3 boosts, 1 favorite"));
 
     present::SpeechConfig::set_current(present::SpeechSettings::defaults()); // restore
+}
+
+void test_reply_participants() {
+    Status s;
+    s.account.acct = "alice@x.social";
+    s.account.display_name = "Alice";
+    Mention bob;
+    bob.acct = "bob@y.social";
+    bob.username = "bob";
+    Mention me;
+    me.acct = "me@home.social"; // the viewer — must be dropped
+    Mention dup;
+    dup.acct = "Alice@x.social"; // case-insensitive duplicate of the author
+    s.mentions = {bob, me, dup};
+
+    User viewer;
+    viewer.acct = "me@home.social";
+
+    auto parts = present::reply_participants(s, viewer);
+    CHECK_EQ(parts.size(), static_cast<size_t>(2)); // alice + bob, self + dup removed
+    CHECK_EQ(parts[0].acct, std::string("alice@x.social"));
+    CHECK_EQ(parts[0].display_name, std::string("Alice"));
+    CHECK_EQ(parts[1].acct, std::string("bob@y.social"));
+
+    // Only the checked handles get prepended; unchecking everyone yields no prefix.
+    CHECK_EQ(present::mention_prefix({"alice@x.social", "bob@y.social"}),
+             std::string("@alice@x.social @bob@y.social "));
+    CHECK_EQ(present::mention_prefix(std::vector<std::string>{}), std::string(""));
 }
 
 void test_post_links() {

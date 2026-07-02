@@ -19,6 +19,7 @@ struct AppSettings {
     bool confirm_clear_timeline = true;
     bool confirm_block = true;
     bool show_mentions_in_notifications = true;
+    bool reverse_timelines = false; // newest at the bottom (oldest-first) for time-ordered feeds
     int auto_refresh_seconds = 0; // 0 = off; otherwise poll interval
     bool streaming_enabled = false; // real-time streaming (Mastodon)
     // Invisible interface (Windows): control the client from any window.

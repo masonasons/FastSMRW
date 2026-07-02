@@ -44,6 +44,16 @@ public:
     bool unblock(const std::string& id) override;
     bool set_show_boosts(const std::string& id, bool show) override;
 
+    std::vector<TimelineList> lists() override;
+    std::vector<TimelineList> account_lists(const std::string& account_id) override;
+    bool set_list_membership(const std::string& list_id, const std::string& account_id,
+                             bool add) override;
+    bool create_list(const std::string& title, const std::string& replies_policy,
+                     bool exclusive) override;
+    bool update_list(const std::string& id, const std::string& title,
+                     const std::string& replies_policy, bool exclusive) override;
+    bool delete_list(const std::string& id) override;
+
     bool supports_server_filters() const override { return true; }
     std::vector<ServerFilter> list_server_filters() override;
     bool create_server_filter(const ServerFilter& filter) override;
@@ -63,6 +73,9 @@ private:
                  const std::string& content_type, std::string& out_body, long& out_status);
     bool status_action(const std::string& status_id, const char* verb);
     bool account_action(const std::string& id, const char* verb);
+    // Upload one attachment (multipart POST /api/v2/media, with alt text as
+    // description) and return its media id, polling while the server processes it.
+    std::optional<std::string> upload_media(const MediaUpload& a);
 
     // --- Remote timelines (fetched unauthenticated from a foreign instance) ---
     // Look up a username's account id on its home instance (unauthenticated).

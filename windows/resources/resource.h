@@ -39,6 +39,19 @@
 #define IDC_COMPOSE_SCHEDULE   238
 #define IDC_COMPOSE_SCHED_TIME 239
 #define IDC_COMPOSE_COUNTER    250
+#define IDC_COMPOSE_RCP_LABEL  251
+#define IDC_COMPOSE_RECIPIENTS 252
+#define IDC_COMPOSE_MEDIA      253
+#define IDC_COMPOSE_MEDIA_STATUS 254
+
+// Attachments dialog (add media + alt text) launched from the compose dialog.
+#define IDD_ATTACHMENTS        530
+#define IDC_ATT_LIST           531
+#define IDC_ATT_ADD            532
+#define IDC_ATT_REMOVE         533
+#define IDC_ATT_ALT_LABEL      534
+#define IDC_ATT_ALT            535
+#define IDC_ATT_ALT_SET        536
 
 // New Timeline dialog.
 #define IDD_NEW_TIMELINE   240
@@ -55,6 +68,7 @@
 #define IDC_SET_AUTOREFRESH 313
 #define IDC_SET_STREAMING   314
 #define IDC_SET_SHOW_MENTIONS 315
+#define IDC_SET_REVERSE       316
 #define IDD_SET_AUDIO       320
 #define IDC_SET_SOUNDS      321
 #define IDC_SET_SOUNDPACK   322
@@ -186,3 +200,21 @@
 #define IDC_PROFILE_BOOSTS    377
 #define IDC_PROFILE_FOLLOWERS 378
 #define IDC_PROFILE_FOLLOWING 379
+#define IDC_PROFILE_LISTS     500
+
+// User list-membership dialog (add/remove a user from your Mastodon lists).
+#define IDD_LIST_MEMBERSHIP   501
+#define IDC_LM_LIST           502
+#define IDC_LM_HEADING        503
+
+// List Manager (Application menu) + its create/edit sub-dialog.
+#define IDD_LISTS_MANAGER     510
+#define IDC_LSM_LIST          511
+#define IDC_LSM_OPEN          512
+#define IDC_LSM_NEW           513
+#define IDC_LSM_EDIT          514
+#define IDC_LSM_DELETE        515
+#define IDD_LIST_EDIT         516
+#define IDC_LSE_NAME          517
+#define IDC_LSE_REPLIES       518
+#define IDC_LSE_EXCLUSIVE     519

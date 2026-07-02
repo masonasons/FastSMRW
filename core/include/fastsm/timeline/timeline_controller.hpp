@@ -43,6 +43,13 @@ public:
     // Client-side filter chokepoint: predicate returns true to KEEP a row.
     void set_filter(std::function<bool(const TimelineItem&)> predicate);
 
+    // Global "reverse timelines" preference: when on, the visible list is flipped
+    // (oldest at top, newest at bottom) for time-ordered feeds only. raw_ stays
+    // canonical newest-first, so merge/gap/pagination are unaffected — only the
+    // projection into visible_ is reversed. Threads/searches keep their order.
+    void set_reversed(bool reversed);
+    bool reversed() const { return reversed_ && source_.is_time_ordered(); }
+
     void load_cached();
     void refresh();
     void load_older();
@@ -100,8 +107,9 @@ private:
     std::string selected_id_;           // remembered selected row (by id)
     std::string origin_key_;            // where we came from (for close-returns)
     std::vector<std::string> nav_history_; // prior positions, for Go Back (jumps)
-    std::vector<TimelineItem> raw_;     // everything fetched/cached
+    std::vector<TimelineItem> raw_;     // everything fetched/cached (canonical newest-first)
     std::vector<TimelineItem> visible_; // filtered view the UI reads
+    bool reversed_ = false;             // global reverse-timelines preference
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     // Page-boundary cursors (row id -> cursor to fetch the page just below it),

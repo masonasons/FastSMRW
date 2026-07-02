@@ -1,5 +1,8 @@
 #include "fastsm/platform/mastodon/mastodon_account.hpp"
 
+#include <chrono>
+#include <thread>
+
 #include <nlohmann/json.hpp>
 
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
@@ -57,6 +60,7 @@ PlatformFeatures MastodonAccount::features() const {
     f.editing = true;
     f.scheduling = true;
     f.hide_boosts = true;
+    f.media = true;
     return f;
 }
 
@@ -268,6 +272,15 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Hashtag:
         path = "/api/v1/timelines/tag/" + util::percent_encode(source.param);
         break;
+    case TimelineSource::Kind::List:
+        path = "/api/v1/timelines/list/" + util::percent_encode(source.param);
+        break;
+    case TimelineSource::Kind::Mutes:
+        path = "/api/v1/mutes"; // rows are accounts; paginates via the Link header
+        break;
+    case TimelineSource::Kind::Blocks:
+        path = "/api/v1/blocks";
+        break;
     case TimelineSource::Kind::Thread:
     case TimelineSource::Kind::SearchPosts:
     case TimelineSource::Kind::SearchPeople:
@@ -337,9 +350,60 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     return page;
 }
 
+std::optional<std::string> MastodonAccount::upload_media(const MediaUpload& a) {
+    if (a.bytes.empty())
+        return std::nullopt;
+    // Build a multipart/form-data body: the alt text as "description", then the file.
+    const std::string boundary = "----FastSMRWFormBoundary8x3Kq9Zt";
+    std::string b;
+    if (!a.alt.empty()) {
+        b += "--" + boundary + "\r\n";
+        b += "Content-Disposition: form-data; name=\"description\"\r\n\r\n";
+        b += a.alt + "\r\n";
+    }
+    b += "--" + boundary + "\r\n";
+    b += "Content-Disposition: form-data; name=\"file\"; filename=\"" +
+         (a.filename.empty() ? std::string("upload") : a.filename) + "\"\r\n";
+    b += "Content-Type: " + (a.mime.empty() ? std::string("application/octet-stream") : a.mime) +
+         "\r\n\r\n";
+    b += a.bytes;
+    b += "\r\n--" + boundary + "--\r\n";
+
+    const std::string ct = "multipart/form-data; boundary=" + boundary;
+    std::string body;
+    long status = 0;
+    if (!request("POST", credentials_.instance_url + "/api/v2/media", b, ct, body, status))
+        return std::nullopt;
+    std::string id;
+    try {
+        id = json::parse(body).value("id", std::string{});
+    } catch (...) {
+        return std::nullopt;
+    }
+    if (id.empty())
+        return std::nullopt;
+    // 202 = still processing (e.g. video/large image); poll until it's ready (200),
+    // capped so a stuck upload can't block the post forever.
+    if (status == 202) {
+        const std::string purl = credentials_.instance_url + "/api/v1/media/" + id;
+        for (int i = 0; i < 30; ++i) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::string pb;
+            long ps = 0;
+            if (request("GET", purl, "", "", pb, ps) && ps == 200)
+                break;
+        }
+    }
+    return id;
+}
+
 std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
     std::vector<std::pair<std::string, std::string>> params;
     params.push_back({"status", draft.text});
+    // Upload any attachments first; attach the ones that succeed.
+    for (const auto& a : draft.attachments)
+        if (auto id = upload_media(a))
+            params.push_back({"media_ids[]", *id});
     if (draft.reply_to_id) {
         // Replying to a remote post: resolve its URL to a local id first, so the
         // reply threads correctly on the user's own instance.
@@ -600,6 +664,84 @@ std::vector<ServerFilter> MastodonAccount::list_server_filters() {
     } catch (...) {
     }
     return out;
+}
+
+std::vector<TimelineList> MastodonAccount::lists() {
+    const std::string url = credentials_.instance_url + "/api/v1/lists";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return {};
+    std::vector<TimelineList> out;
+    try {
+        const json arr = json::parse(body);
+        if (arr.is_array())
+            for (const auto& j : arr)
+                out.push_back({j.value("id", std::string{}), j.value("title", std::string{}),
+                               j.value("replies_policy", std::string("list")),
+                               j.value("exclusive", false)});
+    } catch (...) {
+    }
+    return out;
+}
+
+std::vector<TimelineList> MastodonAccount::account_lists(const std::string& account_id) {
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/" +
+                            util::percent_encode(account_id) + "/lists";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return {};
+    std::vector<TimelineList> out;
+    try {
+        const json arr = json::parse(body);
+        if (arr.is_array())
+            for (const auto& j : arr)
+                out.push_back({j.value("id", std::string{}), j.value("title", std::string{})});
+    } catch (...) {
+    }
+    return out;
+}
+
+bool MastodonAccount::set_list_membership(const std::string& list_id,
+                                          const std::string& account_id, bool add) {
+    // account_ids[] goes in the query string so this works whether or not the
+    // HTTP client sends a body on DELETE (removal). Mastodon accepts either.
+    const std::string url = credentials_.instance_url + "/api/v1/lists/" +
+                            util::percent_encode(list_id) +
+                            "/accounts?account_ids[]=" + util::percent_encode(account_id);
+    std::string body;
+    long status = 0;
+    return request(add ? "POST" : "DELETE", url, "", "", body, status);
+}
+
+bool MastodonAccount::create_list(const std::string& title, const std::string& replies_policy,
+                                  bool exclusive) {
+    const std::string url = credentials_.instance_url + "/api/v1/lists";
+    const std::string form = util::form_encode({{"title", title},
+                                                {"replies_policy", replies_policy},
+                                                {"exclusive", exclusive ? "true" : "false"}});
+    std::string body;
+    long status = 0;
+    return request("POST", url, form, "application/x-www-form-urlencoded", body, status);
+}
+
+bool MastodonAccount::update_list(const std::string& id, const std::string& title,
+                                  const std::string& replies_policy, bool exclusive) {
+    const std::string url = credentials_.instance_url + "/api/v1/lists/" + util::percent_encode(id);
+    const std::string form = util::form_encode({{"title", title},
+                                                {"replies_policy", replies_policy},
+                                                {"exclusive", exclusive ? "true" : "false"}});
+    std::string body;
+    long status = 0;
+    return request("PUT", url, form, "application/x-www-form-urlencoded", body, status);
+}
+
+bool MastodonAccount::delete_list(const std::string& id) {
+    const std::string url = credentials_.instance_url + "/api/v1/lists/" + util::percent_encode(id);
+    std::string body;
+    long status = 0;
+    return request("DELETE", url, "", "", body, status);
 }
 
 bool MastodonAccount::create_server_filter(const ServerFilter& filter) {

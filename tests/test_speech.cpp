@@ -51,6 +51,7 @@ void test_settings_roundtrip() {
     cfg.settings.text.name_emoji = EmojiRemoval::Unicode;
     cfg.settings.text.max_mentions = 3;
     cfg.settings.text.absolute_time = true;
+    cfg.settings.reverse_timelines = true;
     cfg.settings.speech = SpeechSettings::defaults();
     cfg.settings.speech.separator = " | ";
     for (auto& it : cfg.settings.speech.status) {
@@ -71,6 +72,7 @@ void test_settings_roundtrip() {
     CHECK(loaded.settings.text.name_emoji == EmojiRemoval::Unicode);
     CHECK_EQ(loaded.settings.text.max_mentions, 3);
     CHECK(loaded.settings.text.absolute_time);
+    CHECK(loaded.settings.reverse_timelines);
     CHECK_EQ(loaded.settings.speech.separator, std::string(" | "));
     bool handle_on = false;
     for (const auto& it : loaded.settings.speech.status)

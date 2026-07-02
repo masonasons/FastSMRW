@@ -103,6 +103,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
         checked(dlg, IDC_SET_STREAMING, ctx->settings.streaming_enabled);
         checked(dlg, IDC_SET_SHOW_MENTIONS, ctx->settings.show_mentions_in_notifications);
+        checked(dlg, IDC_SET_REVERSE, ctx->settings.reverse_timelines);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -118,6 +119,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
                 ctx->settings.auto_refresh_seconds = AppSettings::kAutoRefreshOptions[sel];
             ctx->settings.streaming_enabled = is_checked(dlg, IDC_SET_STREAMING);
             ctx->settings.show_mentions_in_notifications = is_checked(dlg, IDC_SET_SHOW_MENTIONS);
+            ctx->settings.reverse_timelines = is_checked(dlg, IDC_SET_REVERSE);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

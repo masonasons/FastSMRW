@@ -19,6 +19,7 @@
 namespace fastsmui {
 
 class ServerFiltersDialog; // manager modal; non-null while open (like keymap_mgr_)
+class ListsManagerDialog;  // Lists manager modal; non-null while open
 
 // The main application window: a left "Timelines" list and a right virtual
 // "Timeline" posts list. It is a pure client of the core's C ABI: it dispatches
@@ -53,6 +54,7 @@ private:
         std::string kind;
         bool dismissable = false;
         bool user_list = false; // rows are users: multi-select + batch actions
+        bool reversed = false;  // oldest at top, newest at bottom (load older from the top)
         std::vector<Row> rows;
         std::string selected_id; // UI-authoritative remembered position
     };
@@ -80,6 +82,20 @@ private:
     // window is hidden (invisible interface), briefly show it and take the
     // foreground first, else focus never reaches the menu (FastPlay pattern).
     int track_popup(HMENU menu, POINT pt);
+
+    // Focus handling for modal dialogs opened from the invisible interface. The
+    // main window may be hidden or merely not in the foreground; a plain modal
+    // owned by it then never gets focus, and on close it reactivates the hidden
+    // window (surfacing it / stealing screen-reader focus). enter_modal() records
+    // the prior foreground window, surfaces + foregrounds the main window so the
+    // dialog takes focus; leave_modal() re-hides if we unhid and hands focus back
+    // to where it was. Same idea as track_popup, for DialogBox dialogs.
+    struct ModalGuard {
+        HWND prior = nullptr;
+        bool was_hidden = false;
+    };
+    ModalGuard enter_modal();
+    void leave_modal(const ModalGuard& g);
 
     // Commands.
     void dispatch_cmd(const nlohmann::json& cmd);
@@ -114,6 +130,8 @@ private:
     void ev_invisible_ui_action(const nlohmann::json& e);
     void ev_client_filter(const nlohmann::json& e);  // open the per-timeline client filter dialog
     void ev_server_filters(const nlohmann::json& e); // open / refresh the server filters manager
+    void ev_user_lists(const nlohmann::json& e);     // open the add/remove-from-lists checklist
+    void ev_lists(const nlohmann::json& e);          // forward into the open Lists manager
     void ev_update_status(const nlohmann::json& e); // check result -> prompt / announce
     void ev_update_ready(const nlohmann::json& e);  // downloaded -> swap + restart
     // Apply the current invisible-interface mode (from settings_): (re)load the
@@ -149,6 +167,7 @@ private:
     std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager
     KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open
     ServerFiltersDialog* server_filters_mgr_ = nullptr;     // non-null while its modal is open
+    ListsManagerDialog* lists_mgr_ = nullptr;               // non-null while its modal is open
     std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
     std::string layer_help_message_;                        // spoken on "/" in the layer
     std::map<std::string, std::string> layer_bindings_;     // cached bare-key layer map
@@ -161,7 +180,8 @@ private:
     int current_ = 0;
     nlohmann::json settings_ = nlohmann::json::object(); // cached settings object
     std::vector<std::string> soundpacks_;
-    std::vector<std::string> spawnable_kinds_; // parallels the New Timeline dialog
+    std::vector<std::string> spawnable_kinds_;  // parallels the New Timeline dialog
+    std::vector<std::string> spawnable_params_; // per-entry param (e.g. a list id), echoed on spawn
 };
 
 } // namespace fastsmui

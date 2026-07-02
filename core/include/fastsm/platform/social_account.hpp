@@ -23,6 +23,16 @@ struct PlatformFeatures {
     bool editing = false;
     bool scheduling = false;
     bool hide_boosts = false; // can hide/show a followed account's boosts (Mastodon)
+    bool media = false;       // attach media (with alt text) to posts
+};
+
+// A media file to attach to a new post: the raw bytes plus a filename, MIME
+// type, and alt-text description. The platform uploads/embeds it at post time.
+struct MediaUpload {
+    std::string filename; // e.g. "photo.jpg"
+    std::string mime;     // e.g. "image/jpeg"
+    std::string bytes;    // raw file contents
+    std::string alt;      // alt-text description (may be empty)
 };
 
 // The viewer's relationship to another account (Mastodon).
@@ -75,12 +85,22 @@ struct PostDraft {
     std::optional<std::string> language;
     std::optional<PollDraft> poll;
     std::optional<std::int64_t> scheduled_at; // unix seconds (Mastodon)
+    std::vector<MediaUpload> attachments;     // media to upload + attach (with alt text)
 };
 
 // Editable source of an existing post (for Edit).
 struct PostSource {
     std::string text;
     std::string spoiler_text;
+};
+
+// A user's timeline list (Mastodon /api/v1/lists): id + display title, plus the
+// list's settings (used by the list manager; ignored elsewhere).
+struct TimelineList {
+    std::string id;
+    std::string title;
+    std::string replies_policy = "list"; // "none" | "list" | "followed"
+    bool exclusive = false;              // hide members from the home timeline
 };
 
 // A long-lived request to open for real-time streaming (e.g. Mastodon SSE).
@@ -163,6 +183,28 @@ public:
     virtual bool create_server_filter(const ServerFilter&) { return false; }
     virtual bool update_server_filter(const ServerFilter&) { return false; }
     virtual bool delete_server_filter(const std::string&) { return false; }
+
+    // --- Timeline lists (optional; Mastodon /api/v1/lists) ---
+    // Fetch the account's lists so the New Timeline dialog can offer them. Runs
+    // synchronously on the worker thread. Empty for platforms without lists.
+    virtual std::vector<TimelineList> lists() { return {}; }
+    // The lists a given account is a member of (Mastodon /api/v1/accounts/:id/lists).
+    virtual std::vector<TimelineList> account_lists(const std::string&) { return {}; }
+    // Add or remove an account from one of the viewer's lists. (Mastodon only
+    // permits adding accounts you follow.) Returns success.
+    virtual bool set_list_membership(const std::string&, const std::string&, bool) { return false; }
+    // List management (Mastodon): create/update/delete. All return success.
+    // `replies_policy` is "none" | "list" | "followed"; `exclusive` hides members
+    // from the home timeline.
+    virtual bool create_list(const std::string& /*title*/, const std::string& /*replies_policy*/,
+                             bool /*exclusive*/) {
+        return false;
+    }
+    virtual bool update_list(const std::string& /*id*/, const std::string& /*title*/,
+                             const std::string& /*replies_policy*/, bool /*exclusive*/) {
+        return false;
+    }
+    virtual bool delete_list(const std::string&) { return false; }
 
     // --- Real-time streaming (optional; Mastodon SSE user stream) ---
 

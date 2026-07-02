@@ -48,6 +48,7 @@ void test_presenter_cw_modes();
 void test_presenter_demojify_and_mentions();
 void test_presenter_wrap_and_separator();
 void test_presenter_stats_nonzero();
+void test_reply_participants();
 void test_post_links();
 
 // From test_speech.cpp
@@ -131,6 +132,7 @@ int main() {
     test_presenter_demojify_and_mentions();
     test_presenter_wrap_and_separator();
     test_presenter_stats_nonzero();
+    test_reply_participants();
     test_post_links();
     test_speech_defaults();
     test_speech_normalized();

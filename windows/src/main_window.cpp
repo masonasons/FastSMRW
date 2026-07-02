@@ -10,6 +10,8 @@
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
 #include "client_filters_dialog.hpp"
+#include "list_membership_dialog.hpp"
+#include "lists_manager_dialog.hpp"
 #include "new_timeline_dialog.hpp"
 #include "server_filters_dialog.hpp"
 #include "post_info_dialog.hpp"
@@ -67,6 +69,9 @@ enum {
     ID_HIDE_WINDOW,
     ID_CLIENT_FILTER,
     ID_SERVER_FILTER,
+    ID_LIST_MANAGER,
+    ID_VIEW_MUTES,
+    ID_VIEW_BLOCKS,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -174,6 +179,9 @@ HMENU build_menu() {
     AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+,");
     AppendMenuW(app, MF_STRING, ID_KEYMAP_MANAGER, L"&Keyboard Manager…");
     AppendMenuW(app, MF_STRING, ID_SERVER_FILTER, L"Ser&ver Filters…");
+    AppendMenuW(app, MF_STRING, ID_LIST_MANAGER, L"&Lists…");
+    AppendMenuW(app, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
+    AppendMenuW(app, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
     AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
@@ -539,15 +547,22 @@ void MainWindow::maybe_load_older(int row) {
     if (!tc)
         return;
     const int count = static_cast<int>(tc->rows.size());
-    // A tracked middle gap within the next few rows -> fill it transparently.
-    for (int g = row; g < count && g <= row + 5; ++g) {
-        if (tc->rows[static_cast<size_t>(g)].gap_after) {
-            load_pending_ = true;
-            dispatch_cmd({{"cmd", "load_gap"}, {"id", tc->rows[static_cast<size_t>(g)].id}});
-            return;
+    // A tracked middle gap within a few rows -> fill it transparently. In reversed
+    // mode older posts sit above, so scan both directions around the cursor.
+    for (int d = 0; d <= 5; ++d) {
+        for (int g : {row + d, row - d}) {
+            if (g < 0 || g >= count)
+                continue;
+            if (tc->rows[static_cast<size_t>(g)].gap_after) {
+                load_pending_ = true;
+                dispatch_cmd({{"cmd", "load_gap"}, {"id", tc->rows[static_cast<size_t>(g)].id}});
+                return;
+            }
         }
     }
-    if (count > 0 && row >= count - 10) { // within 10 rows of the bottom
+    // Older posts are at the bottom normally, but at the top when reversed.
+    const bool near_edge = tc->reversed ? (row <= 9) : (row >= count - 10);
+    if (count > 0 && near_edge) {
         load_pending_ = true;
         dispatch_cmd({{"cmd", "load_older"}});
     }
@@ -582,8 +597,10 @@ void MainWindow::bind_current_to_view(bool force) {
     if (tc && count > 0) {
         int idx = index_of_id(*tc, tc->selected_id);
         if (idx < 0) {
-            idx = 0;
-            tc->selected_id = tc->rows[0].id; // adopt the top as the position
+            // No remembered row: land on the newest post — the top normally, or the
+            // bottom when the timeline is reversed (newest-at-bottom).
+            idx = tc->reversed ? count - 1 : 0;
+            tc->selected_id = tc->rows[static_cast<size_t>(idx)].id;
         }
         const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
         if ((ListView_GetItemState(timeline_view_, idx, want) & want) != want)
@@ -736,8 +753,10 @@ void MainWindow::ev_post_info(const json& e) {
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
     const bool browser_ok = e.value("has_url", false);
     const std::string keep_id = selected_id();
+    auto guard = enter_modal();
     auto action = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok);
     restore_selection(keep_id);
+    leave_modal(guard);
     if (!action)
         return;
     switch (*action) {
@@ -782,9 +801,12 @@ void MainWindow::ev_user_profile(const json& e) {
     rel.requested = e.value("requested", false);
     rel.showing_reblogs = e.value("showing_reblogs", true);
     rel.can_hide_boosts = e.value("can_hide_boosts", false);
+    rel.can_use_lists = e.value("can_use_lists", false);
     const std::string keep_id = selected_id();
+    auto guard = enter_modal();
     auto action = show_user_profile_dialog(hwnd_, inst_, text, rel);
     restore_selection(keep_id);
+    leave_modal(guard);
     if (!action)
         return;
     auto set_rel = [&](const char* a) {
@@ -822,6 +844,42 @@ void MainWindow::ev_user_profile(const json& e) {
     case UserProfileAction::ToggleBoosts:
         set_rel(rel.showing_reblogs ? "hide_boosts" : "show_boosts");
         break;
+    case UserProfileAction::Lists:
+        // Fetch the account's lists + this user's membership; ev_user_lists opens
+        // the checklist when they arrive.
+        dispatch_cmd({{"cmd", "get_user_lists"}, {"account_id", account_id}, {"acct", acct}});
+        break;
+    }
+}
+
+void MainWindow::ev_user_lists(const json& e) {
+    if (!e.value("supported", false))
+        return;
+    const std::string account_id = e.value("account_id", std::string{});
+    const std::string acct = e.value("acct", std::string{});
+    std::vector<fastsmui::ListMembershipItem> items;
+    for (const auto& l : e.value("lists", json::array()))
+        items.push_back({l.value("id", std::string{}), to_wide(l.value("title", std::string{})),
+                         l.value("member", false)});
+    if (items.empty()) {
+        announce("You have no lists. Create one from Application, Lists.");
+        return;
+    }
+    const std::vector<fastsmui::ListMembershipItem> before = items; // to diff after editing
+    const std::wstring heading = L"Lists for @" + to_wide(acct) + L" (check to add):";
+    auto guard = enter_modal();
+    auto result = show_list_membership_dialog(hwnd_, inst_, heading, items);
+    leave_modal(guard);
+    if (!result)
+        return;
+    // Apply only the changes.
+    for (size_t i = 0; i < result->size(); ++i) {
+        if ((*result)[i].member == before[i].member)
+            continue;
+        dispatch_cmd({{"cmd", "set_user_list"},
+                      {"list_id", (*result)[i].id},
+                      {"account_id", account_id},
+                      {"add", (*result)[i].member}});
     }
 }
 
@@ -1033,9 +1091,11 @@ std::wstring lowered(std::wstring s) {
 void MainWindow::do_find() {
     FindCtx ctx;
     ctx.text = find_query_;
-    if (DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_FIND), hwnd_, &find_proc,
-                        reinterpret_cast<LPARAM>(&ctx)) != IDOK ||
-        !ctx.ok || ctx.text.empty())
+    auto guard = enter_modal();
+    const INT_PTR fr = DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_FIND), hwnd_, &find_proc,
+                                       reinterpret_cast<LPARAM>(&ctx));
+    leave_modal(guard);
+    if (fr != IDOK || !ctx.ok || ctx.text.empty())
         return;
     find_query_ = ctx.text;
     const int row = selected_row();
@@ -1106,6 +1166,15 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_SERVER_FILTER:
         dispatch_cmd({{"cmd", "list_server_filters"}}); // core replies with server_filters -> dialog
+        break;
+    case ID_LIST_MANAGER:
+        dispatch_cmd({{"cmd", "list_lists"}}); // core replies with lists -> manager dialog
+        break;
+    case ID_VIEW_MUTES:
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "mutes"}});
+        break;
+    case ID_VIEW_BLOCKS:
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "blocks"}});
         break;
     case ID_CHECK_UPDATES:
         announce("Checking for updates…");
@@ -1276,6 +1345,10 @@ void MainWindow::on_event(const std::string& js) {
         ev_client_filter(e);
     else if (ev == "server_filters")
         ev_server_filters(e);
+    else if (ev == "user_lists")
+        ev_user_lists(e);
+    else if (ev == "lists")
+        ev_lists(e);
     else if (ev == "update_status")
         ev_update_status(e);
     else if (ev == "update_ready")
@@ -1333,6 +1406,7 @@ void MainWindow::ev_timeline_updated(const json& e) {
     if (index < 0 || index >= static_cast<int>(timelines_.size()))
         return;
     Timeline& tl = timelines_[static_cast<size_t>(index)];
+    tl.reversed = e.value("reversed", false);
     tl.rows.clear();
     for (const auto& r : e.value("rows", json::array())) {
         Row row;
@@ -1601,6 +1675,23 @@ void MainWindow::ev_server_filters(const json& e) {
     server_filters_mgr_ = nullptr;
 }
 
+void MainWindow::ev_lists(const json& e) {
+    if (lists_mgr_) { // manager is open: live-refresh its list
+        lists_mgr_->on_lists(e);
+        return;
+    }
+    if (!e.value("supported", false)) {
+        announce("Lists are only available for Mastodon accounts.");
+        return;
+    }
+    ListsManagerDialog dlg(inst_, [this](const json& cmd) { dispatch_cmd(cmd); });
+    lists_mgr_ = &dlg;
+    auto guard = enter_modal();
+    dlg.run(hwnd_, e);
+    leave_modal(guard);
+    lists_mgr_ = nullptr;
+}
+
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
     if (a == "EnterLayer") {
@@ -1661,6 +1752,9 @@ void MainWindow::ev_compose_context(const json& e) {
     req.context_label = e.value("context_label", std::string{});
     req.prefill_text = e.value("prefill_text", std::string{});
     req.prefill_cw = e.value("prefill_cw", std::string{});
+    for (const auto& p : e.value("reply_participants", json::array()))
+        req.recipients.push_back({p.value("acct", std::string{}),
+                                  to_wide(p.value("display_name", p.value("acct", std::string{})))});
     req.max_chars = e.value("max_chars", 500);
     req.enter_to_send = e.value("enter_to_send", false);
     if (e.contains("default_visibility"))
@@ -1672,14 +1766,28 @@ void MainWindow::ev_compose_context(const json& e) {
         req.features.polls = f->value("polls", false);
         req.features.editing = f->value("editing", false);
         req.features.scheduling = f->value("scheduling", false);
+        req.features.media = f->value("media", false);
     }
 
+    auto guard = enter_modal();
     auto result = show_compose_dialog(hwnd_, inst_, req);
     restore_selection(keep_id);
+    leave_modal(guard);
     if (!result)
         return;
 
     json draft = draft_to_json(result->draft);
+    if (!result->mentions.empty())
+        draft["mentions"] = result->mentions; // checked reply recipients; core prepends them
+    if (!result->attachments.empty()) {
+        json atts = json::array();
+        for (const auto& a : result->attachments)
+            atts.push_back({{"filename", to_utf8(a.filename)},
+                            {"mime", a.mime},
+                            {"data", a.data_base64},
+                            {"alt", to_utf8(a.alt)}});
+        draft["attachments"] = std::move(atts);
+    }
     if (e.contains("reply_to_id"))
         draft["reply_to_id"] = e["reply_to_id"];
     if (e.contains("reply_to_url")) // remote reply target: resolved core-side
@@ -1695,9 +1803,11 @@ void MainWindow::ev_compose_context(const json& e) {
 void MainWindow::ev_spawnable(const json& e) {
     leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     spawnable_kinds_.clear();
+    spawnable_params_.clear();
     std::vector<fastsmui::NewTimelineEntry> entries;
     for (const auto& t : e.value("timelines", json::array())) {
         spawnable_kinds_.push_back(t.value("kind", std::string{}));
+        spawnable_params_.push_back(t.value("param", std::string{}));
         entries.push_back({to_wide(t.value("title", std::string{})),
                            to_wide(t.value("input", std::string{}))});
     }
@@ -1705,13 +1815,17 @@ void MainWindow::ev_spawnable(const json& e) {
         announce("No more timelines to add for this account.");
         return;
     }
+    auto guard = enter_modal();
     auto choice = show_new_timeline_dialog(hwnd_, inst_, entries);
+    leave_modal(guard);
     if (!choice || choice->index < 0 || choice->index >= static_cast<int>(spawnable_kinds_.size()))
         return;
-    json cmd = {{"cmd", "spawn_timeline"},
-                {"kind", spawnable_kinds_[static_cast<size_t>(choice->index)]}};
+    const size_t ci = static_cast<size_t>(choice->index);
+    json cmd = {{"cmd", "spawn_timeline"}, {"kind", spawnable_kinds_[ci]}};
     if (!choice->value.empty())
         cmd["value"] = to_utf8(choice->value);
+    if (ci < spawnable_params_.size() && !spawnable_params_[ci].empty())
+        cmd["param"] = spawnable_params_[ci];
     dispatch_cmd(cmd);
 }
 
@@ -1730,6 +1844,26 @@ int MainWindow::track_popup(HMENU menu, POINT pt) {
     if (was_hidden)
         ShowWindow(hwnd_, SW_HIDE);
     return chosen;
+}
+
+MainWindow::ModalGuard MainWindow::enter_modal() {
+    ModalGuard g;
+    g.prior = GetForegroundWindow();
+    g.was_hidden = !IsWindowVisible(hwnd_);
+    if (g.was_hidden)
+        ShowWindow(hwnd_, SW_SHOW);
+    SetForegroundWindow(hwnd_); // ensure the dialog we own can take focus
+    return g;
+}
+
+void MainWindow::leave_modal(const ModalGuard& g) {
+    if (g.was_hidden)
+        ShowWindow(hwnd_, SW_HIDE);
+    // Return focus to wherever the user was (another app) instead of letting the
+    // now-closed dialog reactivate our (possibly hidden) main window. A no-op when
+    // we were already the foreground window (normal in-app use).
+    if (g.prior && g.prior != hwnd_ && IsWindow(g.prior) && IsWindowVisible(g.prior))
+        SetForegroundWindow(g.prior);
 }
 
 void MainWindow::announce(const std::string& message) {

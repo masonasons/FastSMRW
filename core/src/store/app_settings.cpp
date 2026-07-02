@@ -60,6 +60,7 @@ AppSettings settings_from_json(const json& root) {
     settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 0);
     settings.streaming_enabled = root.value("streaming_enabled", false);
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
+    settings.reverse_timelines = root.value("reverse_timelines", false);
     settings.invisible_mode = root.value("invisible_mode", std::string("off"));
     settings.invisible_keymap = root.value("invisible_keymap", std::string("default"));
     settings.invisible_layer_key =
@@ -107,6 +108,7 @@ json settings_to_json(const AppSettings& settings) {
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
+    root["reverse_timelines"] = settings.reverse_timelines;
     root["invisible_mode"] = settings.invisible_mode;
     root["invisible_keymap"] = settings.invisible_keymap;
     root["invisible_layer_key"] = settings.invisible_layer_key;

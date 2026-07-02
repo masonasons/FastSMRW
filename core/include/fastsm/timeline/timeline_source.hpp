@@ -25,6 +25,9 @@ struct TimelineSource {
         SearchPeople, // people search for param; rows are users
         RemoteLocal, // a remote instance's Local timeline (param = instance domain)
         RemoteUser,  // a remote user's posts (param = "user@instance"), fetched abroad
+        List,        // a Mastodon list timeline (param = list id)
+        Mutes,       // the account's muted users; rows are users
+        Blocks,      // the account's blocked users; rows are users
     };
 
     Kind kind = Kind::Home;
@@ -65,6 +68,12 @@ struct TimelineSource {
             return title_text.empty() ? (param + " (Local)") : title_text;
         case Kind::RemoteUser:
             return title_text.empty() ? ("@" + param) : title_text;
+        case Kind::List:
+            return title_text.empty() ? "List" : title_text;
+        case Kind::Mutes:
+            return "Muted Users";
+        case Kind::Blocks:
+            return "Blocked Users";
         }
         return "Timeline";
     }
@@ -104,6 +113,12 @@ struct TimelineSource {
             return "remoteLocal:" + param;
         case Kind::RemoteUser:
             return "remoteUser:" + param;
+        case Kind::List:
+            return "list:" + param;
+        case Kind::Mutes:
+            return "mutes";
+        case Kind::Blocks:
+            return "blocks";
         }
         return "timeline";
     }
@@ -121,6 +136,9 @@ struct TimelineSource {
         case Kind::SearchPeople:
         case Kind::RemoteLocal:
         case Kind::RemoteUser:
+        case Kind::List:
+        case Kind::Mutes:
+        case Kind::Blocks:
             return false;
         default:
             return true;
@@ -133,7 +151,8 @@ struct TimelineSource {
     }
     // Rows are users (not statuses), so the UI offers multi-select + batch actions.
     bool is_user_list() const {
-        return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople;
+        return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople ||
+               kind == Kind::Mutes || kind == Kind::Blocks;
     }
     // Mastodon paginates these by item id (max_id), so scrollback can be re-seeded
     // from the oldest loaded row after a cache load.
@@ -148,6 +167,7 @@ struct TimelineSource {
         case Kind::Hashtag:
         case Kind::RemoteLocal:
         case Kind::RemoteUser:
+        case Kind::List:
             return true;
         default:
             return false;
@@ -173,6 +193,7 @@ struct TimelineSource {
         case Kind::Hashtag:
         case Kind::RemoteLocal:
         case Kind::RemoteUser:
+        case Kind::List:
             return "home";
         case Kind::Notifications:
             return "notification";
@@ -186,6 +207,8 @@ struct TimelineSource {
         case Kind::Following:
         case Kind::SearchPosts:
         case Kind::SearchPeople:
+        case Kind::Mutes:
+        case Kind::Blocks:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -226,6 +249,12 @@ struct TimelineSource {
     static TimelineSource remote_user(std::string handle, std::string title = {}) {
         return {Kind::RemoteUser, std::move(handle), std::move(title)};
     }
+    // A Mastodon list timeline (id = list id, title = "List: <name>").
+    static TimelineSource list(std::string list_id, std::string title = {}) {
+        return {Kind::List, std::move(list_id), std::move(title)};
+    }
+    static TimelineSource mutes() { return {Kind::Mutes}; }
+    static TimelineSource blocks() { return {Kind::Blocks}; }
 };
 
 } // namespace fastsm

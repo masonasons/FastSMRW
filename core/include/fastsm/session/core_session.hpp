@@ -75,6 +75,22 @@ private:
     void cmd_go_back();
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
+    // Refresh the selected account's Mastodon lists in the background so the New
+    // Timeline dialog (Ctrl+T) can offer them instantly from cache.
+    void refresh_lists(SocialAccount* account);
+
+    // --- Mastodon lists: user membership + list management ---
+    void cmd_get_user_lists(const nlohmann::json& cmd); // {account_id, acct} -> user_lists event
+    void cmd_set_user_list(const nlohmann::json& cmd);  // {list_id, account_id, add}
+    void cmd_list_lists();                              // emit lists event (all lists) for the manager
+    void cmd_create_list(const nlohmann::json& cmd);    // {title}
+    void cmd_rename_list(const nlohmann::json& cmd);    // {id, title}
+    void cmd_delete_list(const nlohmann::json& cmd);    // {id}
+    void emit_lists();                                  // lists event {supported, lists:[...]}
+    // Run a list create/update/delete on the worker, then re-emit the updated set
+    // and announce the outcome.
+    void run_list_mutation(SocialAccount* acct, std::function<bool()> op, std::string ok_msg,
+                           std::string fail_msg);
     void cmd_open_thread(const nlohmann::json& cmd);
     void cmd_open_user_timeline(const nlohmann::json& cmd);
     void cmd_open_user_profile(const nlohmann::json& cmd);
@@ -185,6 +201,9 @@ private:
     std::filesystem::path bundled_keymaps_dir_; // read-only keymaps shipped with the app
     std::map<std::string, std::string> positions_; // cache_key -> remembered selected id
     std::map<std::string, ClientFilter> client_filters_; // cache_key -> per-timeline client filter
+    // account_key -> the account's timeline lists, refreshed in the background so
+    // Ctrl+T can offer them without a network round trip in the hot path.
+    std::map<std::string, std::vector<TimelineList>> lists_by_account_;
     std::function<void(const std::string&)> emit_;
 
     std::unique_ptr<net::IHttpClient> http_;

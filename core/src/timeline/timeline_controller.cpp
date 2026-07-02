@@ -60,17 +60,29 @@ void TimelineController::set_filter(std::function<bool(const TimelineItem&)> pre
         on_change();
 }
 
+void TimelineController::set_reversed(bool reversed) {
+    if (reversed_ == reversed)
+        return;
+    reversed_ = reversed;
+    rebuild_visible();
+    if (on_change)
+        on_change();
+}
+
 void TimelineController::rebuild_visible() {
     visible_.clear();
     if (!filter_) {
         visible_ = raw_;
-        return;
+    } else {
+        visible_.reserve(raw_.size());
+        for (const auto& item : raw_)
+            if (filter_(item))
+                visible_.push_back(item);
     }
-    visible_.reserve(raw_.size());
-    for (const auto& item : raw_) {
-        if (filter_(item))
-            visible_.push_back(item);
-    }
+    // raw_ is canonical newest-first; flip the projection for time-ordered feeds
+    // when the reverse preference is on, so the UI reads oldest-first.
+    if (reversed_ && source_.is_time_ordered())
+        std::reverse(visible_.begin(), visible_.end());
 }
 
 TimelineItem* TimelineController::find_raw(const std::string& id) {

@@ -44,6 +44,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         } else {
             ShowWindow(GetDlgItem(dlg, IDC_PROFILE_BOOSTS), SW_HIDE);
         }
+        // Lists button only for platforms with lists (Mastodon).
+        if (!r.can_use_lists)
+            ShowWindow(GetDlgItem(dlg, IDC_PROFILE_LISTS), SW_HIDE);
 
         SetFocus(GetDlgItem(dlg, IDC_PROFILE_TEXT)); // read the profile immediately
         return FALSE;                                // focus set explicitly
@@ -79,6 +82,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             return TRUE;
         case IDC_PROFILE_BOOSTS:
             finish(UserProfileAction::ToggleBoosts);
+            return TRUE;
+        case IDC_PROFILE_LISTS:
+            finish(UserProfileAction::Lists);
             return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);

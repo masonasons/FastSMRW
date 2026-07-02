@@ -1,10 +1,19 @@
 FastSMRW changelog
 ==================
 
-0.0.7 (in development)
-----------------------
+0.0.7
+-----
 
 - Reply, boost and favorite counts are now only spoken when they're above zero, so posts with no activity don't read "0 boosts, 0 favorites".
+- Fixed: replying or opening a dialog while the window is hidden no longer throws you into the hidden window; focus returns to wherever you were.
+- Fixed: dialogs opened from the invisible interface now reliably take focus even when the window was showing but not focused.
+- New Timeline (Ctrl+T) now lets you open any of your Mastodon lists as a timeline.
+- New Lists manager (Application > Lists): create, rename (with replies policy and "hide from Home"), delete, and open your Mastodon lists.
+- The user profile dialog now has a Lists button to add the person to or remove them from your Mastodon lists.
+- New Application menu items "View Muted Users" and "View Blocked Users" open your muted/blocked accounts as a people list (Mastodon).
+- When replying (Mastodon), the people being replied to now appear as a check list beside the post box - uncheck anyone you don't want to mention instead of editing them out of the text.
+- New Timelines setting "Reverse timelines (newest at the bottom)": show feeds oldest-first, with new posts arriving at the bottom (threads and searches keep their normal order).
+- Compose now has a Media button (Mastodon) to attach images, video or audio to a post and give each one alt text; you can post media on its own with no text.
 
 
 0.0.6
