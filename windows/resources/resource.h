@@ -119,6 +119,10 @@
 #define IDD_FIND            440
 #define IDC_FIND_TEXT       441
 
+// Layer keys help window.
+#define IDD_LAYER_HELP      495
+#define IDC_LAYERHELP_TEXT  496
+
 // Client Filters dialog (per-timeline display filter).
 #define IDD_CLIENT_FILTER   450
 #define IDC_CF_ORIGINAL     451
@@ -165,6 +169,7 @@
 #define IDC_POSTINFO_BROWSER  366
 #define IDC_POSTINFO_THREAD   367
 #define IDC_POSTINFO_AUTHOR   368
+#define IDC_POSTINFO_LINKS    369
 
 #define IDD_USER_PROFILE      370
 #define IDC_PROFILE_TEXT      371

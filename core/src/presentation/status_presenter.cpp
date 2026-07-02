@@ -1,5 +1,7 @@
 #include "fastsm/presentation/status_presenter.hpp"
 
+#include <cctype>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -318,6 +320,143 @@ std::string accessibility_label(const TimelineItem& item, std::int64_t now) {
     if (const User* u = std::get_if<User>(&item.value))
         return accessibility_label(*u);
     return compact_line(item, now);
+}
+
+namespace {
+// Pull http(s) URLs out of plain text (Bluesky text carries them verbatim; a
+// Mastodon post's `text` reconstructs them from its link spans too).
+void find_urls_in_text(const std::string& text, std::vector<std::string>& out) {
+    const char* trailing = ".,!?;:)]}'\"";
+    size_t i = 0;
+    while (i < text.size()) {
+        size_t p = text.find("http", i);
+        if (p == std::string::npos)
+            return;
+        const bool http = text.compare(p, 7, "http://") == 0;
+        const bool https = text.compare(p, 8, "https://") == 0;
+        if (!http && !https) {
+            i = p + 4;
+            continue;
+        }
+        size_t end = p;
+        while (end < text.size() && static_cast<unsigned char>(text[end]) > ' ')
+            ++end;
+        std::string url = text.substr(p, end - p);
+        while (!url.empty() && std::strchr(trailing, url.back()))
+            url.pop_back();
+        if (url.size() > (https ? 8u : 7u))
+            out.push_back(std::move(url));
+        i = end;
+    }
+}
+
+// Extract (visible text, href) pairs from HTML <a> tags, skipping @mention and
+// #hashtag anchors (those aren't links a user wants to open). Mirrors the Mac's
+// PostLinks.anchors.
+void anchors(const std::string& html, std::vector<std::pair<std::string, std::string>>& out) {
+    size_t pos = 0;
+    while (true) {
+        const size_t lt = html.find("<a", pos);
+        if (lt == std::string::npos)
+            return;
+        const char after = lt + 2 < html.size() ? html[lt + 2] : '\0';
+        if (after != ' ' && after != '\t' && after != '\n' && after != '>') {
+            pos = lt + 2;
+            continue;
+        }
+        const size_t gt = html.find('>', lt);
+        if (gt == std::string::npos)
+            return;
+        const std::string tag = html.substr(lt, gt - lt + 1); // the opening <a ...> tag
+        const size_t close = html.find("</a", gt + 1);
+        const size_t inner_end = close == std::string::npos ? html.size() : close;
+        const std::string inner = html.substr(gt + 1, inner_end - (gt + 1));
+        pos = close == std::string::npos ? html.size() : close + 3;
+        if (tag.find("mention") != std::string::npos || tag.find("hashtag") != std::string::npos)
+            continue; // @mention / #hashtag links aren't openable "links"
+        const size_t h = tag.find("href=");
+        if (h == std::string::npos || h + 5 >= tag.size())
+            continue;
+        const char quote = tag[h + 5];
+        if (quote != '"' && quote != '\'')
+            continue;
+        const size_t he = tag.find(quote, h + 6);
+        if (he == std::string::npos)
+            continue;
+        const std::string href = util::decode_entities(tag.substr(h + 6, he - (h + 6)));
+        if (href.compare(0, 4, "http") != 0)
+            continue;
+        out.push_back({util::strip_html(inner), href});
+    }
+}
+
+std::string media_type_noun(MediaAttachment::Kind k) {
+    switch (k) {
+    case MediaAttachment::Kind::Image: return "image";
+    case MediaAttachment::Kind::Video: return "video";
+    case MediaAttachment::Kind::Audio: return "audio";
+    case MediaAttachment::Kind::Gifv: return "gifv";
+    case MediaAttachment::Kind::Unknown: return "media";
+    }
+    return "media";
+}
+
+std::string capitalize(std::string s) {
+    if (!s.empty())
+        s[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
+    return s;
+}
+} // namespace
+
+std::vector<PostLink> post_links(const Status& status) {
+    const Status& s = status.display_status(); // unwrap a boost
+    std::vector<PostLink> out;
+    std::vector<std::string> seen;
+    auto add = [&](const std::string& title, const std::string& url) {
+        if (url.empty())
+            return;
+        for (const auto& u : seen)
+            if (u == url)
+                return;
+        seen.push_back(url);
+        out.push_back({title.empty() ? url : title, url});
+    };
+
+    const bool has_card = s.card && !s.card->url.empty();
+
+    // Links embedded in the text. A Mastodon post carries HTML in `content`; a
+    // Bluesky post has none, so fall back to scanning its plain `text`.
+    std::vector<std::pair<std::string, std::string>> text_links;
+    anchors(s.content, text_links);
+    if (text_links.empty()) {
+        std::vector<std::string> urls;
+        find_urls_in_text(s.text, urls);
+        for (const auto& u : urls)
+            text_links.push_back({std::string{}, u});
+    }
+    for (const auto& [text, url] : text_links) {
+        // The link-preview card's title decorates its matching text link.
+        if (has_card && url == s.card->url && !s.card->title.empty())
+            add(s.card->title, url);
+        else
+            add(text, url);
+    }
+
+    // The card on its own, if its link wasn't in the text.
+    if (has_card)
+        add(s.card->title, s.card->url);
+
+    // Media attachments, labeled by description (or the type) plus the type.
+    for (const auto& m : s.media_attachments) {
+        const std::string noun = media_type_noun(m.type);
+        const std::string label = m.description.empty() ? capitalize(noun) : m.description;
+        add(label + " (" + noun + ")", m.url);
+    }
+
+    // Finally the post itself, so the old "open the post" behavior stays reachable.
+    if (!s.url.empty())
+        add("Open this post in browser", s.url);
+    return out;
 }
 
 std::string post_info(const Status& s, std::int64_t now) {

@@ -142,17 +142,19 @@ std::string serialize_keymap(const std::map<std::string, std::string>& action_to
 KeyBindings layer_keymap() {
     // Bare keys mapped to actions while inside the layer. Escape and the
     // activation combo exit the layer (handled by the driver, not here).
+    // Bare keys mirror the in-window shortcuts where possible: Space opens the
+    // thread, Enter shows post info, single letters act on the current post.
     return {
         {"up", "prev_item"},         {"down", "next_item"},
         {"left", "prev_tl"},         {"right", "next_tl"},
         {"home", "top_item"},        {"end", "bottom_item"},
         {"pageup", "prev_item_jump"}, {"pagedown", "next_item_jump"},
-        {"space", "speak_item"},     {"return", "View"},
+        {"space", "open_thread"},    {"return", "View"},
         {"r", "Reply"},              {"b", "BoostToggle"},
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
-        {"t", "open_thread"},        {"u", "UserTimeline"},
-        {"w", "ToggleWindow"},
+        {"t", "NewTimeline"},        {"u", "UserTimeline"},
+        {"o", "Url"},                {"w", "ToggleWindow"},
         {"back", "CloseTimeline"}, // canonical name for Backspace (matches vk_to_base)
     };
 }
@@ -160,14 +162,30 @@ KeyBindings layer_keymap() {
 std::string layer_enter_message() { return "FastSM layer. Press slash for help."; }
 
 std::string layer_help_text() {
-    // Kept in sync with layer_keymap() above.
-    return "FastSM layer. Up and down arrows move between posts. Left and right switch "
-           "timelines. Home and end jump to the top or bottom. Page up and page down jump "
-           "twenty posts. Space speaks the current post. R replies, Q quotes, E edits, N "
-           "starts a new post. B boosts, F favorites. T opens the thread, U opens the user's "
-           "timeline. W shows or hides the window. Enter shows post info, backspace closes the "
-           "timeline. Slash repeats this help. Press escape, or the activation key, to leave the "
-           "layer.";
+    // One key per line for the layer help window. Kept in sync with layer_keymap().
+    return "Up arrow: Previous post\n"
+           "Down arrow: Next post\n"
+           "Left arrow: Previous timeline\n"
+           "Right arrow: Next timeline\n"
+           "Home: Top of timeline\n"
+           "End: Bottom of timeline\n"
+           "Page Up: Jump up\n"
+           "Page Down: Jump down\n"
+           "Space: Open thread\n"
+           "Enter: Post info\n"
+           "R: Reply\n"
+           "Q: Quote\n"
+           "E: Edit\n"
+           "N: New post\n"
+           "B: Boost or unboost\n"
+           "F: Like or unlike\n"
+           "T: New timeline\n"
+           "U: User's timeline\n"
+           "O: Open links\n"
+           "W: Show or hide window\n"
+           "Backspace: Close timeline\n"
+           "Slash: Show these keys\n"
+           "Escape: Leave the layer";
 }
 
 KeyBindings default_bindings() {
@@ -228,7 +246,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"BoostToggle", "Boost / Unboost", "control+shift+win+r"},
         {"LikeToggle", "Like / Unlike", "alt+win+i"},
         {"View", "Post info", "alt+win+v"},
-        {"Url", "Open post URL", "alt+win+return"},
+        {"Url", "Open link in post", "alt+win+return"},
         {"open_thread", "View thread", "alt+win+t"},
         // --- user actions ---
         {"UserTimeline", "Open user timeline", "alt+win+u"},
@@ -237,6 +255,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"MuteToggle", "Mute / Unmute user", "alt+win+shift+l"},
         {"BlockToggle", "Block / Unblock user", "control+shift+win+b"},
         // --- timeline / app ---
+        {"NewTimeline", "New timeline", ""}, // unbound by default (in-app Ctrl+T); opens the dialog
         {"CloseTimeline", "Close timeline", "alt+win+'"},
         {"ToggleWindow", "Show / hide window", "control+win+w"},
         {"EnterLayer", "Open the layer", ""}, // unbound: call up the layer from hotkey/keyhook mode

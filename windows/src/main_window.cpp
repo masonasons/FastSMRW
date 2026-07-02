@@ -46,6 +46,7 @@ enum {
     ID_USER_TIMELINE,
     ID_USER_PROFILE,
     ID_OPEN_BROWSER,
+    ID_OPEN_LINKS,
     ID_NEW_TIMELINE,
     ID_CLOSE_TIMELINE,
     ID_CLEAR_TIMELINE,
@@ -109,6 +110,37 @@ bool confirm(HWND owner, const wchar_t* message, const wchar_t* title) {
     return MessageBoxW(owner, message, title, MB_YESNO | MB_ICONQUESTION) == IDYES;
 }
 
+// Modal "Layer keys" window: a read-only edit listing the layer keys (one per
+// line), closed with the Close button or Escape.
+INT_PTR CALLBACK layer_help_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG:
+        SetDlgItemTextW(dlg, IDC_LAYERHELP_TEXT, reinterpret_cast<const wchar_t*>(lp));
+        SetFocus(GetDlgItem(dlg, IDC_LAYERHELP_TEXT));
+        return FALSE; // focus set explicitly
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDCANCEL) { // Close button or Escape
+            EndDialog(dlg, 0);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+void show_layer_help(HWND parent, HINSTANCE inst, const std::string& text_utf8) {
+    // Win32 multiline EDIT needs CRLF line breaks; the core composes with LF.
+    std::wstring crlf;
+    for (wchar_t ch : to_wide(text_utf8)) {
+        if (ch == L'\n')
+            crlf += L"\r\n";
+        else
+            crlf += ch;
+    }
+    DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_LAYER_HELP), parent, layer_help_proc,
+                    reinterpret_cast<LPARAM>(crlf.c_str()));
+}
+
 json draft_to_json(const PostDraft& d) {
     json j;
     j["text"] = d.text;
@@ -162,6 +194,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_USER_TIMELINE, L"Open &User Timeline");
     AppendMenuW(status, MF_STRING, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(status, MF_STRING, ID_OPEN_LINKS, L"Open &Links\tCtrl+O");
     AppendMenuW(status, MF_STRING, ID_OPEN_BROWSER, L"Open in Browser");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(status), L"&Status");
 
@@ -250,6 +283,7 @@ bool MainWindow::create() {
         {FVIRTKEY, VK_F3, ID_FIND_NEXT},             // F3: find next
         {FVIRTKEY | FSHIFT, VK_F3, ID_FIND_PREV},    // Shift+F3: find previous
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
+        {FVIRTKEY | FCONTROL, 'O', ID_OPEN_LINKS},   // Ctrl+O: open links in the post
         {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
         {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_DOWN}, // jump down by movement unit
         {FVIRTKEY | FCONTROL, VK_LEFT, ID_CYCLE_PREV},  // pick previous movement unit
@@ -339,7 +373,8 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         if (*action == KeyhookDriver::kLayerHelp) {
-            announce(layer_help_message_);
+            leave_layer(); // a window is opening; drop out of the layer
+            show_layer_help(hwnd_, inst_, layer_help_message_);
             return 0;
         }
         if (*action == KeyhookDriver::kLayerExit) {
@@ -721,6 +756,9 @@ void MainWindow::ev_post_info(const json& e) {
     case PostInfoAction::OpenBrowser:
         dispatch_cmd({{"cmd", "open_status"}, {"id", id}});
         break;
+    case PostInfoAction::OpenLinks:
+        dispatch_cmd({{"cmd", "open_post_links"}, {"id", id}});
+        break;
     case PostInfoAction::ViewThread:
         dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
         break;
@@ -826,6 +864,43 @@ void MainWindow::ev_user_picker(const json& e) {
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
     else
         dispatch_cmd({{"cmd", "open_user_profile"}, {"id", row_id}, {"account_id", account_id}});
+}
+
+void MainWindow::ev_url_picker(const json& e) {
+    if (!e.contains("links") || !e["links"].is_array() || e["links"].empty())
+        return;
+    leave_layer(); // a menu is opening; leave the layer (restores an overlay)
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+    std::vector<std::wstring> urls; // parallels the menu items
+    UINT cmd_id = 1;
+    for (const auto& l : e["links"]) {
+        const std::string title = l.value("title", std::string{});
+        const std::string url = l.value("url", std::string{});
+        // Show the title with the actual URL in parentheses (unless they're equal).
+        std::string label = (title.empty() || title == url) ? url : title + " (" + url + ")";
+        AppendMenuW(menu, MF_STRING, cmd_id++, to_wide(label).c_str());
+        urls.push_back(to_wide(url));
+    }
+    POINT pt{0, 0};
+    const int row = selected_row();
+    RECT rc;
+    if (row >= 0 && ListView_GetItemRect(timeline_view_, row, &rc, LVIR_BOUNDS)) {
+        pt.x = rc.left;
+        pt.y = rc.bottom;
+        ClientToScreen(timeline_view_, &pt);
+    } else {
+        GetCursorPos(&pt);
+    }
+    const int chosen = static_cast<int>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd_,
+        nullptr));
+    DestroyMenu(menu);
+    if (chosen <= 0 || chosen > static_cast<int>(urls.size()))
+        return;
+    ShellExecuteW(nullptr, L"open", urls[static_cast<size_t>(chosen - 1)].c_str(), nullptr, nullptr,
+                  SW_SHOW);
 }
 
 void MainWindow::show_user_actions() {
@@ -1086,6 +1161,12 @@ void MainWindow::handle_command(int id) {
             dispatch_cmd({{"cmd", "open_status"}, {"id", id}});
         break;
     }
+    case ID_OPEN_LINKS: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_post_links"}, {"id", id}});
+        break;
+    }
     case ID_VIEW_THREAD: {
         const std::string id = selected_id();
         if (!id.empty())
@@ -1184,6 +1265,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_user_profile(e);
     else if (ev == "user_picker")
         ev_user_picker(e);
+    else if (ev == "url_picker")
+        ev_url_picker(e);
     else if (ev == "select_row")
         restore_selection(e.value("id", std::string{}));
     else if (ev == "keymap")
@@ -1565,6 +1648,8 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
         do_find_next();
     } else if (a == "FindPrev") {
         do_find_prev();
+    } else if (a == "NewTimeline") {
+        do_new_timeline(); // requests spawnable list; ev_spawnable opens the dialog
     }
 }
 
@@ -1613,6 +1698,7 @@ void MainWindow::ev_compose_context(const json& e) {
 }
 
 void MainWindow::ev_spawnable(const json& e) {
+    leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     spawnable_kinds_.clear();
     std::vector<fastsmui::NewTimelineEntry> entries;
     for (const auto& t : e.value("timelines", json::array())) {

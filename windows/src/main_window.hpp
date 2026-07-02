@@ -103,6 +103,7 @@ private:
     void ev_post_info(const nlohmann::json& e);
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
+    void ev_url_picker(const nlohmann::json& e); // choose among links found in a post
     void ev_keymap(const nlohmann::json& e);
     void ev_layer_keymap(const nlohmann::json& e);
     void ev_action_catalog(const nlohmann::json& e);

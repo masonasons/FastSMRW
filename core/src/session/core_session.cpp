@@ -286,6 +286,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_compose_context(cmd);
     else if (c == "open_status")
         cmd_open_status(cmd);
+    else if (c == "open_post_links")
+        cmd_open_post_links(cmd);
     else if (c == "post_info")
         cmd_post_info(cmd);
     else if (c == "move")
@@ -1122,6 +1124,32 @@ void CoreSession::cmd_open_status(const json& cmd) {
                 emit({{"event", "open_url"}, {"url", s->url}});
 }
 
+void CoreSession::cmd_open_post_links(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const TimelineItem* item = find_item(tc, cmd.value("id", std::string{}));
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s)
+        return;
+    const std::vector<present::PostLink> links = present::post_links(*s);
+    if (links.empty()) {
+        emit_announce("No links in this post.");
+        return;
+    }
+    if (links.size() == 1) {
+        emit({{"event", "open_url"}, {"url", links[0].url}});
+        return;
+    }
+    // Multiple: let the UI present a chooser (works with the window hidden too).
+    json arr = json::array();
+    for (const auto& l : links)
+        arr.push_back({{"title", l.title}, {"url", l.url}});
+    emit({{"event", "url_picker"}, {"links", arr}});
+}
+
 void CoreSession::cmd_post_info(const json& cmd) {
     TimelineController* tc = current();
     if (!tc || !tc->account())
@@ -1517,7 +1545,7 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     if (a == "View")
         return cmd_post_info({{"id", row}});
     if (a == "Url")
-        return cmd_open_status({{"id", row}});
+        return cmd_open_post_links({{"id", row}});
     if (a == "open_thread")
         return cmd_open_thread({{"id", row}});
     if (a == "UserTimeline")
@@ -1528,7 +1556,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_close_timeline();
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
     if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio" ||
-        a == "Find" || a == "FindNext" || a == "FindPrev" || a == "EnterLayer") {
+        a == "Find" || a == "FindNext" || a == "FindPrev" || a == "EnterLayer" ||
+        a == "NewTimeline") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }

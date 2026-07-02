@@ -153,3 +153,55 @@ void test_presenter_demojify_and_mentions() {
     CHECK(!contains(label, "\xF0\x9F\x91\x8B"));   // 👋 stripped
     present::TextConfig::set_current({});
 }
+
+void test_post_links() {
+    // A Mastodon post: HTML anchors (skipping @mention / #hashtag), a titled card,
+    // a labeled media attachment, and finally the post's own URL.
+    Status s;
+    s.content =
+        "<p>read <a href=\"https://example.com/path\">example.com/path</a> and "
+        "<a href=\"https://tags.example/foo\" class=\"mention hashtag\">#foo</a> "
+        "<a href=\"https://x.social/@bob\" class=\"u-url mention\">@bob</a></p>";
+    s.text = "read example.com/path and #foo @bob";
+    s.url = "https://x.social/@me/123";
+    Card c;
+    c.url = "https://card.example/article";
+    c.title = "Great Article";
+    s.card = c;
+    MediaAttachment m;
+    m.url = "https://media.example/pic.jpg";
+    m.type = MediaAttachment::Kind::Image;
+    m.description = "A cat";
+    s.media_attachments.push_back(m);
+
+    std::vector<present::PostLink> links = present::post_links(s);
+    CHECK_EQ(links.size(), static_cast<size_t>(4)); // text link + card + media + post
+    CHECK_EQ(links[0].url, std::string("https://example.com/path"));
+    CHECK_EQ(links[0].title, std::string("example.com/path")); // the anchor's visible text
+    CHECK_EQ(links[1].url, std::string("https://card.example/article"));
+    CHECK_EQ(links[1].title, std::string("Great Article"));
+    CHECK_EQ(links[2].url, std::string("https://media.example/pic.jpg"));
+    CHECK_EQ(links[2].title, std::string("A cat (image)"));
+    CHECK_EQ(links[3].url, std::string("https://x.social/@me/123"));
+    CHECK_EQ(links[3].title, std::string("Open this post in browser"));
+
+    // A boost unwraps to the boosted post's links.
+    Status boost;
+    boost.reblog = std::make_shared<Status>(s);
+    CHECK_EQ(present::post_links(boost).size(), static_cast<size_t>(4));
+
+    // Bluesky (no HTML content): raw URLs come from the plain text; post URL last.
+    Status bsky;
+    bsky.text = "check https://bsky.example/x here";
+    bsky.url = "https://bsky.app/profile/a/post/1";
+    std::vector<present::PostLink> bl = present::post_links(bsky);
+    CHECK_EQ(bl.size(), static_cast<size_t>(2));
+    CHECK_EQ(bl[0].url, std::string("https://bsky.example/x"));
+    CHECK_EQ(bl[1].title, std::string("Open this post in browser"));
+
+    // A post with only its own URL still offers that one link.
+    Status plain;
+    plain.text = "just some text, no links here.";
+    plain.url = "https://x.social/@me/9";
+    CHECK_EQ(present::post_links(plain).size(), static_cast<size_t>(1));
+}

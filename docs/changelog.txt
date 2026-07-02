@@ -1,11 +1,15 @@
 FastSMRW changelog
 ==================
 
-0.0.5 (in development)
-----------------------
+0.0.5
+-----
 
+- Layer mode keys now match the main window: Space opens the thread, T opens a new timeline, O opens the post's links, and Enter shows post info.
+- The layer's help (slash) now opens in its own window listing every key on its own line, closed with the Close button or Escape.
 - Client filters (Timeline menu, or Ctrl+Shift+F): pick which kinds of posts a timeline shows - originals, replies, replies to you, threads, boosts, quotes, with/without media, your own posts - and hide anything not containing some text; hidden posts are just hidden, so new ones still arrive and stay filtered.
 - Server filters (Application > Server Filters, Mastodon): create, edit and delete your account's keyword filters with their contexts, hide-or-warn action and expiry; posts your server marks as filtered are hidden, or read out with a "Filtered" note.
+- Open a link from the focused post: press Ctrl+O (Status menu > Open Links) or the new Open Links button in Post info, and pick from a menu when the post has more than one - text links, the link preview, media, and the post itself.
+- The invisible interface's post-URL shortcut now offers those same in-post links (picking from a menu when there's more than one) instead of always jumping straight to the post's web page.
 
 - New Speech option "Repeat the item when you hit the top or bottom of a timeline": with the invisible interface or layer, choose whether bumping an edge re-speaks the current post (still plays the boundary sound either way).
 - Portable mode: put a "userdata" folder next to FastSMRW.exe and all your settings, accounts and cache are stored there instead of in AppData, so you can carry FastSM on a USB stick.

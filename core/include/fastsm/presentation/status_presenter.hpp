@@ -32,6 +32,20 @@ std::string accessibility_label(const TimelineItem& item, std::int64_t now);
 std::string accessibility_label(const User& u);
 std::string accessibility_label(const Notification& n, std::int64_t now);
 
+// A single openable link offered by the "open link in post" action, with a
+// human-readable title for the chooser.
+struct PostLink {
+    std::string title;
+    std::string url;
+};
+
+// Every openable link in a post (mirrors the Mac app's PostLinks.links): links
+// embedded in the text (skipping @mention / #hashtag anchors), the link-preview
+// card (titled), media attachments (labeled by description + type), and finally
+// the post's own URL ("Open this post in browser"). Boosts are unwrapped;
+// deduplicated by URL, preserving order.
+std::vector<PostLink> post_links(const Status& s);
+
 // A readable, multi-line rendering of a post for the Post Info dialog (Mac
 // parity): author/@handle, spoken time, content warning, text, media, stats.
 std::string post_info(const Status& s, std::int64_t now);

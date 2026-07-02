@@ -46,6 +46,7 @@ void test_presenter_accessibility_all_fields();
 void test_presenter_accessibility_default_config();
 void test_presenter_cw_modes();
 void test_presenter_demojify_and_mentions();
+void test_post_links();
 
 // From test_speech.cpp
 void test_speech_defaults();
@@ -126,6 +127,7 @@ int main() {
     test_presenter_accessibility_default_config();
     test_presenter_cw_modes();
     test_presenter_demojify_and_mentions();
+    test_post_links();
     test_speech_defaults();
     test_speech_normalized();
     test_settings_roundtrip();

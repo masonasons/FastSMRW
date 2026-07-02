@@ -68,6 +68,7 @@ private:
     void cmd_post(const nlohmann::json& cmd);
     void cmd_compose_context(const nlohmann::json& cmd);
     void cmd_open_status(const nlohmann::json& cmd);
+    void cmd_open_post_links(const nlohmann::json& cmd); // open links found inside a post
     void cmd_post_info(const nlohmann::json& cmd);
     void cmd_move(const nlohmann::json& cmd);
     void cmd_cycle_movement(const nlohmann::json& cmd);
