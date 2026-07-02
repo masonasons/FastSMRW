@@ -1,5 +1,8 @@
 #include "fastsm/util/relative_date.hpp"
 
+#include <cstdio>
+#include <ctime>
+
 namespace fastsm::util {
 namespace {
 
@@ -54,6 +57,42 @@ std::string relative_spoken(std::int64_t when, std::int64_t now) {
     if (d < kYear)
         return phrase(d / kMonth, "month");
     return phrase(d / kYear, "year");
+}
+
+namespace {
+std::tm to_local(std::int64_t unix_seconds) {
+    const std::time_t t = static_cast<std::time_t>(unix_seconds);
+    std::tm out{};
+#if defined(_WIN32)
+    localtime_s(&out, &t);
+#else
+    localtime_r(&t, &out);
+#endif
+    return out;
+}
+} // namespace
+
+std::string absolute_time(std::int64_t when, std::int64_t now) {
+    const std::tm w = to_local(when);
+    int hour12 = w.tm_hour % 12;
+    if (hour12 == 0)
+        hour12 = 12;
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%d:%02d %s", hour12, w.tm_min, w.tm_hour < 12 ? "AM" : "PM");
+    std::string out = buf;
+
+    // Append the date only when it isn't today (local calendar day).
+    const std::tm n = to_local(now);
+    if (w.tm_year != n.tm_year || w.tm_yday != n.tm_yday) {
+        static const char* const months[] = {"January",   "February", "March",    "April",
+                                              "May",       "June",     "July",     "August",
+                                              "September", "October",  "November", "December"};
+        char date[48];
+        std::snprintf(date, sizeof(date), ", %s %d, %d", months[w.tm_mon], w.tm_mday,
+                      w.tm_year + 1900);
+        out += date;
+    }
+    return out;
 }
 
 } // namespace fastsm::util

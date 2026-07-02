@@ -852,10 +852,7 @@ void MainWindow::ev_user_picker(const json& e) {
     } else {
         GetCursorPos(&pt);
     }
-    const int chosen = static_cast<int>(TrackPopupMenu(menu,
-                                                       TPM_RETURNCMD | TPM_NONOTIFY |
-                                                           TPM_LEFTALIGN | TPM_TOPALIGN,
-                                                       pt.x, pt.y, 0, hwnd_, nullptr));
+    const int chosen = track_popup(menu, pt);
     DestroyMenu(menu);
     if (chosen <= 0 || chosen > static_cast<int>(list.size()))
         return;
@@ -893,9 +890,7 @@ void MainWindow::ev_url_picker(const json& e) {
     } else {
         GetCursorPos(&pt);
     }
-    const int chosen = static_cast<int>(TrackPopupMenu(
-        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd_,
-        nullptr));
+    const int chosen = track_popup(menu, pt);
     DestroyMenu(menu);
     if (chosen <= 0 || chosen > static_cast<int>(urls.size()))
         return;
@@ -1718,6 +1713,23 @@ void MainWindow::ev_spawnable(const json& e) {
     if (!choice->value.empty())
         cmd["value"] = to_utf8(choice->value);
     dispatch_cmd(cmd);
+}
+
+int MainWindow::track_popup(HMENU menu, POINT pt) {
+    // A popup needs a visible foreground window or focus never lands on it; when
+    // the app is hidden (invisible interface), briefly show it and restore after
+    // (mirrors FastPlay's hidden-window menu handling).
+    const bool was_hidden = !IsWindowVisible(hwnd_);
+    if (was_hidden)
+        ShowWindow(hwnd_, SW_SHOW);
+    SetForegroundWindow(hwnd_);
+    const int chosen = static_cast<int>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd_,
+        nullptr));
+    PostMessageW(hwnd_, WM_NULL, 0, 0); // let the menu dismiss cleanly
+    if (was_hidden)
+        ShowWindow(hwnd_, SW_HIDE);
+    return chosen;
 }
 
 void MainWindow::announce(const std::string& message) {

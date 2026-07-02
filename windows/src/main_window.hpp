@@ -76,6 +76,10 @@ private:
     void on_view_keydown(int vk);
     void handle_command(int id);
     void announce(const std::string& message);
+    // Show a popup menu (TPM_RETURNCMD) at pt and return the chosen id. When the
+    // window is hidden (invisible interface), briefly show it and take the
+    // foreground first, else focus never reaches the menu (FastPlay pattern).
+    int track_popup(HMENU menu, POINT pt);
 
     // Commands.
     void dispatch_cmd(const nlohmann::json& cmd);

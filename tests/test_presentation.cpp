@@ -154,6 +154,35 @@ void test_presenter_demojify_and_mentions() {
     present::TextConfig::set_current({});
 }
 
+void test_presenter_wrap_and_separator() {
+    const std::int64_t now = 1000;
+    Status s;
+    s.account.display_name = "Alice";
+    s.account.acct = "alice@x.social";
+    s.text = "hello";
+    s.created_at = now - 60;
+
+    // Just author + handle, handle wrapped in parentheses, joined with " | ".
+    present::SpeechSettings cfg;
+    cfg.separator = " | ";
+    cfg.status = {{present::StatusSpeechField::Author, true},
+                  {present::StatusSpeechField::Handle, true}};
+    cfg.status[1].before = "(";
+    cfg.status[1].after = ")";
+    present::SpeechConfig::set_current(cfg);
+    present::TextConfig::set_current({});
+
+    const std::string label = present::accessibility_label(s, now);
+    CHECK_EQ(label, std::string("Alice | (@alice@x.social)"));
+
+    // No separator after the author: the next item runs straight on.
+    cfg.status[0].no_separator_after = true;
+    present::SpeechConfig::set_current(cfg);
+    CHECK_EQ(present::accessibility_label(s, now), std::string("Alice(@alice@x.social)"));
+
+    present::SpeechConfig::set_current(present::SpeechSettings::defaults()); // restore
+}
+
 void test_post_links() {
     // A Mastodon post: HTML anchors (skipping @mention / #hashtag), a titled card,
     // a labeled media attachment, and finally the post's own URL.

@@ -60,15 +60,22 @@ const char* field_key(NotificationSpeechField f);
 const char* field_display_name(NotificationSpeechField f);
 bool notification_field_from_key(std::string_view key, NotificationSpeechField& out);
 
-// One orderable, toggleable field.
+// One orderable, toggleable field, with optional text wrapped around it (e.g.
+// "(" before + ")" after the handle).
 template <class Field> struct SpeechItem {
     Field field{};
     bool enabled = true;
+    std::string before;             // spoken immediately before this field's value
+    std::string after;              // spoken immediately after this field's value
+    bool no_separator_after = false; // don't insert the separator after this item
 
     SpeechItem() = default;
     SpeechItem(Field f, bool e = true) : field(f), enabled(e) {}
 
-    bool operator==(const SpeechItem& o) const { return field == o.field && enabled == o.enabled; }
+    bool operator==(const SpeechItem& o) const {
+        return field == o.field && enabled == o.enabled && before == o.before && after == o.after &&
+               no_separator_after == o.no_separator_after;
+    }
     bool operator!=(const SpeechItem& o) const { return !(*this == o); }
 };
 
@@ -76,6 +83,7 @@ struct SpeechSettings {
     std::vector<SpeechItem<StatusSpeechField>> status;
     std::vector<SpeechItem<UserSpeechField>> user;
     std::vector<SpeechItem<NotificationSpeechField>> notification;
+    std::string separator = ", "; // spoken between the fields of a row
 
     // The Mac default order/visibility.
     static SpeechSettings defaults();
@@ -86,7 +94,8 @@ struct SpeechSettings {
     SpeechSettings normalized() const;
 
     bool operator==(const SpeechSettings& o) const {
-        return status == o.status && user == o.user && notification == o.notification;
+        return status == o.status && user == o.user && notification == o.notification &&
+               separator == o.separator;
     }
 };
 
@@ -130,10 +139,11 @@ struct TextPresentation {
     EmojiRemoval post_emoji = EmojiRemoval::None; // strip emoji from post text
     EmojiRemoval name_emoji = EmojiRemoval::None; // strip emoji from display names
     int max_mentions = 0; // collapse a leading @mention run beyond this (0 = all)
+    bool absolute_time = false; // show clock time instead of a relative "5m ago"
 
     bool operator==(const TextPresentation& o) const {
         return cw == o.cw && post_emoji == o.post_emoji && name_emoji == o.name_emoji &&
-               max_mentions == o.max_mentions;
+               max_mentions == o.max_mentions && absolute_time == o.absolute_time;
     }
 };
 

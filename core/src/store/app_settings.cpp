@@ -13,8 +13,16 @@ namespace {
 template <class Field>
 json items_to_json(const std::vector<SpeechItem<Field>>& items) {
     json arr = json::array();
-    for (const auto& item : items)
-        arr.push_back({{"field", field_key(item.field)}, {"enabled", item.enabled}});
+    for (const auto& item : items) {
+        json j = {{"field", field_key(item.field)}, {"enabled", item.enabled}};
+        if (!item.before.empty())
+            j["before"] = item.before;
+        if (!item.after.empty())
+            j["after"] = item.after;
+        if (item.no_separator_after)
+            j["no_separator_after"] = true;
+        arr.push_back(std::move(j));
+    }
     return arr;
 }
 
@@ -25,8 +33,13 @@ std::vector<SpeechItem<Field>> items_from_json(const json& arr, FromKey from_key
         return out;
     for (const auto& e : arr) {
         Field f{};
-        if (from_key(e.value("field", std::string{}), f))
-            out.push_back({f, e.value("enabled", true)});
+        if (from_key(e.value("field", std::string{}), f)) {
+            SpeechItem<Field> item(f, e.value("enabled", true));
+            item.before = e.value("before", std::string{});
+            item.after = e.value("after", std::string{});
+            item.no_separator_after = e.value("no_separator_after", false);
+            out.push_back(std::move(item));
+        }
     }
     return out;
 }
@@ -63,6 +76,7 @@ AppSettings settings_from_json(const json& root) {
     if (EmojiRemoval e; emoji_removal_from_key(root.value("name_emoji_removal", std::string("none")), e))
         settings.text.name_emoji = e;
     settings.text.max_mentions = root.value("max_usernames_in_post", 0);
+    settings.text.absolute_time = root.value("absolute_time", false);
 
     SpeechSettings speech;
     if (auto it = root.find("speech"); it != root.end() && it->is_object()) {
@@ -73,6 +87,7 @@ AppSettings settings_from_json(const json& root) {
         if (auto nf = it->find("notification"); nf != it->end())
             speech.notification =
                 items_from_json<NotificationSpeechField>(*nf, notification_field_from_key);
+        speech.separator = it->value("separator", std::string(", "));
     }
     settings.speech = speech.normalized();
     return settings;
@@ -103,9 +118,11 @@ json settings_to_json(const AppSettings& settings) {
     root["post_emoji_removal"] = emoji_removal_key(settings.text.post_emoji);
     root["name_emoji_removal"] = emoji_removal_key(settings.text.name_emoji);
     root["max_usernames_in_post"] = settings.text.max_mentions;
+    root["absolute_time"] = settings.text.absolute_time;
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
     root["speech"]["notification"] = items_to_json(settings.speech.notification);
+    root["speech"]["separator"] = settings.speech.separator;
     return root;
 }
 

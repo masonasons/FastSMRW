@@ -230,6 +230,7 @@ SpeechSettings SpeechSettings::normalized() const {
     out.status = merge(status, def.status);
     out.user = merge(user, def.user);
     out.notification = merge(notification, def.notification);
+    out.separator = separator;
     return out;
 }
 

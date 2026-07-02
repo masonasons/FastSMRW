@@ -50,10 +50,16 @@ void test_settings_roundtrip() {
     cfg.settings.text.post_emoji = EmojiRemoval::Both;
     cfg.settings.text.name_emoji = EmojiRemoval::Unicode;
     cfg.settings.text.max_mentions = 3;
+    cfg.settings.text.absolute_time = true;
     cfg.settings.speech = SpeechSettings::defaults();
-    for (auto& it : cfg.settings.speech.status)
-        if (it.field == StatusSpeechField::Handle)
+    cfg.settings.speech.separator = " | ";
+    for (auto& it : cfg.settings.speech.status) {
+        if (it.field == StatusSpeechField::Handle) {
             it.enabled = true; // user turned handle on
+            it.before = "(";   // and wrapped it in parentheses
+            it.after = ")";
+        }
+    }
 
     CHECK(st.save(cfg));
     const store::AppConfig loaded = st.load();
@@ -64,10 +70,15 @@ void test_settings_roundtrip() {
     CHECK(loaded.settings.text.post_emoji == EmojiRemoval::Both);
     CHECK(loaded.settings.text.name_emoji == EmojiRemoval::Unicode);
     CHECK_EQ(loaded.settings.text.max_mentions, 3);
+    CHECK(loaded.settings.text.absolute_time);
+    CHECK_EQ(loaded.settings.speech.separator, std::string(" | "));
     bool handle_on = false;
     for (const auto& it : loaded.settings.speech.status)
-        if (it.field == StatusSpeechField::Handle)
+        if (it.field == StatusSpeechField::Handle) {
             handle_on = it.enabled;
+            CHECK_EQ(it.before, std::string("("));
+            CHECK_EQ(it.after, std::string(")"));
+        }
     CHECK(handle_on);
     CHECK(loaded.settings.speech == cfg.settings.speech.normalized());
 

@@ -23,5 +23,8 @@ CMakeUserPresets.json
 *.swp
 .DS_Store
 
+# Claude Code local settings
+.claude/
+
 # C ABI build artifacts (DLL build: build.bat dll)
 build/release/fastsm_core.dll

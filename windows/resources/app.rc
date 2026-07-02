@@ -101,7 +101,7 @@ BEGIN
                -1, 10, 72, 220, 18
 END
 
-IDD_SET_SPEECH DIALOGEX 0, 0, 240, 228
+IDD_SET_SPEECH DIALOGEX 0, 0, 240, 264
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Speech"
 FONT 9, "Segoe UI"
@@ -125,9 +125,13 @@ BEGIN
                -1, 10, 184, 224, 18
     CONTROL    "&Repeat the item when you hit the top or bottom of a timeline (invisible interface / layer)",
                IDC_SET_REPEAT_EDGE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 10, 206, 224, 18
+    CONTROL    "Use &absolute time (clock time), not relative (""5 minutes ago"")",
+               IDC_SET_ABSOLUTE_TIME, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 10, 228, 224, 12
+    LTEXT      "&Separator spoken between items:", -1, 10, 246, 130, 9
+    EDITTEXT   IDC_SET_SEPARATOR, 144, 244, 86, 12, ES_AUTOHSCROLL | WS_TABSTOP
 END
 
-IDD_SPEECH_DETAIL DIALOGEX 0, 0, 264, 200
+IDD_SPEECH_DETAIL DIALOGEX 0, 0, 264, 268
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Speech Details"
 FONT 9, "Segoe UI"
@@ -138,8 +142,13 @@ BEGIN
                8, 22, 172, 150
     PUSHBUTTON "Move &Up\n(Ctrl+Up)", IDC_SPEECH_DETAIL_UP, 188, 22, 68, 20, BS_MULTILINE
     PUSHBUTTON "Move &Down\n(Ctrl+Down)", IDC_SPEECH_DETAIL_DOWN, 188, 46, 68, 20, BS_MULTILINE
-    DEFPUSHBUTTON "OK", IDOK, 150, 180, 50, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 206, 180, 50, 14
+    LTEXT      "Text &before the selected item:", -1, 8, 178, 248, 9
+    EDITTEXT   IDC_SPEECH_DETAIL_BEFORE, 8, 188, 248, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT      "Text &after the selected item:", -1, 8, 204, 248, 9
+    EDITTEXT   IDC_SPEECH_DETAIL_AFTER, 8, 214, 248, 12, ES_AUTOHSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "&No separator after the selected item", IDC_SPEECH_DETAIL_NOSEP, 8, 230, 248, 10
+    DEFPUSHBUTTON "OK", IDOK, 150, 248, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 206, 248, 50, 14
 END
 
 IDD_SET_ADVANCED DIALOGEX 0, 0, 240, 160

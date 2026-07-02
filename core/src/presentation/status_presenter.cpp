@@ -48,6 +48,14 @@ std::string present_name(const std::string& name) {
     return apply_emoji(name, TextConfig::current().name_emoji);
 }
 
+// Time, honoring the absolute-vs-relative setting. `spoken` picks the wording
+// for the relative case ("5 minutes ago" vs the compact "5m").
+std::string present_time(std::int64_t when, std::int64_t now, bool spoken) {
+    if (TextConfig::current().absolute_time)
+        return util::absolute_time(when, now);
+    return spoken ? util::relative_spoken(when, now) : util::relative_compact(when, now);
+}
+
 void add(std::vector<std::string>& parts, std::string s) {
     if (!s.empty())
         parts.push_back(std::move(s));
@@ -59,6 +67,31 @@ std::string join(const std::vector<std::string>& parts, const char* sep) {
         if (i)
             out += sep;
         out += parts[i];
+    }
+    return out;
+}
+
+// Compose a row's spoken label from its ordered/toggled fields: each enabled,
+// non-empty field is wrapped with its before/after text and joined by the
+// configured separator -- except an item flagged no_separator_after runs
+// straight into the next one. `get` maps a field to its optional string value.
+template <class Field, class Getter>
+std::string compose_fields(const std::vector<SpeechItem<Field>>& fields, Getter get) {
+    const std::string& sep = SpeechConfig::current().separator;
+    std::string out;
+    std::string pending; // separator to place before the next part
+    bool first = true;
+    for (const auto& item : fields) {
+        if (!item.enabled)
+            continue;
+        auto str = get(item.field);
+        if (!str || str->empty())
+            continue;
+        if (!first)
+            out += pending;
+        out += item.before + *str + item.after;
+        pending = item.no_separator_after ? std::string() : sep;
+        first = false;
     }
     return out;
 }
@@ -102,7 +135,7 @@ std::string visibility_name(Visibility v) {
 
 std::string compact_line(const Status& s, std::int64_t now) {
     const Status& d = s.display_status();
-    const std::string time = util::relative_compact(d.created_at, now);
+    const std::string time = present_time(d.created_at, now, false);
     std::string prefix;
     if (s.is_boost())
         prefix = present_name(s.account.best_name()) + " " + kBoostMark + " ";
@@ -150,7 +183,7 @@ std::optional<std::string> status_field_string(StatusSpeechField field, const St
                                       " options")
                       : std::nullopt;
     case StatusSpeechField::Time:
-        return util::relative_spoken(d.created_at, now);
+        return present_time(d.created_at, now, true);
     case StatusSpeechField::Stats:
         return stats(d);
     case StatusSpeechField::Favorited:
@@ -181,14 +214,8 @@ void collect_filter_titles(const Status& s, std::vector<std::string>& out) {
 
 std::string accessibility_label(const Status& s, std::int64_t now,
                                 const std::vector<SpeechItem<StatusSpeechField>>& fields) {
-    std::vector<std::string> parts;
-    for (const auto& item : fields) {
-        if (!item.enabled)
-            continue;
-        if (auto str = status_field_string(item.field, s, now); str && !str->empty())
-            parts.push_back(std::move(*str));
-    }
-    std::string label = join(parts, ", ");
+    std::string label = compose_fields(
+        fields, [&](StatusSpeechField f) { return status_field_string(f, s, now); });
     std::vector<std::string> titles;
     collect_filter_titles(s, titles);
     if (!titles.empty()) {
@@ -266,36 +293,23 @@ std::optional<std::string> notification_field_string(NotificationSpeechField f, 
                    ? std::optional(present_text(n.status->display_status().text))
                    : std::nullopt;
     case NotificationSpeechField::Time:
-        return util::relative_spoken(n.created_at, now);
+        return present_time(n.created_at, now, true);
     }
     return std::nullopt;
 }
 } // namespace
 
 std::string accessibility_label(const User& u) {
-    std::vector<std::string> parts;
-    for (const auto& item : SpeechConfig::current().user) {
-        if (!item.enabled)
-            continue;
-        if (auto str = user_field_string(item.field, u); str && !str->empty())
-            parts.push_back(std::move(*str));
-    }
-    if (parts.empty())
-        parts.push_back(u.best_name()); // never read a blank row
-    return join(parts, ", ");
+    std::string label = compose_fields(SpeechConfig::current().user,
+                                       [&](UserSpeechField f) { return user_field_string(f, u); });
+    return label.empty() ? u.best_name() : label; // never read a blank row
 }
 
 std::string accessibility_label(const Notification& n, std::int64_t now) {
-    std::vector<std::string> parts;
-    for (const auto& item : SpeechConfig::current().notification) {
-        if (!item.enabled)
-            continue;
-        if (auto str = notification_field_string(item.field, n, now); str && !str->empty())
-            parts.push_back(std::move(*str));
-    }
-    if (parts.empty())
-        parts.push_back(n.account.best_name());
-    return join(parts, ", ");
+    std::string label = compose_fields(
+        SpeechConfig::current().notification,
+        [&](NotificationSpeechField f) { return notification_field_string(f, n, now); });
+    return label.empty() ? n.account.best_name() : label;
 }
 
 std::string compact_line(const TimelineItem& item, std::int64_t now) {
@@ -462,7 +476,7 @@ std::vector<PostLink> post_links(const Status& status) {
 std::string post_info(const Status& s, std::int64_t now) {
     std::string out;
     out += s.account.best_name() + " (@" + s.account.acct + ")\n";
-    out += util::relative_spoken(s.created_at, now) + "\n";
+    out += present_time(s.created_at, now, true) + "\n";
     if (s.has_content_warning())
         out += "Content warning: " + *s.spoiler_text + "\n";
     out += "\n" + s.text + "\n";

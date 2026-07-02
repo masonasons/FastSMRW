@@ -1,6 +1,15 @@
 FastSMRW changelog
 ==================
 
+0.0.6
+-----
+
+- New Speech option: use absolute clock time (e.g. "3:45 PM") instead of relative ("5 minutes ago"); the date is added on the end only when the post isn't from today.
+- Speech now lets you set the separator spoken between items, and add your own text before and after each individual item (e.g. wrap the handle in parentheses) in Configure Posts / Users / Notifications.
+- Speech: each item can also be set to have no separator after it, so it runs straight into the next one.
+- Fixed: link and account menus opened from a hidden window (invisible interface) now take focus properly.
+
+
 0.0.5
 -----
 

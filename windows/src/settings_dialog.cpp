@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <functional>
 #include <iterator>
+#include <map>
+#include <utility>
 
 #include <commctrl.h>
 #include <prsht.h>
@@ -217,17 +219,67 @@ LRESULT CALLBACK SpeechListProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR
     return DefSubclassProc(h, msg, wp, lp);
 }
 
-// One generic, orderable, toggleable row (id carries the field enum value).
+// One generic, orderable, toggleable row (id carries the field enum value), with
+// optional text wrapped around the field's value when spoken.
 struct SpeechRow {
     int id;
     std::wstring label;
     bool enabled;
+    std::wstring before;
+    std::wstring after;
+    bool no_sep_after = false;
+};
+
+// Per-item wrap state kept by field id, so it survives list reordering.
+struct ItemWrap {
+    std::wstring before;
+    std::wstring after;
+    bool no_sep = false;
 };
 
 struct DetailCtx {
     const std::wstring* title;
     std::vector<SpeechRow>* rows;
+    std::map<int, ItemWrap> wrap; // field id -> its before/after/no-separator
+    int loaded = -1;              // field id currently shown in the edits/checkbox
 };
+
+std::wstring dlg_text(HWND dlg, int id) {
+    HWND c = GetDlgItem(dlg, id);
+    const int len = GetWindowTextLengthW(c);
+    std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
+    const int got = GetWindowTextW(c, buf.data(), len + 1);
+    buf.resize(static_cast<size_t>(got));
+    return buf;
+}
+
+// Save the before/after edits + no-separator checkbox for the loaded field.
+void save_loaded_wrap(HWND dlg, DetailCtx* c) {
+    if (c->loaded >= 0)
+        c->wrap[c->loaded] = {dlg_text(dlg, IDC_SPEECH_DETAIL_BEFORE),
+                              dlg_text(dlg, IDC_SPEECH_DETAIL_AFTER),
+                              IsDlgButtonChecked(dlg, IDC_SPEECH_DETAIL_NOSEP) == BST_CHECKED};
+}
+
+// Load the selected row's before/after + no-separator into the controls.
+void load_sel_wrap(HWND dlg, DetailCtx* c) {
+    HWND list = GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST);
+    const int sel = ListView_GetNextItem(list, -1, LVNI_SELECTED);
+    if (sel < 0) {
+        c->loaded = -1;
+        return;
+    }
+    LVITEMW lv{};
+    lv.mask = LVIF_PARAM;
+    lv.iItem = sel;
+    ListView_GetItem(list, &lv);
+    const int id = static_cast<int>(lv.lParam);
+    const auto& w = c->wrap[id];
+    SetDlgItemTextW(dlg, IDC_SPEECH_DETAIL_BEFORE, w.before.c_str());
+    SetDlgItemTextW(dlg, IDC_SPEECH_DETAIL_AFTER, w.after.c_str());
+    CheckDlgButton(dlg, IDC_SPEECH_DETAIL_NOSEP, w.no_sep ? BST_CHECKED : BST_UNCHECKED);
+    c->loaded = id;
+}
 
 INT_PTR CALLBACK SpeechDetailProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
@@ -250,14 +302,29 @@ INT_PTR CALLBACK SpeechDetailProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             lv.lParam = r.id;
             ListView_InsertItem(list, &lv);
             ListView_SetCheckState(list, row, r.enabled);
+            c->wrap[r.id] = {r.before, r.after, r.no_sep_after};
             ++row;
         }
         if (row > 0)
             ListView_SetItemState(list, 0, LVIS_SELECTED | LVIS_FOCUSED,
                                   LVIS_SELECTED | LVIS_FOCUSED);
+        load_sel_wrap(dlg, c); // show row 0's wrap text
         SetWindowSubclass(list, SpeechListProc, 1, 0);
         SetFocus(list);
         return FALSE;
+    }
+    case WM_NOTIFY: {
+        auto* nm = reinterpret_cast<LPNMHDR>(lp);
+        if (nm->idFrom == IDC_SPEECH_DETAIL_LIST && nm->code == LVN_ITEMCHANGED) {
+            auto* nv = reinterpret_cast<LPNMLISTVIEW>(lp);
+            // Only when a row gains selection: stash the old wrap edits, load new.
+            if ((nv->uNewState & LVIS_SELECTED) && !(nv->uOldState & LVIS_SELECTED)) {
+                auto* c = reinterpret_cast<DetailCtx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+                save_loaded_wrap(dlg, c);
+                load_sel_wrap(dlg, c);
+            }
+        }
+        break;
     }
     case WM_DESTROY:
         RemoveWindowSubclass(GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST), SpeechListProc, 1);
@@ -274,6 +341,7 @@ INT_PTR CALLBACK SpeechDetailProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         }
         if (id == IDOK) {
             auto* c = reinterpret_cast<DetailCtx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            save_loaded_wrap(dlg, c); // capture the currently-shown edits
             HWND list = GetDlgItem(dlg, IDC_SPEECH_DETAIL_LIST);
             const int n = ListView_GetItemCount(list);
             std::vector<SpeechRow> out;
@@ -284,8 +352,10 @@ INT_PTR CALLBACK SpeechDetailProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 ListView_GetItem(list, &lv);
                 wchar_t label[256] = {};
                 ListView_GetItemText(list, i, 0, label, 256);
+                const int fid = static_cast<int>(lv.lParam);
+                const auto& w = c->wrap[fid];
                 out.push_back(
-                    {static_cast<int>(lv.lParam), label, ListView_GetCheckState(list, i) != 0});
+                    {fid, label, ListView_GetCheckState(list, i) != 0, w.before, w.after, w.no_sep});
             }
             *c->rows = std::move(out);
             EndDialog(dlg, IDOK);
@@ -313,13 +383,19 @@ void edit_speech(HWND parent, const std::wstring& title,
                  std::vector<present::SpeechItem<Field>>& items) {
     std::vector<SpeechRow> rows;
     for (const auto& it : items)
-        rows.push_back(
-            {static_cast<int>(it.field), to_wide(present::field_display_name(it.field)), it.enabled});
+        rows.push_back({static_cast<int>(it.field),
+                        to_wide(present::field_display_name(it.field)), it.enabled,
+                        to_wide(it.before), to_wide(it.after), it.no_separator_after});
     if (!show_speech_detail(parent, title, rows))
         return;
     std::vector<present::SpeechItem<Field>> out;
-    for (const auto& r : rows)
-        out.push_back({static_cast<Field>(r.id), r.enabled});
+    for (const auto& r : rows) {
+        present::SpeechItem<Field> item(static_cast<Field>(r.id), r.enabled);
+        item.before = to_utf8(r.before);
+        item.after = to_utf8(r.after);
+        item.no_separator_after = r.no_sep_after;
+        out.push_back(std::move(item));
+    }
     items = std::move(out);
 }
 
@@ -371,6 +447,8 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                      AppSettings::kMaxMentionsMax);
         SendMessageW(spin, UDM_SETPOS32, 0, ctx->settings.text.max_mentions);
         checked(dlg, IDC_SET_REPEAT_EDGE, ctx->settings.invisible_repeat_at_edge);
+        checked(dlg, IDC_SET_ABSOLUTE_TIME, ctx->settings.text.absolute_time);
+        SetDlgItemTextW(dlg, IDC_SET_SEPARATOR, to_wide(ctx->settings.speech.separator).c_str());
         return TRUE;
     }
     case WM_COMMAND: {
@@ -403,6 +481,8 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             ctx->settings.text.max_mentions =
                 std::clamp(v, AppSettings::kMaxMentionsMin, AppSettings::kMaxMentionsMax);
             ctx->settings.invisible_repeat_at_edge = is_checked(dlg, IDC_SET_REPEAT_EDGE);
+            ctx->settings.text.absolute_time = is_checked(dlg, IDC_SET_ABSOLUTE_TIME);
+            ctx->settings.speech.separator = to_utf8(dlg_text(dlg, IDC_SET_SEPARATOR));
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
