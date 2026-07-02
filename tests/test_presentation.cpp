@@ -183,6 +183,25 @@ void test_presenter_wrap_and_separator() {
     present::SpeechConfig::set_current(present::SpeechSettings::defaults()); // restore
 }
 
+void test_presenter_stats_nonzero() {
+    const std::int64_t now = 1000;
+    present::SpeechSettings cfg; // only the Stats field
+    cfg.status = {{present::StatusSpeechField::Stats, true}};
+    present::SpeechConfig::set_current(cfg);
+    present::TextConfig::set_current({});
+
+    Status z; // all counts zero -> no "0 replies, 0 boosts..." noise
+    CHECK(present::accessibility_label(z, now).empty());
+
+    Status s;
+    s.replies_count = 0;
+    s.boosts_count = 3;
+    s.favourites_count = 1;
+    CHECK_EQ(present::accessibility_label(s, now), std::string("3 boosts, 1 favorite"));
+
+    present::SpeechConfig::set_current(present::SpeechSettings::defaults()); // restore
+}
+
 void test_post_links() {
     // A Mastodon post: HTML anchors (skipping @mention / #hashtag), a titled card,
     // a labeled media attachment, and finally the post's own URL.

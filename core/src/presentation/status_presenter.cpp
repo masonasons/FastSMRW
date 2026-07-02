@@ -112,9 +112,15 @@ std::string stats(const Status& s) {
     auto plural = [](int n, const char* one, const char* many) {
         return std::to_string(n) + " " + (n == 1 ? one : many);
     };
-    return plural(s.replies_count, "reply", "replies") + ", " +
-           plural(s.boosts_count, "boost", "boosts") + ", " +
-           plural(s.favourites_count, "favorite", "favorites");
+    // Only mention non-zero counts — "0 boosts" is just noise (Mac parity).
+    std::vector<std::string> parts;
+    if (s.replies_count > 0)
+        parts.push_back(plural(s.replies_count, "reply", "replies"));
+    if (s.boosts_count > 0)
+        parts.push_back(plural(s.boosts_count, "boost", "boosts"));
+    if (s.favourites_count > 0)
+        parts.push_back(plural(s.favourites_count, "favorite", "favorites"));
+    return join(parts, ", ");
 }
 
 std::string visibility_name(Visibility v) {
@@ -491,9 +497,8 @@ std::string post_info(const Status& s, std::int64_t now) {
         else
             out += "Attachments: " + join(descs, "; ") + "\n";
     }
-    out += "\n" + std::to_string(s.replies_count) + " replies, " +
-           std::to_string(s.boosts_count) + " boosts, " + std::to_string(s.favourites_count) +
-           " favorites";
+    if (std::string counts = stats(s); !counts.empty()) // only non-zero counts (Mac parity)
+        out += "\n" + counts;
     return out;
 }
 

@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.0.7 (in development)
+----------------------
+
+- Reply, boost and favorite counts are now only spoken when they're above zero, so posts with no activity don't read "0 boosts, 0 favorites".
+
+
 0.0.6
 -----
 
