@@ -456,6 +456,7 @@ void KeymapManagerDialog::switch_keymap(const std::string& name) {
     unbinds_.clear();
     dirty_ = false;
     dispatch_({{"cmd", "get_keymap"}, {"name", name}}); // on_keymap will fill in
+    dispatch_({{"cmd", "set_active_keymap"}, {"name", name}}); // selecting also activates it
     refresh_list();
     update_enabled();
     set_status();

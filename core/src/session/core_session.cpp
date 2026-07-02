@@ -356,6 +356,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_following(cmd);
     else if (c == "user_action")
         cmd_user_action(cmd);
+    else if (c == "reorder_timeline")
+        cmd_reorder_timeline(cmd);
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -578,6 +580,32 @@ void CoreSession::cmd_select_timeline(const json& cmd) {
             msg += ", " + timeline_position_text(tc);
         emit_announce(msg);
     }
+}
+
+void CoreSession::cmd_reorder_timeline(const json& cmd) {
+    const int n = static_cast<int>(timelines_.size());
+    if (n < 2)
+        return;
+    const std::string dir = cmd.value("dir", std::string{});
+    int target = current_;
+    if (dir == "up")
+        target = current_ - 1;
+    else if (dir == "down")
+        target = current_ + 1;
+    else
+        return;
+    if (target < 0 || target >= n) { // already at the top/bottom edge
+        sound_.play(sound::Earcon::Boundary);
+        return;
+    }
+    std::swap(timelines_[static_cast<size_t>(current_)], timelines_[static_cast<size_t>(target)]);
+    current_ = target;
+    save_open_timelines(); // the new order survives a restart
+    sound_.play(sound::Earcon::Navigate);
+    emit_timelines();
+    if (TimelineController* tc = current())
+        emit_announce(tc->source().title() + ", " + std::to_string(current_ + 1) + " of " +
+                      std::to_string(n));
 }
 
 std::string CoreSession::timeline_position_text(const TimelineController* tc) const {
@@ -1565,6 +1593,10 @@ void CoreSession::cmd_get_keymap(const json& cmd) {
 void CoreSession::cmd_set_active_keymap(const json& cmd) {
     settings_.invisible_keymap = cmd.value("name", std::string("default"));
     save_config();
+    // Broadcast settings so the UI updates its cached active-keymap name BEFORE the
+    // keymap event arrives; otherwise ev_keymap's active-name gate drops the rebind
+    // and the switch only takes effect on next launch.
+    emit_settings();
     emit_keymap(settings_.invisible_keymap);
 }
 

@@ -347,6 +347,23 @@ LRESULT CALLBACK MainWindow::ViewProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPAR
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
+LRESULT CALLBACK MainWindow::TimelinesListProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
+                                                     UINT_PTR id, DWORD_PTR ref) {
+    auto* self = reinterpret_cast<MainWindow*>(ref);
+    if (msg == WM_KEYDOWN && self && (wp == VK_UP || wp == VK_DOWN) &&
+        (GetKeyState(VK_SHIFT) & 0x8000)) {
+        // Shift+Up/Down reorders the open timelines (Ctrl+arrow is movement-unit
+        // navigation). Swallow the key so the ListView doesn't also move
+        // focus/selection -- the core re-emits the list with the moved timeline
+        // reselected.
+        self->dispatch_cmd({{"cmd", "reorder_timeline"}, {"dir", wp == VK_UP ? "up" : "down"}});
+        return 0;
+    }
+    if (msg == WM_NCDESTROY)
+        RemoveWindowSubclass(hwnd, &MainWindow::TimelinesListProcStatic, id);
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
 LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
@@ -479,6 +496,8 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
 void MainWindow::create_children() {
     timelines_list_ = make_listview(hwnd_, IDC_TIMELINES_LIST);
+    SetWindowSubclass(timelines_list_, &MainWindow::TimelinesListProcStatic, 0,
+                      reinterpret_cast<DWORD_PTR>(this));
     timeline_view_ = CreateWindowExW(
         0, WC_LISTVIEWW, L"",
         WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL |

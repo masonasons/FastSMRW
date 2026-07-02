@@ -1,6 +1,13 @@
 FastSMRW changelog
 ==================
 
+0.0.8
+-----
+
+- Reorder your open timelines: press Shift+Up or Shift+Down while focused on the timelines list to move the current timeline earlier or later; the new order is remembered across restarts.
+- Fixed: choosing a different keymap in the Keyboard Manager now switches to it right away, instead of only taking effect after a restart.
+
+
 0.0.7
 -----
 

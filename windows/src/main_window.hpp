@@ -64,6 +64,7 @@ private:
     // Subclass of the posts ListView: restores the remembered row when focus
     // returns (e.g. after a modal dialog) so it never snaps to the top.
     static LRESULT CALLBACK ViewProcStatic(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
+    static LRESULT CALLBACK TimelinesListProcStatic(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
 
     void create_children();
     void layout();
