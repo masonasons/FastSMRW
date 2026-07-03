@@ -98,7 +98,7 @@ BEGIN
     LTEXT      "&Maximum posts to cache per timeline:", -1, 10, 13, 168, 9
     EDITTEXT   IDC_SET_CACHELIMIT, 180, 11, 42, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL    "", IDC_SET_CACHELIMIT_SPIN, "msctls_updown32",
-               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
+               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 12, 12
     LTEXT      "How many posts to keep saved per timeline for instant startup (100-20000). This is storage, not how many load at once - see Advanced.",
                -1, 10, 30, 224, 26
     LTEXT      "&Auto-refresh:", -1, 10, 66, 56, 9
@@ -144,7 +144,7 @@ BEGIN
     LTEXT      "&Max usernames in a post (0 = all):", -1, 10, 166, 130, 9
     EDITTEXT   IDC_SET_MAX_MENTIONS, 144, 164, 40, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL    "", IDC_SET_MAX_MENTIONS_SPIN, "msctls_updown32",
-               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
+               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 12, 12
     LTEXT      "Collapses a long leading @mention list (e.g. big reply chains). Custom = Mastodon :shortcode: emoji.",
                -1, 10, 184, 224, 18
     CONTROL    "&Repeat the item when you hit the top or bottom of a timeline (invisible interface / layer)",
@@ -183,7 +183,7 @@ BEGIN
     LTEXT      "&API calls per timeline load (1-10):", -1, 10, 13, 150, 9
     EDITTEXT   IDC_SET_FETCHPAGES, 162, 11, 42, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL    "", IDC_SET_FETCHPAGES_SPIN, "msctls_updown32",
-               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS, 0, 0, 12, 12
+               UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 12, 12
     LTEXT      "Posts loaded per refresh is about 40 x this number. Raise it to load more at once (slower). Applies to refresh and scrollback.",
                -1, 10, 30, 224, 26
 END
