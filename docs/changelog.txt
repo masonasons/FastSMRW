@@ -1,6 +1,21 @@
 FastSMRW changelog
 ==================
 
+0.1.3
+-----
+
+- Close the current timeline with Ctrl+W (it used to be Backspace); Hide Window is now Ctrl+H.
+- In the layer, W now closes the current timeline, Shift+H shows or hides the window, and H follows a hashtag.
+- Follow a hashtag by pressing H on a post (Mastodon): a box opens pre-filled with that post's hashtags (blank if it has none), and you can type any tag to follow.
+- New "Followed Hashtags" item in the Application menu (Mastodon) lists the hashtags you follow, where you can open a timeline for one or unfollow it.
+- New invisible-interface actions: Follow a hashtag (Alt+Windows+H) and Manage followed hashtags (unbound by default).
+- When you view a thread (Mastodon) and the post links to or quotes another fediverse post, that post's conversation is now folded into the thread you're reading.
+- Bluesky now has a Notifications timeline (likes, reposts, follows, mentions, replies and quotes), and the "show mentions in notifications" setting works for it too.
+- Bluesky gained a Mentions timeline (add it from New Timeline) that shows the posts that mention or reply to you.
+- Fixed: quoted posts on Mastodon (the newer quote-post feature) now show up and are read out, instead of being silently dropped.
+- Fixed: quoting a post (Quote / Q) now actually attaches the quoted post when you send it, on both Mastodon and Bluesky - before, it silently posted just your text.
+
+
 0.1.2
 -----
 

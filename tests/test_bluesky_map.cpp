@@ -60,6 +60,38 @@ void test_bluesky_feed_mapping() {
     CHECK_EQ(inner.media_attachments[0].description, std::string("a view"));
 }
 
+void test_bluesky_notification_mapping() {
+    // A like notification carries the actor but no attached post.
+    const char* kLike = R"JSON({
+      "uri": "at://did:plc:me/app.bsky.feed.like/n1", "cid": "c1",
+      "author": { "did": "did:plc:dana", "handle": "dana.test", "displayName": "Dana" },
+      "reason": "like",
+      "reasonSubject": "at://did:plc:me/app.bsky.feed.post/mine",
+      "indexedAt": "2024-06-28T12:00:00.000Z"
+    })JSON";
+    const Notification like = bluesky::map_notification(json::parse(kLike));
+    CHECK(like.platform == Platform::Bluesky);
+    CHECK(like.type == Notification::Kind::Favourite);
+    CHECK_EQ(like.account.display_name, std::string("Dana"));
+    CHECK(like.status == nullptr); // like/repost carry no incoming post
+
+    // A reply notification reads as a Mention and carries the incoming post text.
+    const char* kReply = R"JSON({
+      "uri": "at://did:plc:eve/app.bsky.feed.post/r1", "cid": "c2",
+      "author": { "did": "did:plc:eve", "handle": "eve.test", "displayName": "Eve" },
+      "reason": "reply",
+      "record": { "text": "@me hi there", "createdAt": "2024-06-28T13:00:00.000Z" },
+      "indexedAt": "2024-06-28T13:00:01.000Z"
+    })JSON";
+    const Notification reply = bluesky::map_notification(json::parse(kReply));
+    CHECK(reply.type == Notification::Kind::Mention); // reply/quote read as mention
+    CHECK(reply.status != nullptr);
+    if (reply.status) {
+        CHECK_EQ(reply.status->text, std::string("@me hi there"));
+        CHECK_EQ(reply.status->id, std::string("at://did:plc:eve/app.bsky.feed.post/r1"));
+    }
+}
+
 void test_bluesky_plain_post() {
     const char* kPlain = R"JSON({
       "post": {

@@ -46,6 +46,11 @@ struct PostLink {
 // deduplicated by URL, preserving order.
 std::vector<PostLink> post_links(const Status& s);
 
+// Just the URLs embedded in a post's text (HTML anchors, or plain-text URLs on
+// Bluesky), skipping @mention / #hashtag anchors, the card, and media. Used to
+// detect links to other posts (for folding them into a thread). Boost-unwrapped.
+std::vector<std::string> post_text_link_urls(const Status& s);
+
 // A readable, multi-line rendering of a post for the Post Info dialog (Mac
 // parity): author/@handle, spoken time, content warning, text, media, stats.
 std::string post_info(const Status& s, std::int64_t now);

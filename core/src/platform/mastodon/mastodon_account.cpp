@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
+#include "fastsm/presentation/status_presenter.hpp"
 #include "fastsm/util/date_parsing.hpp"
 #include "fastsm/util/url.hpp"
 
@@ -57,12 +58,13 @@ PlatformFeatures MastodonAccount::features() const {
     PlatformFeatures f;
     f.visibility = true;
     f.content_warning = true;
-    f.quote_posts = false; // not on vanilla Mastodon
+    f.quote_posts = true; // Mastodon 4.4+ (older servers just ignore the param)
     f.polls = true;
     f.editing = true;
     f.scheduling = true;
     f.hide_boosts = true;
     f.media = true;
+    f.follow_hashtags = true;
     return f;
 }
 
@@ -123,30 +125,73 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     if (source.kind == TimelineSource::Kind::Thread) {
         // The focused status plus its ancestors and descendants (the local
         // instance's view of the conversation), in order. Matches the Mac.
-        const std::string base = credentials_.instance_url + "/api/v1/statuses/" + source.param;
-        std::string body;
-        long st = 0;
-        Status focused;
-        if (request("GET", base, "", "", body, st)) {
-            try {
-                focused = mastodon::map_status(json::parse(body));
-            } catch (...) {
+        std::unordered_set<std::string> present; // ids already in the thread (dedup)
+
+        // Fetch one status + its /context and append the new rows in
+        // ancestors -> focused -> descendants order. Returns the focused status
+        // (so the caller can inspect its links), or an empty Status on failure.
+        auto append_thread = [&](const std::string& status_id) -> Status {
+            const std::string base = credentials_.instance_url + "/api/v1/statuses/" + status_id;
+            std::string body;
+            long st = 0;
+            Status focus;
+            if (request("GET", base, "", "", body, st)) {
+                try {
+                    focus = mastodon::map_status(json::parse(body));
+                } catch (...) {
+                }
             }
+            auto add = [&](Status s) {
+                if (s.id.empty() || !present.insert(s.id).second)
+                    return; // empty or already folded in
+                page.items.push_back(TimelineItem{std::move(s)});
+            };
+            std::string cbody;
+            if (request("GET", base + "/context", "", "", cbody, st)) {
+                try {
+                    json ctx = json::parse(cbody);
+                    if (auto a = ctx.find("ancestors"); a != ctx.end() && a->is_array())
+                        for (const auto& s : *a)
+                            add(mastodon::map_status(s));
+                    add(focus);
+                    if (auto d = ctx.find("descendants"); d != ctx.end() && d->is_array())
+                        for (const auto& s : *d)
+                            add(mastodon::map_status(s));
+                } catch (...) {
+                }
+            } else {
+                add(focus); // no context available; still show the post itself
+            }
+            return focus;
+        };
+
+        const Status root = append_thread(source.param);
+
+        // Fold in posts the focused post references — its native quote and any
+        // fediverse post it links to in text — merging each one's conversation
+        // into this thread (deduped). Bounded so a reference-heavy post can't fan
+        // out into many network calls.
+        int folded = 0;
+        auto fold = [&](const std::string& id) {
+            if (id.empty() || present.count(id) || folded >= 4)
+                return;
+            append_thread(id);
+            ++folded;
+        };
+        if (root.quote) { // the quoted post's conversation
+            std::string qid = root.quote->id;
+            if (root.quote->instance_url && !root.quote->url.empty())
+                if (auto local = resolve_url(root.quote->url))
+                    qid = *local; // a remote quote -> its local copy
+            fold(qid);
         }
-        std::string cbody;
-        if (request("GET", base + "/context", "", "", cbody, st)) {
-            try {
-                json ctx = json::parse(cbody);
-                if (auto a = ctx.find("ancestors"); a != ctx.end() && a->is_array())
-                    for (const auto& s : *a)
-                        page.items.push_back(TimelineItem{mastodon::map_status(s)});
-                if (!focused.id.empty())
-                    page.items.push_back(TimelineItem{std::move(focused)});
-                if (auto d = ctx.find("descendants"); d != ctx.end() && d->is_array())
-                    for (const auto& s : *d)
-                        page.items.push_back(TimelineItem{mastodon::map_status(s)});
-            } catch (...) {
-            }
+        int attempts = 0;
+        for (const auto& url : present::post_text_link_urls(root)) {
+            if (attempts >= 4 || folded >= 4)
+                break;
+            ++attempts;
+            if (const std::optional<std::string> local = resolve_url(url))
+                fold(*local); // a fediverse post on this instance -> fold it in
         }
         return page;
     }
@@ -454,6 +499,16 @@ std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
             if (auto local = resolve_url(*draft.reply_to_url))
                 reply_id = *local;
         params.push_back({"in_reply_to_id", reply_id});
+    }
+    if (draft.quoted_status_id) {
+        // Mastodon 4.4 quote posts: POST /statuses with quoted_status_id. A remote
+        // target must be resolved to its local copy first (like a reply).
+        std::string qid = *draft.quoted_status_id;
+        if (draft.quoted_status_url && !draft.quoted_status_url->empty())
+            if (auto local = resolve_url(*draft.quoted_status_url))
+                qid = *local;
+        if (!qid.empty())
+            params.push_back({"quoted_status_id", qid});
     }
     if (draft.visibility)
         params.push_back({"visibility", visibility_tag(*draft.visibility)});
@@ -765,6 +820,54 @@ std::vector<ServerFilter> MastodonAccount::list_server_filters() {
         if (arr.is_array())
             for (const auto& j : arr)
                 out.push_back(parse_server_filter(j));
+    } catch (...) {
+    }
+    return out;
+}
+
+namespace {
+// A hashtag name for a URL path: drop a leading '#' and percent-encode.
+std::string tag_path(const std::string& name) {
+    std::string n = name;
+    if (!n.empty() && n.front() == '#')
+        n.erase(n.begin());
+    return util::percent_encode(n);
+}
+} // namespace
+
+bool MastodonAccount::follow_hashtag(const std::string& name) {
+    const std::string url = credentials_.instance_url + "/api/v1/tags/" + tag_path(name) + "/follow";
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
+
+bool MastodonAccount::unfollow_hashtag(const std::string& name) {
+    const std::string url = credentials_.instance_url + "/api/v1/tags/" + tag_path(name) + "/unfollow";
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
+
+std::vector<FollowedTag> MastodonAccount::followed_hashtags() {
+    // GET /api/v1/followed_tags. One page (up to 200) is plenty for a manager UI.
+    const std::string url = credentials_.instance_url + "/api/v1/followed_tags?limit=200";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return {};
+    std::vector<FollowedTag> out;
+    try {
+        const json arr = json::parse(body);
+        if (arr.is_array())
+            for (const auto& j : arr) {
+                FollowedTag t;
+                t.name = j.value("name", std::string{});
+                t.url = j.value("url", std::string{});
+                t.following = true;
+                if (!t.name.empty())
+                    out.push_back(std::move(t));
+            }
     } catch (...) {
     }
     return out;

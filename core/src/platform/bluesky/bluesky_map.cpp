@@ -41,6 +41,19 @@ void map_embed_media(const json& embed, Status& s) {
     }
 }
 
+Notification::Kind notif_kind(const std::string& reason) {
+    if (reason == "like")
+        return Notification::Kind::Favourite;
+    if (reason == "repost")
+        return Notification::Kind::Reblog;
+    if (reason == "follow")
+        return Notification::Kind::Follow;
+    // Bluesky splits an @-mention into mention/reply/quote; all read as "mention".
+    if (reason == "mention" || reason == "reply" || reason == "quote")
+        return Notification::Kind::Mention;
+    return Notification::Kind::Unknown;
+}
+
 } // namespace
 
 User map_author(const json& j) {
@@ -112,6 +125,33 @@ Status map_post(const json& post) {
         }
     }
     return s;
+}
+
+Notification map_notification(const json& j) {
+    Notification n;
+    n.platform = Platform::Bluesky;
+    n.id = str(j, "uri");
+    n.type = notif_kind(str(j, "reason"));
+    if (const json* author = obj(j, "author"))
+        n.account = map_author(*author);
+    n.created_at = util::parse_iso8601(str(j, "indexedAt")).value_or(0);
+    // A mention/reply/quote notification's own record is the incoming post; build
+    // a light Status so the row can read its text (matching the Mastodon side).
+    if (n.type == Notification::Kind::Mention) {
+        Status s;
+        s.platform = Platform::Bluesky;
+        s.id = str(j, "uri");
+        s.cid = str(j, "cid");
+        s.account = n.account;
+        if (const json* record = obj(j, "record")) {
+            s.text = str(*record, "text");
+            s.created_at = util::parse_iso8601(str(*record, "createdAt")).value_or(n.created_at);
+        }
+        if (s.created_at == 0)
+            s.created_at = n.created_at;
+        n.status = std::make_shared<Status>(std::move(s));
+    }
+    return n;
 }
 
 Status map_feed_item(const json& item) {

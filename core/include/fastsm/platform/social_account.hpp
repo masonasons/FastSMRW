@@ -24,6 +24,15 @@ struct PlatformFeatures {
     bool scheduling = false;
     bool hide_boosts = false; // can hide/show a followed account's boosts (Mastodon)
     bool media = false;       // attach media (with alt text) to posts
+    bool follow_hashtags = false; // follow/unfollow hashtags (Mastodon)
+};
+
+// A hashtag the viewer follows (Mastodon /api/v1/followed_tags): its name (no
+// '#'), canonical URL, and whether the viewer currently follows it.
+struct FollowedTag {
+    std::string name;
+    std::string url;
+    bool following = true;
 };
 
 // A media file to attach to a new post: the raw bytes plus a filename, MIME
@@ -82,6 +91,8 @@ struct PostDraft {
     std::optional<Visibility> visibility;
     std::optional<std::string> spoiler_text;
     std::optional<std::string> quoted_status_id;
+    std::optional<std::string> quoted_status_cid; // Bluesky: the quoted post's cid (with the uri)
+    std::optional<std::string> quoted_status_url; // remote Mastodon quote -> resolve to a local id
     std::optional<std::string> language;
     std::optional<PollDraft> poll;
     std::optional<std::int64_t> scheduled_at; // unix seconds (Mastodon)
@@ -184,6 +195,14 @@ public:
     virtual bool reject_follow_request(const std::string&) { return false; }
     // Show or hide a followed account's boosts in the home timeline.
     virtual bool set_show_boosts(const std::string&, bool) { return false; }
+
+    // --- Followed hashtags (optional; Mastodon /api/v1/tags, /followed_tags) ---
+    // Follow / unfollow a hashtag by name (no '#'). Return success.
+    virtual bool follow_hashtag(const std::string&) { return false; }
+    virtual bool unfollow_hashtag(const std::string&) { return false; }
+    // The hashtags the viewer currently follows. Runs synchronously on the worker
+    // thread. Empty for platforms without hashtag following (Bluesky).
+    virtual std::vector<FollowedTag> followed_hashtags() { return {}; }
 
     // --- Server-side keyword filters (optional; Mastodon /api/v2/filters) ---
     // Whether this platform exposes managed server filters at all (Mastodon yes,

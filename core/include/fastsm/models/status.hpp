@@ -37,6 +37,7 @@ struct Status {
     std::shared_ptr<Status> quote;  // the quoted status
     std::vector<MediaAttachment> media_attachments;
     std::vector<Mention> mentions;
+    std::vector<std::string> tags; // hashtag names in this post (no '#'), Mastodon
     std::optional<Visibility> visibility; // Mastodon only
     std::optional<std::string> spoiler_text;
     std::optional<Card> card;

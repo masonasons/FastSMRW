@@ -24,6 +24,7 @@ void test_truncate_mentions();
 // From test_mastodon_map.cpp
 void test_mastodon_status_mapping();
 void test_mastodon_notification_mapping();
+void test_mastodon_quote_mapping();
 void test_mark_remote();
 void test_remote_timeline_source();
 void test_form_encode();
@@ -31,6 +32,7 @@ void test_form_encode();
 // From test_bluesky_map.cpp
 void test_bluesky_feed_mapping();
 void test_bluesky_plain_post();
+void test_bluesky_notification_mapping();
 
 // From test_auth.cpp
 void test_instance_normalization();
@@ -67,6 +69,7 @@ void test_capi_session_events();
 
 // From test_thread.cpp
 void test_mastodon_thread_fetch();
+void test_mastodon_thread_folding();
 void test_mastodon_instance_max_chars();
 void test_mastodon_user_pinned_posts();
 
@@ -118,12 +121,14 @@ int main() {
     test_demojify();
     test_truncate_mentions();
     test_mastodon_status_mapping();
+    test_mastodon_quote_mapping();
     test_mastodon_notification_mapping();
     test_mark_remote();
     test_remote_timeline_source();
     test_form_encode();
     test_bluesky_feed_mapping();
     test_bluesky_plain_post();
+    test_bluesky_notification_mapping();
     test_instance_normalization();
     test_base64();
     test_timeline_cache();
@@ -146,6 +151,7 @@ int main() {
     test_sse_multiline_crlf_comments();
     test_capi_session_events();
     test_mastodon_thread_fetch();
+    test_mastodon_thread_folding();
     test_mastodon_instance_max_chars();
     test_mastodon_user_pinned_posts();
     test_keymap_normalize();

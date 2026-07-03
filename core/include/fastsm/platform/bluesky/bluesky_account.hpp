@@ -21,6 +21,7 @@ public:
     std::string account_key() const override { return "bluesky:" + credentials_.did; }
     PlatformFeatures features() const override;
     std::vector<TimelineSource> default_timelines() const override;
+    std::vector<TimelineSource> spawnable_timelines() const override;
 
     int max_page_size() const override { return 100; } // Bluesky API cap per call
 

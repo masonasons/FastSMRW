@@ -172,6 +172,11 @@ Status map_status(const json& j) {
         for (const auto& m : *it)
             s.mentions.push_back({str(m, "id"), str(m, "acct"), str(m, "username"), str(m, "url")});
     }
+    if (auto it = j.find("tags"); it != j.end() && it->is_array()) {
+        for (const auto& t : *it)
+            if (std::string name = str(t, "name"); !name.empty())
+                s.tags.push_back(std::move(name)); // hashtag names (server returns them without '#')
+    }
     if (auto it = j.find("card"); it != j.end() && it->is_object()) {
         Card c;
         c.url = str(*it, "url");
@@ -184,8 +189,19 @@ Status map_status(const json& j) {
         s.poll = map_poll(*it);
     if (auto it = j.find("reblog"); it != j.end() && it->is_object())
         s.reblog = std::make_shared<Status>(map_status(*it));
-    if (auto it = j.find("quote"); it != j.end() && it->is_object())
+    // Quote posts. Mastodon 4.4 wraps the quote as { state, quoted_status: Status }
+    // (only "accepted" quotes carry a populated quoted_status). Some servers embed
+    // the quoted Status object directly under "quote". Accept both, and a
+    // top-level "quoted_status" as a last resort.
+    if (auto it = j.find("quote"); it != j.end() && it->is_object()) {
+        const json& q = *it;
+        if (auto qs = q.find("quoted_status"); qs != q.end() && qs->is_object())
+            s.quote = std::make_shared<Status>(map_status(*qs));
+        else if (q.contains("id") && q.contains("account")) // Status embedded directly
+            s.quote = std::make_shared<Status>(map_status(q));
+    } else if (auto it = j.find("quoted_status"); it != j.end() && it->is_object()) {
         s.quote = std::make_shared<Status>(map_status(*it));
+    }
     return s;
 }
 

@@ -10,6 +10,7 @@
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
 #include "client_filters_dialog.hpp"
+#include "hashtag_dialog.hpp"
 #include "list_membership_dialog.hpp"
 #include "lists_manager_dialog.hpp"
 #include "new_timeline_dialog.hpp"
@@ -76,6 +77,7 @@ enum {
     ID_VIEW_MUTES,
     ID_VIEW_BLOCKS,
     ID_FOLLOW_REQUESTS,
+    ID_FOLLOWED_HASHTAGS,
     ID_STOP_MEDIA,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
@@ -188,13 +190,14 @@ HMENU build_menu() {
     AppendMenuW(app, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
     AppendMenuW(app, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
     AppendMenuW(app, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
+    AppendMenuW(app, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
     AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
     AppendMenuW(app, MF_STRING, ID_STOP_MEDIA, L"S&top Media Playback\tCtrl+S");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(app, MF_STRING, ID_HIDE_WINDOW, L"&Hide Window\tCtrl+W");
+    AppendMenuW(app, MF_STRING, ID_HIDE_WINDOW, L"&Hide Window\tCtrl+H");
     AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
 
@@ -216,7 +219,7 @@ HMENU build_menu() {
     HMENU timeline = CreatePopupMenu();
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
-    AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tBackspace");
+    AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tCtrl+W");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_FIND, L"&Find…\tCtrl+F");
     AppendMenuW(timeline, MF_STRING, ID_FIND_NEXT, L"Find &Next\tF3");
@@ -286,14 +289,14 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'S', ID_STOP_MEDIA}, // Ctrl+S: stop background audio
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
-        {FVIRTKEY | FCONTROL, 'W', ID_HIDE_WINDOW}, // Ctrl+W: hide the window
+        {FVIRTKEY | FCONTROL, 'W', ID_CLOSE_TIMELINE}, // Ctrl+W: close the current timeline
+        {FVIRTKEY | FCONTROL, 'H', ID_HIDE_WINDOW},    // Ctrl+H: hide the window
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
         {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
         {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
         {FVIRTKEY | FCONTROL | FSHIFT, 'Q', ID_QUOTE},
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
-        {FVIRTKEY, VK_BACK, ID_CLOSE_TIMELINE},          // Backspace: close timeline (anywhere)
         {FVIRTKEY | FCONTROL, VK_DELETE, ID_CLEAR_TIMELINE},          // clear focused timeline
         {FVIRTKEY | FCONTROL | FSHIFT, VK_DELETE, ID_CLEAR_ALL}, // clear every timeline
         {FVIRTKEY | FCONTROL, 'Z', ID_GO_BACK},
@@ -755,6 +758,9 @@ void MainWindow::on_view_keydown(int vk) {
             dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
         break;
     }
+    case 'H': // follow a hashtag; prompt pre-fills with this post's hashtags
+        dispatch_cmd({{"cmd", "follow_hashtag_prompt"}, {"id", selected_id()}});
+        break;
     case VK_RETURN: {
         Timeline* t = current();
         const int fr = selected_row();
@@ -1351,6 +1357,9 @@ void MainWindow::handle_command(int id) {
     case ID_FOLLOW_REQUESTS:
         dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "follow_requests"}});
         break;
+    case ID_FOLLOWED_HASHTAGS:
+        dispatch_cmd({{"cmd", "list_followed_hashtags"}}); // core replies -> manager dialog
+        break;
     case ID_STOP_MEDIA:
         stop_media();
         break;
@@ -1534,6 +1543,10 @@ void MainWindow::on_event(const std::string& js) {
         ev_user_lists(e);
     else if (ev == "lists")
         ev_lists(e);
+    else if (ev == "hashtag_prompt")
+        ev_hashtag_prompt(e);
+    else if (ev == "followed_hashtags")
+        ev_followed_hashtags(e);
     else if (ev == "update_status")
         ev_update_status(e);
     else if (ev == "update_ready")
@@ -1906,6 +1919,35 @@ void MainWindow::ev_lists(const json& e) {
     lists_mgr_ = nullptr;
 }
 
+void MainWindow::ev_hashtag_prompt(const json& e) {
+    std::vector<std::wstring> prefill;
+    for (const auto& t : e.value("tags", json::array()))
+        if (t.is_string())
+            prefill.push_back(to_wide(t.get<std::string>()));
+    auto guard = enter_modal();
+    std::optional<std::string> name = show_follow_hashtag_dialog(hwnd_, inst_, prefill);
+    leave_modal(guard);
+    if (name && !name->empty())
+        dispatch_cmd({{"cmd", "follow_hashtag"}, {"name", *name}});
+}
+
+void MainWindow::ev_followed_hashtags(const json& e) {
+    if (followed_tags_mgr_) { // manager is open: live-refresh its list
+        followed_tags_mgr_->on_followed(e);
+        return;
+    }
+    if (!e.value("supported", false)) {
+        announce("Following hashtags is only available for Mastodon accounts.");
+        return;
+    }
+    FollowedHashtagsDialog dlg(inst_, [this](const json& cmd) { dispatch_cmd(cmd); });
+    followed_tags_mgr_ = &dlg;
+    auto guard = enter_modal();
+    dlg.run(hwnd_, e);
+    leave_modal(guard);
+    followed_tags_mgr_ = nullptr;
+}
+
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
     if (a == "EnterLayer") {
@@ -2084,6 +2126,10 @@ void MainWindow::ev_compose_context(const json& e) {
         draft["reply_to_url"] = e["reply_to_url"];
     if (e.contains("quoted_status_id"))
         draft["quoted_status_id"] = e["quoted_status_id"];
+    if (e.contains("quoted_status_cid"))
+        draft["quoted_status_cid"] = e["quoted_status_cid"];
+    if (e.contains("quoted_status_url"))
+        draft["quoted_status_url"] = e["quoted_status_url"];
     json cmd = {{"cmd", "post"}, {"draft", draft}};
     if (e.contains("edit_id"))
         cmd["edit_id"] = e["edit_id"];

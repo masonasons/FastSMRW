@@ -483,6 +483,20 @@ std::vector<PostLink> post_links(const Status& status) {
     return out;
 }
 
+std::vector<std::string> post_text_link_urls(const Status& status) {
+    const Status& s = status.display_status(); // unwrap a boost
+    std::vector<std::pair<std::string, std::string>> text_links;
+    anchors(s.content, text_links); // HTML anchors (skips @mention / #hashtag)
+    std::vector<std::string> out;
+    if (!text_links.empty()) {
+        for (const auto& [text, url] : text_links)
+            out.push_back(url);
+    } else {
+        find_urls_in_text(s.text, out); // Bluesky: URLs live in plain text
+    }
+    return out;
+}
+
 // Poll block for Post Info. Before voting (and while open) the option titles are
 // listed without counts (Mastodon hides them until you vote); once you've voted or
 // the poll has closed, each option shows its votes and percentage, your own picks

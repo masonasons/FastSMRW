@@ -224,3 +224,14 @@
 #define IDC_LSE_NAME          517
 #define IDC_LSE_REPLIES       518
 #define IDC_LSE_EXCLUSIVE     519
+
+// Follow-a-hashtag prompt (editable combo pre-filled with the post's hashtags).
+#define IDD_FOLLOW_HASHTAG    540
+#define IDC_FH_LABEL          541
+#define IDC_FH_COMBO          542
+
+// Followed Hashtags manager (Application menu): list + open-timeline / unfollow.
+#define IDD_FOLLOWED_HASHTAGS 545
+#define IDC_FHM_LIST          546
+#define IDC_FHM_OPEN          547
+#define IDC_FHM_UNFOLLOW      548

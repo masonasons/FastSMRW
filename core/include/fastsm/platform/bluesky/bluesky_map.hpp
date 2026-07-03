@@ -17,4 +17,10 @@ Status map_post(const nlohmann::json& post);
 // by wrapping the post in a boost.
 Status map_feed_item(const nlohmann::json& item);
 
+// Map a notification (app.bsky.notification.listNotifications). The `reason`
+// becomes the Notification kind (like->Favourite, repost->Reblog, follow->Follow,
+// mention/reply/quote->Mention). For mention/reply/quote the notification's own
+// record is the incoming post, so a light Status is attached.
+Notification map_notification(const nlohmann::json& j);
+
 } // namespace fastsm::bluesky

@@ -114,6 +114,10 @@ PostDraft draft_from_json(const json& d) {
         draft.reply_to_url = d.value("reply_to_url", std::string{});
     if (d.contains("quoted_status_id"))
         draft.quoted_status_id = d.value("quoted_status_id", std::string{});
+    if (d.contains("quoted_status_cid"))
+        draft.quoted_status_cid = d.value("quoted_status_cid", std::string{});
+    if (d.contains("quoted_status_url"))
+        draft.quoted_status_url = d.value("quoted_status_url", std::string{});
     if (d.contains("spoiler_text"))
         draft.spoiler_text = d.value("spoiler_text", std::string{});
     if (d.contains("language"))
@@ -261,6 +265,13 @@ json lists_to_json(const std::vector<TimelineList>& lists) {
                        {"title", l.title},
                        {"replies_policy", l.replies_policy},
                        {"exclusive", l.exclusive}});
+    return arr;
+}
+
+json followed_tags_to_json(const std::vector<FollowedTag>& tags) {
+    json arr = json::array();
+    for (const auto& t : tags)
+        arr.push_back({{"name", t.name}, {"url", t.url}, {"following", t.following}});
     return arr;
 }
 
@@ -437,6 +448,14 @@ void CoreSession::handle(const json& cmd) {
         cmd_rename_list(cmd);
     else if (c == "delete_list")
         cmd_delete_list(cmd);
+    else if (c == "follow_hashtag_prompt")
+        cmd_follow_hashtag_prompt(cmd);
+    else if (c == "follow_hashtag")
+        cmd_follow_hashtag(cmd);
+    else if (c == "unfollow_hashtag")
+        cmd_unfollow_hashtag(cmd);
+    else if (c == "list_followed_hashtags")
+        cmd_list_followed_hashtags();
 }
 
 // --- lifecycle / accounts ---
@@ -966,6 +985,87 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
         spawn_source(*src);
 }
 
+// --- Followed hashtags (Mastodon) ---
+
+namespace {
+std::string without_hash(const std::string& s) {
+    return (!s.empty() && s.front() == '#') ? s.substr(1) : s;
+}
+} // namespace
+
+void CoreSession::cmd_follow_hashtag_prompt(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct)
+        return;
+    if (!acct->features().follow_hashtags) {
+        emit_announce("Following hashtags is only supported on Mastodon.");
+        return;
+    }
+    // Pre-fill the prompt with the hashtags in the focused post (deduped, order
+    // preserved); blank if the post has none.
+    json tags = json::array();
+    TimelineController* tc = current();
+    const std::string row_id = cmd.value("id", std::string{});
+    if (tc && !row_id.empty())
+        if (const TimelineItem* item = find_item(tc, row_id))
+            if (const Status* s = item->actionable_status()) {
+                std::set<std::string> seen;
+                for (const auto& t : s->tags)
+                    if (!t.empty() && seen.insert(t).second)
+                        tags.push_back(t);
+            }
+    emit({{"event", "hashtag_prompt"}, {"tags", std::move(tags)}});
+}
+
+void CoreSession::cmd_follow_hashtag(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string name = without_hash(cmd.value("name", std::string{}));
+    if (!acct || !acct->features().follow_hashtags || name.empty())
+        return;
+    worker_.post([this, acct, name] {
+        const bool ok = acct->follow_hashtag(name);
+        loop_.post([this, ok, name] {
+            sound_.play(ok ? sound::Earcon::Favorite : sound::Earcon::Error);
+            emit_announce(ok ? ("Now following #" + name) : "Couldn't follow that hashtag.");
+        });
+    });
+}
+
+void CoreSession::cmd_unfollow_hashtag(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    const std::string name = without_hash(cmd.value("name", std::string{}));
+    if (!acct || !acct->features().follow_hashtags || name.empty())
+        return;
+    worker_.post([this, acct, name] {
+        const bool ok = acct->unfollow_hashtag(name);
+        auto tags = ok ? acct->followed_hashtags() : std::vector<FollowedTag>{};
+        loop_.post([this, ok, name, tags = std::move(tags)]() mutable {
+            sound_.play(ok ? sound::Earcon::Unfavorite : sound::Earcon::Error);
+            emit_announce(ok ? ("Unfollowed #" + name) : "Couldn't unfollow that hashtag.");
+            if (ok) // refresh an open manager dialog
+                emit({{"event", "followed_hashtags"}, {"tags", followed_tags_to_json(tags)}});
+        });
+    });
+}
+
+void CoreSession::cmd_list_followed_hashtags() { emit_followed_hashtags(); }
+
+void CoreSession::emit_followed_hashtags() {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || !acct->features().follow_hashtags) {
+        emit({{"event", "followed_hashtags"}, {"supported", false}, {"tags", json::array()}});
+        return;
+    }
+    worker_.post([this, acct] {
+        auto tags = acct->followed_hashtags();
+        loop_.post([this, tags = std::move(tags)]() mutable {
+            emit({{"event", "followed_hashtags"},
+                  {"supported", true},
+                  {"tags", followed_tags_to_json(tags)}});
+        });
+    });
+}
+
 void CoreSession::cmd_open_thread(const json& cmd) {
     TimelineController* tc = current();
     const std::string row_id = cmd.value("id", std::string{});
@@ -1429,6 +1529,10 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         ctx["title"] = "Quote Post";
         ctx["context_label"] = "Quoting " + target->account.best_name() + ": " + target->text;
         ctx["quoted_status_id"] = target->id;
+        if (target->cid) // Bluesky needs the quoted post's cid to build the embed
+            ctx["quoted_status_cid"] = *target->cid;
+        if (target->instance_url && !target->url.empty()) // remote: resolve to a local id
+            ctx["quoted_status_url"] = target->url;
     } else if (mode == "edit" && target) {
         ctx["title"] = "Edit Post";
         ctx["prefill_text"] = target->text;
@@ -2033,6 +2137,10 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_favorite({{"id", row}});
     if (a == "PinPost")
         return cmd_toggle_pin_post({{"id", row}});
+    if (a == "FollowHashtag")
+        return cmd_follow_hashtag_prompt({{"id", row}});
+    if (a == "ManageHashtags")
+        return cmd_list_followed_hashtags();
     if (a == "Enter") { // the configurable default action, like pressing Enter in the window
         const TimelineItem* it = tc ? find_item(tc, row) : nullptr;
         if (!it)
@@ -2130,6 +2238,7 @@ void CoreSession::rebuild_timelines() {
     parked_.clear();
     current_ = 0;
     const auto saved = load_open_timelines();
+    bool migrated = false;
     for (SocialAccount* account : accounts_.accounts()) {
         worker_.post([account] { account->load_configuration(); }); // refresh char limit
         refresh_lists(account); // warm each account's list cache for Ctrl+T
@@ -2142,6 +2251,23 @@ void CoreSession::rebuild_timelines() {
             for (const SavedTimeline& st : it->second) {
                 sources.push_back(st.source);
                 pins.push_back(st.pinned);
+            }
+            // Migration: make sure the account's standing (non-dismissable) default
+            // timelines are present even if it was saved before those defaults
+            // existed -- e.g. a Bluesky account that predates the Notifications
+            // timeline. Only non-dismissable defaults are added back: the user
+            // can't have closed those, so a missing one just means an older save.
+            for (const TimelineSource& def : account->default_timelines()) {
+                if (def.is_dismissable())
+                    continue;
+                const std::string ck = def.cache_key();
+                const bool have = std::any_of(sources.begin(), sources.end(),
+                                              [&](const TimelineSource& s) { return s.cache_key() == ck; });
+                if (!have) {
+                    sources.push_back(def);
+                    pins.push_back(false);
+                    migrated = true;
+                }
             }
         } else {
             sources = account->default_timelines();
@@ -2160,6 +2286,8 @@ void CoreSession::rebuild_timelines() {
         else
             parked_[key] = std::move(v);
     }
+    if (migrated)
+        save_open_timelines(); // persist the newly-added standing timelines
     update_streaming();
 }
 

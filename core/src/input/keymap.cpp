@@ -155,9 +155,9 @@ KeyBindings layer_keymap() {
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
         {"p", "PinPost"},            {"t", "NewTimeline"},
-        {"u", "UserTimeline"},
-        {"o", "Url"},                {"w", "ToggleWindow"},
-        {"back", "CloseTimeline"}, // canonical name for Backspace (matches vk_to_base)
+        {"u", "UserTimeline"},        {"h", "FollowHashtag"},
+        {"shift+h", "ToggleWindow"}, // Shift+H shows/hides the window
+        {"o", "Url"},                {"w", "CloseTimeline"}, // W closes the current timeline
     };
 }
 
@@ -185,9 +185,10 @@ std::string layer_help_text() {
            "P: Pin or unpin your post to your profile\n"
            "T: New timeline\n"
            "U: User's timeline\n"
+           "H: Follow a hashtag\n"
            "O: Open links\n"
-           "W: Show or hide window\n"
-           "Backspace: Close timeline\n"
+           "W: Close timeline\n"
+           "Shift+H: Show or hide window\n"
            "Slash: Show these keys\n"
            "Escape: Leave the layer";
 }
@@ -266,6 +267,8 @@ const std::vector<ActionDef>& action_catalog() {
         {"MoveTimelineDown", "Move timeline down", ""},   // unbound (in-app Shift+Down)
         {"TogglePin", "Pin / unpin timeline", ""},        // unbound (in-app Ctrl+P)
         {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
+        {"FollowHashtag", "Follow a hashtag", "alt+win+h"}, // in-app / layer H
+        {"ManageHashtags", "Manage followed hashtags", ""}, // unbound by default
         {"CloseTimeline", "Close timeline", "alt+win+'"},
         {"ToggleWindow", "Show / hide window", "control+win+w"},
         {"EnterLayer", "Open the layer", ""}, // unbound: call up the layer from hotkey/keyhook mode

@@ -42,7 +42,11 @@ PlatformFeatures BlueskyAccount::features() const {
 }
 
 std::vector<TimelineSource> BlueskyAccount::default_timelines() const {
-    return {TimelineSource::home()};
+    return {TimelineSource::home(), TimelineSource::notifications()};
+}
+
+std::vector<TimelineSource> BlueskyAccount::spawnable_timelines() const {
+    return {TimelineSource::mentions()};
 }
 
 bool BlueskyAccount::refresh_session() {
@@ -166,6 +170,50 @@ TimelinePage BlueskyAccount::items(const TimelineSource& source, int limit,
         }
         break;
     }
+    case TimelineSource::Kind::Notifications: {
+        // Every notification, including mention/reply/quote (as Mention rows) so
+        // the "show mentions in notifications" setting can filter them client-side.
+        if (auto j = fetch(base + "app.bsky.notification.listNotifications?limit=" +
+                           std::to_string(limit) + cur)) {
+            if (auto a = j->find("notifications"); a != j->end() && a->is_array())
+                for (const auto& e : *a)
+                    page.items.push_back(TimelineItem{bluesky::map_notification(e)});
+            if (auto c = j->find("cursor"); c != j->end() && c->is_string())
+                page.next_cursor = PageCursor::token(c->get<std::string>());
+        }
+        break;
+    }
+    case TimelineSource::Kind::Mentions: {
+        // Keep only mention/reply/quote notifications, then hydrate the actual
+        // posts via getPosts so a @-mention shows as the post itself (Mastodon
+        // parity). getPosts takes at most 25 uris per call, so batch them.
+        auto j = fetch(base + "app.bsky.notification.listNotifications?limit=" +
+                       std::to_string(limit) + cur);
+        if (!j)
+            break;
+        std::vector<std::string> uris;
+        if (auto a = j->find("notifications"); a != j->end() && a->is_array())
+            for (const auto& e : *a) {
+                const std::string reason = e.value("reason", std::string{});
+                if (reason == "mention" || reason == "reply" || reason == "quote")
+                    if (std::string uri = e.value("uri", std::string{}); !uri.empty())
+                        uris.push_back(std::move(uri));
+            }
+        if (auto c = j->find("cursor"); c != j->end() && c->is_string())
+            page.next_cursor = PageCursor::token(c->get<std::string>());
+        for (size_t i = 0; i < uris.size(); i += 25) {
+            std::string q;
+            for (size_t k = i; k < i + 25 && k < uris.size(); ++k)
+                q += "&uris=" + util::percent_encode(uris[k]);
+            if (q.empty())
+                continue;
+            if (auto pj = fetch(base + "app.bsky.feed.getPosts?" + q.substr(1)))
+                if (auto pa = pj->find("posts"); pa != pj->end() && pa->is_array())
+                    for (const auto& p : *pa)
+                        page.items.push_back(TimelineItem{bluesky::map_post(p)});
+        }
+        break;
+    }
     default:
         break; // other kinds aren't supported on Bluesky yet
     }
@@ -179,6 +227,13 @@ std::optional<Status> BlueskyAccount::post(const PostDraft& draft) {
     record["createdAt"] = util::format_iso8601(util::now_unix());
     if (draft.language)
         record["langs"] = json::array({*draft.language});
+    // Quote post: embed a strong reference (uri + cid) to the quoted post.
+    if (draft.quoted_status_id && !draft.quoted_status_id->empty() && draft.quoted_status_cid &&
+        !draft.quoted_status_cid->empty()) {
+        record["embed"] = {{"$type", "app.bsky.embed.record"},
+                           {"record",
+                            {{"uri", *draft.quoted_status_id}, {"cid", *draft.quoted_status_cid}}}};
+    }
 
     json body;
     body["repo"] = credentials_.did;

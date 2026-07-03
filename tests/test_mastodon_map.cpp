@@ -41,6 +41,7 @@ static const char* kSampleBoost = R"JSON({
     "media_attachments": [
       { "id": "m1", "type": "image", "url": "https://img/x.png", "description": "a cat" }
     ],
+    "tags": [ {"name": "cats", "url": "https://x/tags/cats"}, {"name": "welcome"} ],
     "poll": {
       "id": "p1", "multiple": true, "votes_count": 3,
       "options": [ {"title": "yes", "votes_count": 2}, {"title": "no", "votes_count": 1} ]
@@ -73,6 +74,9 @@ void test_mastodon_status_mapping() {
     CHECK_EQ(inner.media_attachments.size(), size_t(1));
     CHECK(inner.media_attachments[0].type == MediaAttachment::Kind::Image);
     CHECK_EQ(inner.media_attachments[0].description, std::string("a cat"));
+    CHECK_EQ(inner.tags.size(), size_t(2)); // hashtag names parsed from the tags array
+    CHECK_EQ(inner.tags[0], std::string("cats"));
+    CHECK_EQ(inner.tags[1], std::string("welcome"));
     CHECK(inner.poll.has_value());
     CHECK(inner.poll->multiple);
     CHECK_EQ(inner.poll->options.size(), size_t(2));
@@ -92,6 +96,37 @@ void test_mastodon_notification_mapping() {
     CHECK_EQ(n.account.display_name, std::string("Alice"));
     CHECK(n.status != nullptr);
     CHECK_EQ(n.status->text, std::string("hi"));
+}
+
+void test_mastodon_quote_mapping() {
+    // Mastodon 4.4 wraps the quote as { state, quoted_status: Status }.
+    const char* kQuote = R"JSON({
+      "id": "q1", "content": "<p>check this out</p>",
+      "created_at": "2024-06-28T12:00:00.000Z",
+      "account": {"id":"1","acct":"me","username":"me"},
+      "quote": {
+        "state": "accepted",
+        "quoted_status": {
+          "id": "700", "content": "<p>original post</p>",
+          "created_at": "2024-06-28T11:00:00.000Z",
+          "account": {"id":"2","acct":"alice","username":"alice","display_name":"Alice"}
+        }
+      }
+    })JSON";
+    const Status s = mastodon::map_status(json::parse(kQuote));
+    CHECK(s.quote != nullptr);
+    if (s.quote) {
+        CHECK_EQ(s.quote->id, std::string("700"));
+        CHECK_EQ(s.quote->text, std::string("original post")); // HTML stripped
+        CHECK_EQ(s.quote->account.display_name, std::string("Alice"));
+    }
+
+    // A pending/rejected quote has no quoted_status -> no quote attached.
+    const char* kPending = R"JSON({
+      "id": "q2", "content": "<p>hi</p>", "created_at": "2024-06-28T12:00:00.000Z",
+      "account": {"id":"1","acct":"me"}, "quote": { "state": "pending" }
+    })JSON";
+    CHECK(mastodon::map_status(json::parse(kPending)).quote == nullptr);
 }
 
 void test_mark_remote() {

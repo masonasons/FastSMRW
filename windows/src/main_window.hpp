@@ -21,6 +21,7 @@ namespace fastsmui {
 
 class ServerFiltersDialog; // manager modal; non-null while open (like keymap_mgr_)
 class ListsManagerDialog;  // Lists manager modal; non-null while open
+class FollowedHashtagsDialog; // Followed Hashtags manager modal; non-null while open
 class MediaPlayback;       // windowless background audio playback (media_player_window.hpp)
 
 // The main application window: a left "Timelines" list and a right virtual
@@ -149,6 +150,8 @@ private:
     void ev_server_filters(const nlohmann::json& e); // open / refresh the server filters manager
     void ev_user_lists(const nlohmann::json& e);     // open the add/remove-from-lists checklist
     void ev_lists(const nlohmann::json& e);          // forward into the open Lists manager
+    void ev_hashtag_prompt(const nlohmann::json& e);    // prompt to follow a hashtag
+    void ev_followed_hashtags(const nlohmann::json& e); // open / refresh Followed Hashtags manager
     void ev_update_status(const nlohmann::json& e); // check result -> prompt / announce
     void ev_update_ready(const nlohmann::json& e);  // downloaded -> swap + restart
     // Apply the current invisible-interface mode (from settings_): (re)load the
@@ -188,6 +191,7 @@ private:
     KeymapManagerDialog* keymap_mgr_ = nullptr;             // non-null while its modal is open
     ServerFiltersDialog* server_filters_mgr_ = nullptr;     // non-null while its modal is open
     ListsManagerDialog* lists_mgr_ = nullptr;               // non-null while its modal is open
+    FollowedHashtagsDialog* followed_tags_mgr_ = nullptr;   // non-null while its modal is open
     std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
     std::string layer_help_message_;                        // spoken on "/" in the layer
     std::map<std::string, std::string> layer_bindings_;     // cached bare-key layer map
