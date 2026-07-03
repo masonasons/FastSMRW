@@ -48,6 +48,26 @@ void checked(HWND dlg, int id, bool on) {
 }
 bool is_checked(HWND dlg, int id) { return IsDlgButtonChecked(dlg, id) == BST_CHECKED; }
 
+// Read an integer from an edit control, tolerating any digit-group separators the
+// up-down control inserts (UDS_SETBUDDYINT adds thousands commas, e.g. "20,000",
+// which GetDlgItemInt can't parse - that silently reset the setting). Returns
+// `fallback` if the field has no digits.
+int read_int_field(HWND dlg, int edit_id, int fallback) {
+    wchar_t buf[32] = {};
+    GetDlgItemTextW(dlg, edit_id, buf, static_cast<int>(std::size(buf)));
+    std::wstring digits;
+    for (wchar_t c : buf)
+        if (c >= L'0' && c <= L'9')
+            digits += c;
+    if (digits.empty())
+        return fallback;
+    try {
+        return std::stoi(digits);
+    } catch (...) {
+        return fallback; // overflow / out of range -> keep the existing value
+    }
+}
+
 INT_PTR CALLBACK GeneralProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG:
@@ -109,7 +129,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     case WM_NOTIFY:
         if (is_apply(lp)) {
             Ctx* ctx = ctx_of(dlg);
-            int v = static_cast<int>(GetDlgItemInt(dlg, IDC_SET_CACHELIMIT, nullptr, FALSE));
+            int v = read_int_field(dlg, IDC_SET_CACHELIMIT, ctx->settings.cache_limit);
             v = std::clamp(v, AppSettings::kCacheLimitMin, AppSettings::kCacheLimitMax);
             ctx->settings.cache_limit = v;
             const int sel =
@@ -479,7 +499,7 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 read_combo(dlg, IDC_SET_POST_EMOJI, kEmojiModes, present::EmojiRemoval::None);
             ctx->settings.text.name_emoji =
                 read_combo(dlg, IDC_SET_NAME_EMOJI, kEmojiModes, present::EmojiRemoval::None);
-            int v = static_cast<int>(GetDlgItemInt(dlg, IDC_SET_MAX_MENTIONS, nullptr, FALSE));
+            int v = read_int_field(dlg, IDC_SET_MAX_MENTIONS, ctx->settings.text.max_mentions);
             ctx->settings.text.max_mentions =
                 std::clamp(v, AppSettings::kMaxMentionsMin, AppSettings::kMaxMentionsMax);
             ctx->settings.invisible_repeat_at_edge = is_checked(dlg, IDC_SET_REPEAT_EDGE);
@@ -505,7 +525,7 @@ INT_PTR CALLBACK AdvancedProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     }
     case WM_NOTIFY:
         if (is_apply(lp)) {
-            int v = static_cast<int>(GetDlgItemInt(dlg, IDC_SET_FETCHPAGES, nullptr, FALSE));
+            int v = read_int_field(dlg, IDC_SET_FETCHPAGES, ctx_of(dlg)->settings.fetch_pages);
             v = std::clamp(v, AppSettings::kFetchPagesMin, AppSettings::kFetchPagesMax);
             ctx_of(dlg)->settings.fetch_pages = v;
             ctx_of(dlg)->applied = true;

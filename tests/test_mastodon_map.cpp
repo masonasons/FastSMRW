@@ -128,7 +128,7 @@ void test_remote_timeline_source() {
     CHECK(local.kind == TimelineSource::Kind::RemoteLocal);
     CHECK_EQ(local.title(), std::string("mastodon.social (Local)"));
     CHECK_EQ(local.cache_key(), std::string("remoteLocal:mastodon.social"));
-    CHECK(!local.is_cacheable());
+    CHECK(local.is_cacheable()); // every timeline now caches (unique per account+key)
     CHECK(local.is_dismissable());
     CHECK(local.paginates_by_item_id());
     CHECK(!local.is_user_list());
@@ -138,7 +138,7 @@ void test_remote_timeline_source() {
     CHECK(user.kind == TimelineSource::Kind::RemoteUser);
     CHECK_EQ(user.title(), std::string("@dana@other.social"));
     CHECK_EQ(user.cache_key(), std::string("remoteUser:dana@other.social"));
-    CHECK(!user.is_cacheable());
+    CHECK(user.is_cacheable());
     CHECK(user.paginates_by_item_id());
 }
 

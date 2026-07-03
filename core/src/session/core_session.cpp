@@ -21,6 +21,7 @@
 #include "fastsm/update/update_checker.hpp"
 #include "fastsm/util/base64.hpp"
 #include "fastsm/util/date_parsing.hpp"
+#include "fastsm/util/log.hpp"
 
 #include "fastsm/store/settings_json.hpp"
 
@@ -287,10 +288,13 @@ CoreSession::CoreSession(Paths paths, std::unique_ptr<net::IHttpClient> http,
       cache_(paths.config_dir / "cache"), accounts_(http_.get()) {
     sound_.set_bundled_packs_dir(paths.bundled_soundpacks);
     sound_.set_user_packs_dir(paths.config_dir / "soundpacks");
+    log::init(paths.config_dir / "fastsm.log");
+    log::write(std::string("session start, version ") + fastsm::version());
     auto_refresh_thread_ = std::thread([this] { auto_refresh_loop(); });
 }
 
 CoreSession::~CoreSession() {
+    log::write("session ending, stopping all streams (app exit)");
     auto_refresh_running_.store(false);
     if (auto_refresh_thread_.joinable())
         auto_refresh_thread_.join();
@@ -2132,7 +2136,9 @@ void CoreSession::rebuild_timelines() {
         const std::string key = account->account_key();
         std::vector<TimelineSource> sources;
         std::vector<bool> pins;
+        bool from_saved = false;
         if (auto it = saved.find(key); it != saved.end() && !it->second.empty()) {
+            from_saved = true;
             for (const SavedTimeline& st : it->second) {
                 sources.push_back(st.source);
                 pins.push_back(st.pinned);
@@ -2140,6 +2146,12 @@ void CoreSession::rebuild_timelines() {
         } else {
             sources = account->default_timelines();
         }
+        std::string kinds;
+        for (const auto& s : sources)
+            kinds += (kinds.empty() ? "" : ",") + std::string(kind_name(s.kind)) +
+                     (s.param.empty() ? "" : ":" + s.param);
+        log::write("rebuild: " + key + " -> " + std::to_string(sources.size()) + " timelines" +
+                   (from_saved ? " (restored)" : " (defaults)") + " [" + kinds + "]");
         auto v = build_timelines_for(account, sources);
         for (size_t i = 0; i < v.size() && i < pins.size(); ++i)
             v[i]->set_pinned(pins[i]);
@@ -2160,6 +2172,7 @@ void CoreSession::switch_account(const std::string& new_key) {
     // short-circuit a genuine no-op switch to the already-shown account.
     if (new_key == old && !timelines_.empty())
         return;
+    log::write("switch_account: " + old + " -> " + new_key);
     if (!timelines_.empty())
         parked_[old] = std::move(timelines_); // park the account we're leaving
     timelines_.clear();
@@ -2504,8 +2517,12 @@ void CoreSession::save_open_timelines() const {
     }
     std::error_code ec;
     std::filesystem::rename(tmp, path, ec);
-    if (ec)
+    if (ec) {
         std::filesystem::remove(tmp, ec);
+        log::write("save_open_timelines: FAILED to write " + path.string());
+    } else {
+        log::write("save_open_timelines: wrote " + std::to_string(root.size()) + " account(s)");
+    }
 }
 
 std::vector<std::unique_ptr<TimelineController>>*
@@ -2518,9 +2535,14 @@ CoreSession::timelines_for_account(const std::string& key) {
 
 void CoreSession::update_streaming() {
     if (!settings_.streaming_enabled) {
+        if (!streams_.empty())
+            log::write("update_streaming: streaming disabled, stopping all " +
+                       std::to_string(streams_.size()) + " stream(s)");
         streams_.clear(); // stop + join every stream
         return;
     }
+    log::write("update_streaming: enabled, " + std::to_string(accounts_.accounts().size()) +
+               " account(s), " + std::to_string(streams_.size()) + " existing stream(s)");
     // Ensure one live stream per streaming-capable account (started once, left
     // running across account switches). The callback routes each event to the
     // owning account's timelines by key, whether displayed or parked.
@@ -2533,6 +2555,7 @@ void CoreSession::update_streaming() {
         auto& client = streams_[key];
         if (client)
             continue; // already streaming
+        log::write("update_streaming: starting stream for " + key);
         client = std::make_unique<StreamingClient>(http_.get(), &loop_);
         client->start(account, [this, key](StreamItem item) {
             if (auto* tls = timelines_for_account(key))
@@ -2543,8 +2566,14 @@ void CoreSession::update_streaming() {
                     }
         });
     }
-    for (auto it = streams_.begin(); it != streams_.end();) // drop streams for gone accounts
-        it = live.count(it->first) ? std::next(it) : streams_.erase(it);
+    for (auto it = streams_.begin(); it != streams_.end();) { // drop streams for gone accounts
+        if (live.count(it->first)) {
+            it = std::next(it);
+        } else {
+            log::write("update_streaming: dropping stream for gone account " + it->first);
+            it = streams_.erase(it);
+        }
+    }
 }
 
 void CoreSession::auto_refresh_loop() {

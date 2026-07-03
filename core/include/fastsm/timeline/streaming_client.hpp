@@ -3,6 +3,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <string>
 #include <thread>
 
 #include "fastsm/net/http_client.hpp"
@@ -35,6 +36,7 @@ private:
     runtime::IMainExecutor* main_;
     std::thread thread_;
     std::shared_ptr<std::atomic<bool>> running_;
+    std::string account_key_; // for diagnostic logging
 };
 
 } // namespace fastsm

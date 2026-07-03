@@ -93,7 +93,7 @@ echo === Building FastSMRW [%CONFIG%] ===
 
 REM ---- 1) core -> fastsm_core.lib ----
 set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\winhttp_client.cpp core\src\net\sse_parser.cpp core\src\models\serialization.cpp"
-set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp core\src\util\log.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\mastodon\mastodon_map.cpp core\src\platform\mastodon\mastodon_account.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\platform\bluesky\bluesky_account.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\auth\mastodon_auth.cpp core\src\auth\bluesky_auth.cpp"

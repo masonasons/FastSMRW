@@ -1,6 +1,13 @@
 FastSMRW changelog
 ==================
 
+0.1.1
+-----
+
+- All timelines now cache to disk and reload instantly on restart - author timelines, threads, hashtags, searches, lists, remote feeds and people lists too, not just your standing feeds (they still re-check for new posts, and drop their cache when closed).
+- Fixed: number settings such as the maximum posts per timeline no longer reset themselves - a thousands separator shown in the box (e.g. "20,000") is now read correctly instead of invalidating the value.
+
+
 0.1.0
 -----
 

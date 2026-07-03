@@ -128,28 +128,11 @@ struct TimelineSource {
         return "timeline";
     }
 
-    // Standing feeds are cached for instant startup; spawned/ephemeral ones
-    // (threads, author timelines, user lists, hashtags, searches) are not.
-    bool is_cacheable() const {
-        switch (kind) {
-        case Kind::Thread:
-        case Kind::UserPosts:
-        case Kind::Followers:
-        case Kind::Following:
-        case Kind::Hashtag:
-        case Kind::SearchPosts:
-        case Kind::SearchPeople:
-        case Kind::RemoteLocal:
-        case Kind::RemoteUser:
-        case Kind::List:
-        case Kind::Mutes:
-        case Kind::Blocks:
-        case Kind::FollowRequests:
-            return false;
-        default:
-            return true;
-        }
-    }
+    // Every timeline caches its rows to disk (keyed by account + this cache_key,
+    // so they never collide) and reloads instantly on restart. Spawned timelines
+    // (threads, author timelines, hashtags, searches, lists, remote feeds, people
+    // lists) drop their cache when closed.
+    bool is_cacheable() const { return true; }
     // Time-ordered feeds re-sort newest-first on merge; threads keep conversation
     // order, user lists keep server order, and searches keep relevance order.
     bool is_time_ordered() const {

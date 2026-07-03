@@ -11,6 +11,8 @@
 #include <string>
 #include <string_view>
 
+#include "fastsm/util/log.hpp"
+
 namespace fastsm::net {
 namespace {
 
@@ -309,6 +311,9 @@ void WinHttpClient::send_stream(const HttpRequest& req,
 
 void WinHttpClient::cancel_streams() {
     std::lock_guard<std::mutex> lk(stream_mutex_);
+    if (!active_streams_.empty())
+        fastsm::log::write("winhttp: cancel_streams closing " +
+                           std::to_string(active_streams_.size()) + " active stream handle(s)");
     for (void* h : active_streams_)
         WinHttpCloseHandle(h);
     active_streams_.clear();
