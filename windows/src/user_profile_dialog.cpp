@@ -1,5 +1,7 @@
 #include "user_profile_dialog.hpp"
 
+#include "edit_util.hpp"
+
 #include "../resources/resource.h"
 
 namespace fastsmui {
@@ -26,6 +28,7 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 crlf += ch;
         }
         SetDlgItemTextW(dlg, IDC_PROFILE_TEXT, crlf.c_str());
+        enable_edit_select_all(GetDlgItem(dlg, IDC_PROFILE_TEXT)); // Ctrl+A select-all
 
         // Relationship-aware labels; disabled until the relationship is known.
         const UserProfileRelationship& r = *c->rel;

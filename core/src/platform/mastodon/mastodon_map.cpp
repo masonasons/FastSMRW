@@ -25,6 +25,21 @@ std::int64_t date(const json& j, const char* key) {
     return 0;
 }
 
+// Null-safe number/bool readers. nlohmann's json::value(key, default) throws
+// type_error.302 when the key is present but null — and some fediverse servers
+// (Pleroma, Akkoma, GoToSocial, Sharkey, …) return null where Mastodon returns a
+// count or flag. Check the type first, like str()/date() above, so a single odd
+// account can't throw out of the mapper and crash the client.
+int num(const json& j, const char* key, int fallback = 0) {
+    auto it = j.find(key);
+    return (it != j.end() && it->is_number()) ? it->get<int>() : fallback;
+}
+
+bool boolean(const json& j, const char* key, bool fallback = false) {
+    auto it = j.find(key);
+    return (it != j.end() && it->is_boolean()) ? it->get<bool>() : fallback;
+}
+
 MediaAttachment map_media(const json& j) {
     MediaAttachment m;
     m.id = str(j, "id");
@@ -71,18 +86,18 @@ Poll map_poll(const json& j) {
     Poll p;
     p.id = str(j, "id");
     p.expires_at = date(j, "expires_at");
-    p.expired = j.value("expired", false);
-    p.multiple = j.value("multiple", false);
-    p.votes_count = j.value("votes_count", 0);
-    p.voters_count = j.value("voters_count", 0);
-    p.voted = j.value("voted", false);
+    p.expired = boolean(j, "expired");
+    p.multiple = boolean(j, "multiple");
+    p.votes_count = num(j, "votes_count");
+    p.voters_count = num(j, "voters_count");
+    p.voted = boolean(j, "voted");
     if (auto it = j.find("own_votes"); it != j.end() && it->is_array())
         for (const auto& v : *it)
             if (v.is_number_integer())
                 p.own_votes.push_back(v.get<int>());
     if (auto it = j.find("options"); it != j.end() && it->is_array()) {
         for (const auto& o : *it)
-            p.options.push_back({str(o, "title"), o.value("votes_count", 0)});
+            p.options.push_back({str(o, "title"), num(o, "votes_count")});
     }
     return p;
 }
@@ -98,12 +113,12 @@ User map_user(const json& j) {
     u.avatar_url = str(j, "avatar");
     u.header_url = str(j, "header");
     u.url = str(j, "url");
-    u.followers_count = j.value("followers_count", 0);
-    u.following_count = j.value("following_count", 0);
-    u.statuses_count = j.value("statuses_count", 0);
+    u.followers_count = num(j, "followers_count");
+    u.following_count = num(j, "following_count");
+    u.statuses_count = num(j, "statuses_count");
     u.created_at = date(j, "created_at");
-    u.bot = j.value("bot", false);
-    u.locked = j.value("locked", false);
+    u.bot = boolean(j, "bot");
+    u.locked = boolean(j, "locked");
     return u;
 }
 
@@ -117,12 +132,12 @@ Status map_status(const json& j) {
     s.content = str(j, "content");
     s.text = util::strip_html(s.content);
     s.created_at = date(j, "created_at");
-    s.favourites_count = j.value("favourites_count", 0);
-    s.boosts_count = j.value("reblogs_count", 0);
-    s.replies_count = j.value("replies_count", 0);
-    s.favourited = j.value("favourited", false);
-    s.boosted = j.value("reblogged", false);
-    s.pinned = j.value("pinned", false);
+    s.favourites_count = num(j, "favourites_count");
+    s.boosts_count = num(j, "reblogs_count");
+    s.replies_count = num(j, "replies_count");
+    s.favourited = boolean(j, "favourited");
+    s.boosted = boolean(j, "reblogged");
+    s.pinned = boolean(j, "pinned");
 
     if (std::string v = str(j, "in_reply_to_id"); !v.empty())
         s.in_reply_to_id = v;

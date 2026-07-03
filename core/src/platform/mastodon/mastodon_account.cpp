@@ -629,6 +629,27 @@ bool MastodonAccount::unpin_post(const Status& status) {
     return status_action(action_status_id(status), "unpin");
 }
 
+std::optional<User> MastodonAccount::fetch_profile(const std::string& id) {
+    // GET /api/v1/accounts/:id — enrich a sparse row (e.g. a mention, which
+    // carries no bio or counts) with the full account so the profile dialog
+    // shows the bio and follower/following/post counts.
+    if (id.empty())
+        return std::nullopt;
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/" + id;
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return std::nullopt;
+    try {
+        json j = json::parse(body);
+        if (!j.is_object())
+            return std::nullopt;
+        return mastodon::map_user(j);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {
     const std::string url = credentials_.instance_url + "/api/v1/accounts/relationships?id[]=" + id;
     std::string body;

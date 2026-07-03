@@ -71,13 +71,19 @@ void TimelineController::set_reversed(bool reversed) {
 
 void TimelineController::rebuild_visible() {
     visible_.clear();
-    if (!filter_) {
-        visible_ = raw_;
-    } else {
-        visible_.reserve(raw_.size());
-        for (const auto& item : raw_)
-            if (filter_(item))
-                visible_.push_back(item);
+    visible_.reserve(raw_.size());
+    // Guarantee the visible list holds each id at most once. Navigation tracks
+    // position by id (visible_index_of), so a duplicate id would strand the
+    // cursor on it -- stepping off always resolves back to the first copy. This
+    // is the last-line defense; the merge paths also dedupe at the source.
+    std::unordered_set<std::string> seen;
+    seen.reserve(raw_.size());
+    for (const auto& item : raw_) {
+        if (filter_ && !filter_(item))
+            continue;
+        if (!seen.insert(item.id()).second)
+            continue; // a duplicate id already made it in
+        visible_.push_back(item);
     }
     // raw_ is canonical newest-first; flip the projection for time-ordered feeds
     // when the reverse preference is on, so the UI reads oldest-first. Pinned posts
@@ -99,20 +105,26 @@ TimelineItem* TimelineController::find_raw(const std::string& id) {
 
 void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
                                      std::optional<PageCursor> next) {
+    // Dedupe by id against what we already have AND within this batch. Paginated
+    // fetches can return the same post on two adjacent pages when new posts shift
+    // the window mid-fetch, so `fresh` may carry internal duplicates; letting one
+    // through shows the post twice and (because navigation is keyed by id) strands
+    // the cursor on it.
+    std::unordered_set<std::string> seen;
+    seen.reserve(raw_.size() + fresh.size());
+    for (const auto& it : raw_)
+        seen.insert(it.id());
+    std::vector<TimelineItem> added;
+    added.reserve(fresh.size());
+    for (auto& it : fresh)
+        if (seen.insert(it.id()).second)
+            added.push_back(std::move(it));
+
     if (raw_.empty()) {
-        raw_ = std::move(fresh);
+        raw_ = std::move(added);
         scrollback_cursor_ = next;
     } else {
-        std::unordered_set<std::string> existing;
-        existing.reserve(raw_.size());
-        for (const auto& it : raw_)
-            existing.insert(it.id());
         // Prepend the genuinely new rows, preserving server order.
-        std::vector<TimelineItem> added;
-        for (auto& it : fresh) {
-            if (existing.find(it.id()) == existing.end())
-                added.push_back(std::move(it));
-        }
         const int new_count = static_cast<int>(added.size());
         added.insert(added.end(), std::make_move_iterator(raw_.begin()),
                      std::make_move_iterator(raw_.end()));
@@ -175,7 +187,7 @@ void TimelineController::load_gap(const std::string& after_id) {
                 existing.insert(it.id());
             std::vector<TimelineItem> fresh;
             for (auto& it : fetched)
-                if (existing.find(it.id()) == existing.end())
+                if (existing.insert(it.id()).second) // dedupe vs raw_ and within the batch
                     fresh.push_back(std::move(it));
             std::string new_after = after_id;
             auto pos = std::find_if(raw_.begin(), raw_.end(),
@@ -268,6 +280,17 @@ void TimelineController::load_cached() {
     if (cached.items.empty())
         return;
     raw_ = std::move(cached.items);
+    // Drop any duplicate ids a pre-fix cache may still hold, so a stale double
+    // post (and the navigation snag it caused) doesn't come back on launch.
+    {
+        std::unordered_set<std::string> seen;
+        seen.reserve(raw_.size());
+        raw_.erase(std::remove_if(raw_.begin(), raw_.end(),
+                                  [&](const TimelineItem& it) {
+                                      return !seen.insert(it.id()).second;
+                                  }),
+                   raw_.end());
+    }
     // Restore scrollback so "load older" works after a cache load. If the cache
     // wasn't truncated, the persisted cursor is exact (works for every platform).
     // If it was truncated, the persisted cursor points below un-cached posts, so
@@ -379,7 +402,7 @@ void TimelineController::load_older() {
             for (const auto& it : raw_)
                 existing.insert(it.id());
             for (auto& it : older)
-                if (existing.find(it.id()) == existing.end())
+                if (existing.insert(it.id()).second) // dedupe vs raw_ and within the batch
                     raw_.push_back(std::move(it));
             for (auto& m : marks)
                 page_marks_[m.first] = m.second;

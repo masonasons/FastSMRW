@@ -1,5 +1,9 @@
 #include "fastsm/runtime/worker_queue.hpp"
 
+#include <exception>
+
+#include "fastsm/util/log.hpp"
+
 namespace fastsm::runtime {
 
 WorkerQueue::WorkerQueue() : thread_([this] { run(); }) {}
@@ -33,8 +37,20 @@ void WorkerQueue::run() {
             task = std::move(tasks_.front());
             tasks_.pop_front();
         }
-        if (task)
-            task();
+        // A task must never take the whole app down: an unhandled exception
+        // escaping here would unwind out of the thread and std::terminate the
+        // process (the 0xc0000409 crash). Contain it and keep the queue alive so
+        // one malformed item (e.g. a fediverse server returning a null count)
+        // can't kill the client.
+        if (task) {
+            try {
+                task();
+            } catch (const std::exception& e) {
+                log::write(std::string("task threw: ") + e.what());
+            } catch (...) {
+                log::write("task threw: unknown exception");
+            }
+        }
     }
 }
 

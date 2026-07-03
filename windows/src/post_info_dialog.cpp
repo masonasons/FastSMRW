@@ -2,6 +2,8 @@
 
 #include <commctrl.h>
 
+#include "edit_util.hpp"
+
 #include "../resources/resource.h"
 
 namespace fastsmui {
@@ -119,6 +121,7 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 crlf += ch;
         }
         SetDlgItemTextW(dlg, IDC_POSTINFO_TEXT, crlf.c_str());
+        enable_edit_select_all(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // Ctrl+A select-all
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_QUOTE), c->quote_ok);
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_BROWSER), c->browser_ok);
         build_poll_controls(dlg, c);

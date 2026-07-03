@@ -39,6 +39,7 @@ public:
     std::optional<Poll> vote_poll(const std::string& poll_id,
                                   const std::vector<int>& choices) override;
 
+    std::optional<User> fetch_profile(const std::string& id) override;
     std::optional<Relationship> relationship(const std::string& id) override;
     bool follow(const std::string& id) override;
     bool unfollow(const std::string& id) override;

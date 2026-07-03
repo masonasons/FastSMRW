@@ -1,6 +1,15 @@
 FastSMRW changelog
 ==================
 
+0.1.2
+-----
+
+- Fixed: focusing a notification from certain servers (some non-Mastodon fediverse instances) could crash the app; it no longer does, and one bad post or notification can't take the app down.
+- Profile dialogs now show the person's bio and follower, following and post counts even when you open the profile from a mention.
+- Ctrl+A now selects all text in the profile and Post Info read-only text boxes so you can copy the whole thing.
+- Fixed: a post could occasionally show twice in a timeline and trap the cursor so you couldn't move past it; duplicate posts are now prevented (and cleaned up from existing timelines on launch).
+
+
 0.1.1
 -----
 
