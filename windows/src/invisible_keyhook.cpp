@@ -135,7 +135,14 @@ LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
             post(kLayerHelp);
             return 1;
         }
-        auto it = g_active->layer_bindings_.find(base);
+        // Prefer a Shift-qualified binding (e.g. "shift+return") when Shift is held,
+        // falling back to the bare base so plain-key bindings keep working.
+        std::string full = base;
+        if (down(VK_SHIFT))
+            full = "shift+" + base;
+        auto it = g_active->layer_bindings_.find(full);
+        if (it == g_active->layer_bindings_.end() && full != base)
+            it = g_active->layer_bindings_.find(base);
         if (it != g_active->layer_bindings_.end()) {
             post(it->second.c_str());
             return 1;

@@ -1,7 +1,9 @@
 #include "fastsm/platform/mastodon/mastodon_account.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
+#include <unordered_set>
 
 #include <nlohmann/json.hpp>
 
@@ -281,6 +283,9 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Blocks:
         path = "/api/v1/blocks";
         break;
+    case TimelineSource::Kind::FollowRequests:
+        path = "/api/v1/follow_requests"; // rows are accounts; paginates via the Link header
+        break;
     case TimelineSource::Kind::Thread:
     case TimelineSource::Kind::SearchPosts:
     case TimelineSource::Kind::SearchPeople:
@@ -347,6 +352,43 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     // relationship id, not an account id), so don't fall back to the last id.
     if (!page.next_cursor && !last_id.empty() && !user_list)
         page.next_cursor = PageCursor::max_id(last_id);
+
+    // User timelines: float the account's pinned posts to the top, but only on the
+    // first page (never while paging older). Mastodon returns them from a separate
+    // ?pinned=true request; mark them, drop any copy that also shows up in the
+    // normal feed (the pinned one wins), and prepend them. The next cursor stays
+    // derived from the normal feed above, so an old pin never poisons pagination.
+    if (source.kind == TimelineSource::Kind::UserPosts && cursor.kind != CursorKind::MaxID) {
+        net::HttpRequest preq;
+        preq.method = "GET";
+        preq.url = credentials_.instance_url + path + "?pinned=true&limit=" + std::to_string(limit);
+        preq.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+        const net::HttpResponse pres = http_->send(preq);
+        if (pres.ok()) {
+            try {
+                const json pj = json::parse(pres.body);
+                if (pj.is_array() && !pj.empty()) {
+                    std::unordered_set<std::string> pinned_ids;
+                    std::vector<TimelineItem> pinned;
+                    for (const auto& entry : pj) {
+                        Status s = mastodon::map_status(entry);
+                        s.pinned = true;
+                        pinned_ids.insert(s.id);
+                        pinned.push_back(TimelineItem{std::move(s)});
+                    }
+                    page.items.erase(
+                        std::remove_if(page.items.begin(), page.items.end(),
+                                       [&](const TimelineItem& it) {
+                                           return pinned_ids.count(it.pagination_id()) > 0;
+                                       }),
+                        page.items.end());
+                    page.items.insert(page.items.begin(), std::make_move_iterator(pinned.begin()),
+                                      std::make_move_iterator(pinned.end()));
+                }
+            } catch (...) {
+            }
+        }
+    }
     return page;
 }
 
@@ -560,6 +602,32 @@ bool MastodonAccount::favorite(const Status& status) {
 bool MastodonAccount::unfavorite(const Status& status) {
     return status_action(action_status_id(status), "unfavourite");
 }
+std::optional<Poll> MastodonAccount::vote_poll(const std::string& poll_id,
+                                               const std::vector<int>& choices) {
+    if (poll_id.empty() || choices.empty())
+        return std::nullopt;
+    std::vector<std::pair<std::string, std::string>> params;
+    for (int c : choices)
+        params.push_back({"choices[]", std::to_string(c)});
+    const std::string url = credentials_.instance_url + "/api/v1/polls/" + poll_id + "/votes";
+    std::string body;
+    long status = 0;
+    if (!request("POST", url, util::form_encode(params), "application/x-www-form-urlencoded", body,
+                 status))
+        return std::nullopt;
+    try {
+        return mastodon::map_poll(json::parse(body));
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+bool MastodonAccount::pin_post(const Status& status) {
+    return status_action(action_status_id(status), "pin");
+}
+bool MastodonAccount::unpin_post(const Status& status) {
+    return status_action(action_status_id(status), "unpin");
+}
 
 std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {
     const std::string url = credentials_.instance_url + "/api/v1/accounts/relationships?id[]=" + id;
@@ -599,6 +667,21 @@ bool MastodonAccount::mute(const std::string& id) { return account_action(id, "m
 bool MastodonAccount::unmute(const std::string& id) { return account_action(id, "unmute"); }
 bool MastodonAccount::block(const std::string& id) { return account_action(id, "block"); }
 bool MastodonAccount::unblock(const std::string& id) { return account_action(id, "unblock"); }
+bool MastodonAccount::authorize_follow_request(const std::string& id) {
+    // POST /api/v1/follow_requests/:id/authorize (id is the requesting account id).
+    const std::string url =
+        credentials_.instance_url + "/api/v1/follow_requests/" + id + "/authorize";
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
+bool MastodonAccount::reject_follow_request(const std::string& id) {
+    const std::string url =
+        credentials_.instance_url + "/api/v1/follow_requests/" + id + "/reject";
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
 bool MastodonAccount::set_show_boosts(const std::string& id, bool show) {
     // Re-follow with the reblogs flag to show/hide this account's boosts.
     const std::string url = credentials_.instance_url + "/api/v1/accounts/" + id + "/follow";

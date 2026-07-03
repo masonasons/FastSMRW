@@ -61,6 +61,11 @@ AppSettings settings_from_json(const json& root) {
     settings.streaming_enabled = root.value("streaming_enabled", false);
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.reverse_timelines = root.value("reverse_timelines", false);
+    settings.enter_post_action = root.value("enter_post_action", std::string("post_info"));
+    settings.enter_user_action = root.value("enter_user_action", std::string("actions"));
+    settings.secondary_post_action =
+        root.value("secondary_post_action", std::string("play_media"));
+    settings.media_background = root.value("media_background", false);
     settings.invisible_mode = root.value("invisible_mode", std::string("off"));
     settings.invisible_keymap = root.value("invisible_keymap", std::string("default"));
     settings.invisible_layer_key =
@@ -109,6 +114,10 @@ json settings_to_json(const AppSettings& settings) {
     root["streaming_enabled"] = settings.streaming_enabled;
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["reverse_timelines"] = settings.reverse_timelines;
+    root["enter_post_action"] = settings.enter_post_action;
+    root["enter_user_action"] = settings.enter_user_action;
+    root["secondary_post_action"] = settings.secondary_post_action;
+    root["media_background"] = settings.media_background;
     root["invisible_mode"] = settings.invisible_mode;
     root["invisible_keymap"] = settings.invisible_keymap;
     root["invisible_layer_key"] = settings.invisible_layer_key;

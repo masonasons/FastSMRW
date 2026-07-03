@@ -26,7 +26,9 @@ struct Poll {
     bool expired = false;
     bool multiple = false;
     int votes_count = 0;
-    bool voted = false;
+    int voters_count = 0;      // distinct voters (used for multi-choice percentages)
+    bool voted = false;        // the viewer has already voted
+    std::vector<int> own_votes; // option indexes the viewer picked
     std::vector<Option> options;
 };
 

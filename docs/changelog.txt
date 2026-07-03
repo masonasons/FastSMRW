@@ -1,6 +1,28 @@
 FastSMRW changelog
 ==================
 
+0.1.0
+-----
+
+- Pin a timeline with Ctrl+P (Timeline menu) to lock it so it can't be closed; press again to unpin. Pinned tabs stay pinned across restarts.
+- A user's pinned posts (Mastodon) now show at the top of their timeline, with newer posts always arriving below them.
+- Pin or unpin your own post to your profile (Mastodon) by pressing P on it, in the window or the layer (added to the layer help).
+- New assignable invisible-interface actions (Keyboard Manager, unbound by default): move the current timeline up or down, pin/unpin the timeline tab, and pin/unpin your post to your profile.
+- Follow requests (Mastodon): open Application > View Follow Requests to see who asked to follow you and accept or reject them, or press Enter on a follow-request notification to accept or reject it.
+- Polls (Mastodon): if a post has a poll you can still vote in, Post Info now shows the options with a Vote button (a checklist for multiple-choice polls); once you've voted or the poll has closed, it shows each option's votes and percentage with your own picks marked.
+- New Behavior settings tab: choose what pressing Enter does on a post (view post, view thread, reply, or open links) and on a user (actions menu, view profile, or view their timeline); the default is still view post.
+- The invisible interface's Alt+Win+Enter now does your Enter action (view post by default) instead of opening links, and the layer's Enter follows the same setting; "Open link in post" stays assignable but is unbound by default.
+- New secondary interact on a post with Shift+Enter, set in the Behavior tab: Play media (default), View post, View thread, Reply, or Open links.
+- Shift+Enter also works in the layer and as a new invisible-interface "Secondary action" key (Win+Alt+Shift+Enter by default, Ctrl+Win+Shift+Enter on the Windows 8.1 keymap).
+- Play media (default Shift+Enter): audio streams in a small in-app player - Space plays/pauses, Left/Right arrows seek, Up/Down change volume, Escape stops and closes; video and images still open in your system player.
+- When a post has more than one attachment, Play media asks which one to open.
+- New Behavior option "Play audio in the background": audio plays with no player window; stop it with Ctrl+S (Application menu) or the new assignable "Stop media playback" invisible action (Ctrl+Win+Alt+S by default).
+- Fixed: the invisible interface now loads more posts as you navigate toward the edge of a timeline or a gap, just like scrolling the window does, so it no longer gets stuck at a post with more available above or below it.
+- Fixed: your own post could occasionally appear twice (most noticeable with reverse timelines); the duplicate is now prevented.
+- Installer: FastSMRW now ships an installer alongside the portable zip, and an installed copy updates itself through the installer instead of the zip.
+- Media is now announced with its type - "Image", "Video", "Audio" or "GIF", plus its alt text - both when reading a post and in Post Info.
+
+
 0.0.8
 -----
 

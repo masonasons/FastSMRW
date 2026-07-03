@@ -65,11 +65,15 @@ private:
     void cmd_note_selection(const nlohmann::json& cmd);
     void cmd_toggle_boost(const nlohmann::json& cmd);
     void cmd_toggle_favorite(const nlohmann::json& cmd);
+    void cmd_toggle_pin_post(const nlohmann::json& cmd); // pin/unpin your own post to profile
     void cmd_post(const nlohmann::json& cmd);
     void cmd_compose_context(const nlohmann::json& cmd);
     void cmd_open_status(const nlohmann::json& cmd);
     void cmd_open_post_links(const nlohmann::json& cmd); // open links found inside a post
     void cmd_post_info(const nlohmann::json& cmd);
+    void cmd_vote_poll(const nlohmann::json& cmd); // {id, choices[]} -> vote + reopen results
+    void cmd_play_media(const nlohmann::json& cmd); // {id} -> play the post's media
+    void play_one_media(const std::string& url, const std::string& kind, const std::string& title);
     void cmd_move(const nlohmann::json& cmd);
     void cmd_cycle_movement(const nlohmann::json& cmd);
     void cmd_go_back();
@@ -106,6 +110,7 @@ private:
     void open_user_list(const nlohmann::json& cmd, bool following);
     void cmd_user_action(const nlohmann::json& cmd); // batch follow/mute/block
     void cmd_reorder_timeline(const nlohmann::json& cmd); // move current timeline up/down
+    void cmd_toggle_pin(); // pin/unpin the current tab (locks/unlocks dismissal)
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_clear_all_timelines();
@@ -148,6 +153,9 @@ private:
     // visible list, emitting select_row (list follows if shown) + a spoken label.
     void invisible_step(int delta);
     void invisible_goto_edge(bool top);
+    // Fetch more posts (gap-fill / load-older) as invisible navigation nears an
+    // edge, so it loads content the same way scrolling the window does.
+    void invisible_autoload(TimelineController* tc, int visible_index);
     void invisible_speak_index(int visible_index);
     // "<n> of <count>" for the current position in a timeline (or "empty").
     std::string timeline_position_text(const TimelineController* tc) const;
@@ -159,7 +167,13 @@ private:
     // The set of open timelines is remembered across restarts (per account) in a
     // small open_timelines.json, so spawned/closed timelines reopen as you left them.
     std::filesystem::path open_timelines_path() const;
-    std::map<std::string, std::vector<TimelineSource>> load_open_timelines() const;
+    // A saved open timeline: its source plus per-tab state (pinned) that isn't part
+    // of the source's identity.
+    struct SavedTimeline {
+        TimelineSource source;
+        bool pinned = false;
+    };
+    std::map<std::string, std::vector<SavedTimeline>> load_open_timelines() const;
     void save_open_timelines() const;
     // Switch the displayed account: park the current, unpark (or build) the target.
     void switch_account(const std::string& new_key);

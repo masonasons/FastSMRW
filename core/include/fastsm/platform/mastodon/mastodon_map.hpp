@@ -11,6 +11,7 @@ namespace fastsm::mastodon {
 User map_user(const nlohmann::json& j);
 Status map_status(const nlohmann::json& j);
 Notification map_notification(const nlohmann::json& j);
+Poll map_poll(const nlohmann::json& j);
 
 // Tag a status (and its boosted inner status) as fetched from a remote instance:
 // set instance_url to `base` ("https://<domain>"), add the domain to bare handles,

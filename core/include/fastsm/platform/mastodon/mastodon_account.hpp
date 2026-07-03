@@ -34,6 +34,10 @@ public:
     bool unboost(const Status& status) override;
     bool favorite(const Status& status) override;
     bool unfavorite(const Status& status) override;
+    bool pin_post(const Status& status) override;
+    bool unpin_post(const Status& status) override;
+    std::optional<Poll> vote_poll(const std::string& poll_id,
+                                  const std::vector<int>& choices) override;
 
     std::optional<Relationship> relationship(const std::string& id) override;
     bool follow(const std::string& id) override;
@@ -42,6 +46,8 @@ public:
     bool unmute(const std::string& id) override;
     bool block(const std::string& id) override;
     bool unblock(const std::string& id) override;
+    bool authorize_follow_request(const std::string& id) override;
+    bool reject_follow_request(const std::string& id) override;
     bool set_show_boosts(const std::string& id, bool show) override;
 
     std::vector<TimelineList> lists() override;

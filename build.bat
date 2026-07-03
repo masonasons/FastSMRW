@@ -140,8 +140,8 @@ echo Compiling resources...
 rc /nologo /I windows\resources /fo "%BUILD%\app.res" windows\resources\app.rc
 if errorlevel 1 goto error
 echo Compiling and linking FastSMRW.exe...
-set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\client_filters_dialog.cpp windows\src\server_filters_dialog.cpp windows\src\list_membership_dialog.cpp windows\src\lists_manager_dialog.cpp windows\src\invisible_hotkeys.cpp windows\src\invisible_keyhook.cpp windows\src\keymap_manager_dialog.cpp windows\src\win_speech.cpp"
-cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib winmm.lib %USPEECH_LIB%
+set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\client_filters_dialog.cpp windows\src\server_filters_dialog.cpp windows\src\list_membership_dialog.cpp windows\src\lists_manager_dialog.cpp windows\src\media_player_window.cpp windows\src\invisible_hotkeys.cpp windows\src\invisible_keyhook.cpp windows\src\keymap_manager_dialog.cpp windows\src\win_speech.cpp"
+cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib oleaut32.lib winmm.lib strmiids.lib %USPEECH_LIB%
 if errorlevel 1 goto error
 
 REM ---- 2b) assemble the dist run folder (exe + bundled assets) ----
@@ -152,6 +152,27 @@ copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
 if exist docs xcopy /e /i /y docs\* dist\docs\ >nul
 REM UniversalSpeech runtime bridge DLLs (NVDA/SAPI/ZDSR), if present.
 if exist "deps\UniversalSpeech\bin-x64\*.dll" copy /y deps\UniversalSpeech\bin-x64\*.dll dist\ >nul
+
+REM ---- 2c) optional: build the Inno Setup installer (FastSMRWInstaller.exe) ----
+REM Read the app version from version.cpp (the source of truth) for the installer.
+set "APP_VERSION=0.0.0"
+for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "(Select-String -Path 'core\src\version.cpp' -Pattern '[0-9]+\.[0-9]+\.[0-9]+').Matches[0].Value"`) do set "APP_VERSION=%%v"
+set "ISCC="
+for %%V in (6 5) do (
+    if not defined ISCC if exist "%ProgramFiles(x86)%\Inno Setup %%V\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup %%V\ISCC.exe"
+    if not defined ISCC if exist "%ProgramFiles%\Inno Setup %%V\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup %%V\ISCC.exe"
+)
+if defined ISCC (
+    echo Building installer [%APP_VERSION%]...
+    "%ISCC%" /Qp /DMyAppVersion=%APP_VERSION% /DSourceDir=dist /DOutputDir=. installer.iss
+    if errorlevel 1 (
+        echo Installer build FAILED.
+        goto error
+    )
+    echo Installer built: FastSMRWInstaller.exe
+) else (
+    echo Inno Setup not found - skipping installer build.
+)
 
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (

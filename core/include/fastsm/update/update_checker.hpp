@@ -19,8 +19,9 @@ struct UpdateInfo {
     std::string branch;       // "latest" | "stable" (echoed back)
     std::string version;      // remote version ("0.0.4") or short commit ("a1b2c3d")
     std::string notes;        // release notes / body
-    std::string download_url; // FastSMRW.zip asset URL, when available
-    std::string error;        // non-empty on failure (network / parse / no release)
+    std::string download_url;  // FastSMRW.zip (portable) asset URL, when available
+    std::string installer_url; // FastSMRWInstaller.exe asset URL, when available
+    std::string error;         // non-empty on failure (network / parse / no release)
 };
 
 // Compare two dotted numeric versions ("0.0.3"). Returns <0 if a<b, 0 if equal,

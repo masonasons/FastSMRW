@@ -80,9 +80,13 @@ void TimelineController::rebuild_visible() {
                 visible_.push_back(item);
     }
     // raw_ is canonical newest-first; flip the projection for time-ordered feeds
-    // when the reverse preference is on, so the UI reads oldest-first.
-    if (reversed_ && source_.is_time_ordered())
-        std::reverse(visible_.begin(), visible_.end());
+    // when the reverse preference is on, so the UI reads oldest-first. Pinned posts
+    // stay pinned at the very top, so only the non-pinned tail is reversed.
+    if (reversed_ && source_.is_time_ordered()) {
+        auto tail = std::find_if(visible_.begin(), visible_.end(),
+                                 [](const TimelineItem& it) { return !it.is_pinned(); });
+        std::reverse(tail, visible_.end());
+    }
 }
 
 TimelineItem* TimelineController::find_raw(const std::string& id) {
@@ -119,9 +123,14 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
 
     // Keep rows newest-first by timestamp (notifications included — their
     // sort_date is created_at). Threads keep their fetched conversation order.
+    // Pinned posts (user timelines) float to the very top as a block, ahead of
+    // everything else, so newly-arriving posts always land beneath them; within
+    // each group the order stays newest-first (stable_sort keeps the pin order).
     if (source_.is_time_ordered())
         std::stable_sort(raw_.begin(), raw_.end(),
                          [](const TimelineItem& a, const TimelineItem& b) {
+                             if (a.is_pinned() != b.is_pinned())
+                                 return a.is_pinned();
                              return a.sort_date() > b.sort_date();
                          });
     rebuild_visible();
@@ -486,6 +495,55 @@ bool TimelineController::toggle_boost(int visible_index) {
     return want;
 }
 
+int TimelineController::toggle_pin_post(int visible_index) {
+    if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
+        return -1;
+    const std::string id = visible_[static_cast<size_t>(visible_index)].id();
+    TimelineItem* raw = find_raw(id);
+    if (!raw)
+        return -1;
+    Status* s = raw->mutable_status(); // the pin lives on the outer post
+    if (!s)
+        return -1;
+    // Only your OWN posts can be pinned to your profile.
+    if (!account_ || s->account.id != account_->me().id)
+        return -1;
+
+    const bool want = !s->pinned;
+    s->pinned = want;
+    rebuild_visible();
+    if (on_change)
+        on_change();
+
+    const Status target = *s;
+    worker_->post([this, target, want, id] {
+        const bool ok = want ? account_->pin_post(target) : account_->unpin_post(target);
+        if (!ok) {
+            main_->post([this, id, want] {
+                if (TimelineItem* r = find_raw(id))
+                    if (Status* st = r->mutable_status())
+                        st->pinned = !want;
+                rebuild_visible();
+                if (on_change)
+                    on_change();
+                if (on_error)
+                    on_error(want ? "Pin failed" : "Unpin failed");
+            });
+        }
+    });
+    return want ? 1 : 0;
+}
+
+void TimelineController::set_poll(const std::string& row_id, const Poll& poll) {
+    if (TimelineItem* raw = find_raw(row_id))
+        if (Status* s = raw->mutable_actionable_status())
+            s->poll = poll;
+    rebuild_visible();
+    if (on_change)
+        on_change();
+    persist();
+}
+
 void TimelineController::edit_post(const std::string& id, const PostDraft& draft,
                                    std::function<void(bool)> done) {
     worker_->post([this, id, draft, done = std::move(done)] {
@@ -517,10 +575,16 @@ void TimelineController::post(const PostDraft& draft, std::function<void(bool)> 
         main_->post([this, created = std::move(created), done, is_reply]() mutable {
             const bool ok = created.has_value();
             if (ok && !is_reply) {
-                raw_.insert(raw_.begin(), TimelineItem{std::move(*created)});
-                rebuild_visible();
-                if (on_change)
-                    on_change();
+                // Only add the optimistic copy if streaming hasn't already delivered
+                // this exact post (dedupe by id) - otherwise your own post appears
+                // twice, which is very visible with reverse timelines.
+                TimelineItem item{*created};
+                if (!find_raw(item.id())) {
+                    raw_.insert(raw_.begin(), std::move(item));
+                    rebuild_visible();
+                    if (on_change)
+                        on_change();
+                }
             }
             if (done)
                 done(ok);

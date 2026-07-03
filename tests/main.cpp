@@ -48,6 +48,7 @@ void test_presenter_cw_modes();
 void test_presenter_demojify_and_mentions();
 void test_presenter_wrap_and_separator();
 void test_presenter_stats_nonzero();
+void test_presenter_poll();
 void test_reply_participants();
 void test_post_links();
 
@@ -67,6 +68,7 @@ void test_capi_session_events();
 // From test_thread.cpp
 void test_mastodon_thread_fetch();
 void test_mastodon_instance_max_chars();
+void test_mastodon_user_pinned_posts();
 
 // From test_keymap.cpp
 void test_keymap_normalize();
@@ -78,6 +80,7 @@ void test_keymap_inheritance();
 void test_update_version_compare();
 void test_update_stable_branch();
 void test_update_latest_branch();
+void test_update_installer_asset();
 
 // From test_filters.cpp
 void test_client_filter_post_types();
@@ -132,6 +135,7 @@ int main() {
     test_presenter_demojify_and_mentions();
     test_presenter_wrap_and_separator();
     test_presenter_stats_nonzero();
+    test_presenter_poll();
     test_reply_participants();
     test_post_links();
     test_speech_defaults();
@@ -143,6 +147,7 @@ int main() {
     test_capi_session_events();
     test_mastodon_thread_fetch();
     test_mastodon_instance_max_chars();
+    test_mastodon_user_pinned_posts();
     test_keymap_normalize();
     test_keymap_default_and_catalog();
     test_keymap_parse_and_serialize();
@@ -150,6 +155,7 @@ int main() {
     test_update_version_compare();
     test_update_stable_branch();
     test_update_latest_branch();
+    test_update_installer_asset();
     test_client_filter_post_types();
     test_client_filter_media_and_me();
     test_client_filter_text();

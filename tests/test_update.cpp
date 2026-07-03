@@ -20,7 +20,8 @@ struct FakeGitHub : net::IHttpClient {
                 "tag_name": "latest",
                 "target_commitish": "deadbeef1234567890",
                 "body": "Automated build of main (deadbeef1234).",
-                "assets": [{"name":"FastSMRW.zip","browser_download_url":"https://x/latest/FastSMRW.zip"}]
+                "assets": [{"name":"FastSMRW.zip","browser_download_url":"https://x/latest/FastSMRW.zip"},
+                           {"name":"FastSMRWInstaller.exe","browser_download_url":"https://x/latest/FastSMRWInstaller.exe"}]
             })";
         } else if (req.url.find("/releases") != std::string::npos) {
             res.body = R"([
@@ -85,4 +86,19 @@ void test_update_latest_branch() {
     update::UpdateInfo local =
         update::check_for_update(http, "latest", "0.0.3", "", "owner/repo");
     CHECK(!local.available);
+}
+
+void test_update_installer_asset() {
+    FakeGitHub http;
+    // The latest release ships an installer asset; its URL is surfaced so an
+    // installed copy can update via setup instead of the portable zip.
+    update::UpdateInfo up =
+        update::check_for_update(http, "latest", "0.0.3", "abc1234", "owner/repo");
+    CHECK_EQ(up.installer_url, std::string("https://x/latest/FastSMRWInstaller.exe"));
+    CHECK_EQ(up.download_url, std::string("https://x/latest/FastSMRW.zip"));
+
+    // The stable list has no installer asset -> installer_url stays empty.
+    update::UpdateInfo st =
+        update::check_for_update(http, "stable", "0.0.3", "abc1234", "owner/repo");
+    CHECK(st.installer_url.empty());
 }

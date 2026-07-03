@@ -1,6 +1,7 @@
 #include "fastsm/session/core_session.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <fstream>
 #include <iterator>
@@ -159,6 +160,10 @@ std::string user_action_label(const std::string& action) {
         return "Block";
     if (action == "unblock")
         return "Unblock";
+    if (action == "authorize_request")
+        return "Accept";
+    if (action == "reject_request")
+        return "Reject";
     return "Action";
 }
 
@@ -181,6 +186,10 @@ std::string relationship_message(const std::string& action, const std::string& h
         return "Showing boosts from " + at;
     if (action == "hide_boosts")
         return "Hiding boosts from " + at;
+    if (action == "authorize_request")
+        return "Accepted " + at;
+    if (action == "reject_request")
+        return "Rejected " + at;
     return "Done";
 }
 
@@ -214,6 +223,7 @@ const char* kind_name(TimelineSource::Kind k) {
     case K::List: return "list";
     case K::Mutes: return "mutes";
     case K::Blocks: return "blocks";
+    case K::FollowRequests: return "followRequests";
     }
     return "home";
 }
@@ -239,6 +249,7 @@ std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
     if (s == "list") return K::List;
     if (s == "mutes") return K::Mutes;
     if (s == "blocks") return K::Blocks;
+    if (s == "followRequests") return K::FollowRequests;
     return std::nullopt;
 }
 
@@ -322,6 +333,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_toggle_boost(cmd);
     else if (c == "toggle_favorite")
         cmd_toggle_favorite(cmd);
+    else if (c == "toggle_pin_post")
+        cmd_toggle_pin_post(cmd);
     else if (c == "post")
         cmd_post(cmd);
     else if (c == "compose_context")
@@ -332,6 +345,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_post_links(cmd);
     else if (c == "post_info")
         cmd_post_info(cmd);
+    else if (c == "vote_poll")
+        cmd_vote_poll(cmd);
+    else if (c == "play_media")
+        cmd_play_media(cmd);
     else if (c == "move")
         cmd_move(cmd);
     else if (c == "cycle_movement")
@@ -358,6 +375,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_user_action(cmd);
     else if (c == "reorder_timeline")
         cmd_reorder_timeline(cmd);
+    else if (c == "toggle_pin")
+        cmd_toggle_pin();
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -932,9 +951,10 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
         spawn_source(TimelineSource::list(id, "List: " + title));
         return;
     }
-    if (kind == "mutes" || kind == "blocks") {
+    if (kind == "mutes" || kind == "blocks" || kind == "follow_requests") {
         if (accounts_.selected()->platform() != Platform::Mastodon) {
-            emit_announce("Muted and blocked lists are only available for Mastodon accounts.");
+            emit_announce("Muted, blocked and follow-request lists are only available for "
+                          "Mastodon accounts.");
             return;
         }
     }
@@ -1075,6 +1095,10 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
             ok = acct->set_show_boosts(id, true);
         else if (action == "hide_boosts")
             ok = acct->set_show_boosts(id, false);
+        else if (action == "authorize_request")
+            ok = acct->authorize_follow_request(id);
+        else if (action == "reject_request")
+            ok = acct->reject_follow_request(id);
         loop_.post([this, ok, action, handle] {
             if (!ok) {
                 sound_.play(sound::Earcon::Error);
@@ -1146,6 +1170,10 @@ void CoreSession::cmd_user_action(const json& cmd) {
                 ok = acct->block(id);
             else if (action == "unblock")
                 ok = acct->unblock(id);
+            else if (action == "authorize_request")
+                ok = acct->authorize_follow_request(id);
+            else if (action == "reject_request")
+                ok = acct->reject_follow_request(id);
             if (!ok)
                 ++failures;
         }
@@ -1229,9 +1257,22 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
     emit_user_picker("profile", row_id, users);
 }
 
+void CoreSession::cmd_toggle_pin() {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const bool now_pinned = !tc->pinned();
+    tc->set_pinned(now_pinned);
+    save_open_timelines(); // pin state survives a restart
+    sound_.play(now_pinned ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+    emit_timelines(); // refresh the UI's dismissable/pinned flags
+    emit_announce(tc->source().title() + (now_pinned ? ", pinned" : ", unpinned"));
+}
+
 void CoreSession::cmd_close_timeline() {
     TimelineController* tc = current();
-    if (!tc || !tc->source().is_dismissable())
+    // A pinned tab is locked; only inherently-dismissable, un-pinned tabs close.
+    if (!tc || !tc->source().is_dismissable() || tc->pinned())
         return;
     const std::string origin = tc->origin_key();
     const std::string closed_key = tc->cache_key();
@@ -1305,6 +1346,23 @@ void CoreSession::cmd_toggle_favorite(const json& cmd) {
         return;
     const bool now = tc->toggle_favorite(idx);
     sound_.play(now ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+}
+
+void CoreSession::cmd_toggle_pin_post(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const int idx = tc->visible_index_of(cmd.value("id", std::string{}));
+    if (idx < 0)
+        return;
+    const int r = tc->toggle_pin_post(idx);
+    if (r < 0) { // not your own post (or not pinnable)
+        sound_.play(sound::Earcon::Error);
+        emit_announce("You can only pin your own posts to your profile.");
+        return;
+    }
+    sound_.play(r ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+    emit_announce(r ? "Pinned to your profile" : "Unpinned from your profile");
 }
 
 void CoreSession::cmd_post(const json& cmd) {
@@ -1425,11 +1483,132 @@ void CoreSession::cmd_post_info(const json& cmd) {
     const Status* s = item->actionable_status();
     if (!s)
         return;
-    emit({{"event", "post_info"},
-          {"id", cmd.value("id", std::string{})},
-          {"text", present::post_info(*s, util::now_unix())},
-          {"features", features_json(tc->account()->features())},
-          {"has_url", !s->url.empty()}});
+    json ev = {{"event", "post_info"},
+               {"id", cmd.value("id", std::string{})},
+               {"text", present::post_info(*s, util::now_unix())},
+               {"features", features_json(tc->account()->features())},
+               {"has_url", !s->url.empty()}};
+    // A poll the viewer can still vote in (not yet voted, not closed): let the UI
+    // offer the voting controls. Otherwise the results are already in the text.
+    if (s->poll && !s->poll->voted && !s->poll->expired) {
+        json opts = json::array();
+        for (const auto& o : s->poll->options)
+            opts.push_back(o.title);
+        ev["poll"] = {{"multiple", s->poll->multiple}, {"options", std::move(opts)}};
+    }
+    emit(ev);
+}
+
+void CoreSession::cmd_vote_poll(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc || !tc->account())
+        return;
+    const std::string row_id = cmd.value("id", std::string{});
+    const TimelineItem* item = find_item(tc, row_id);
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s || !s->poll)
+        return;
+    const std::string poll_id = s->poll->id;
+    std::vector<int> choices;
+    if (cmd.contains("choices") && cmd["choices"].is_array())
+        for (const auto& c : cmd["choices"])
+            if (c.is_number_integer())
+                choices.push_back(c.get<int>());
+    if (poll_id.empty() || choices.empty())
+        return;
+    SocialAccount* acct = tc->account();
+    worker_.post([this, acct, poll_id, choices, row_id] {
+        std::optional<Poll> updated = acct->vote_poll(poll_id, choices);
+        loop_.post([this, updated = std::move(updated), row_id]() mutable {
+            if (!updated) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Vote failed");
+                return;
+            }
+            sound_.play(sound::Earcon::PostSent);
+            emit_announce("Vote recorded");
+            if (TimelineController* tc2 = current(); tc2 && find_item(tc2, row_id)) {
+                tc2->set_poll(row_id, *updated);
+                cmd_post_info({{"id", row_id}}); // reopen showing the results
+            }
+        });
+    });
+}
+
+namespace {
+std::string media_kind_str(MediaAttachment::Kind k) {
+    switch (k) {
+    case MediaAttachment::Kind::Image:
+        return "image";
+    case MediaAttachment::Kind::Video:
+        return "video";
+    case MediaAttachment::Kind::Audio:
+        return "audio";
+    case MediaAttachment::Kind::Gifv:
+        return "gifv";
+    default:
+        return "media";
+    }
+}
+// Player/menu label: the alt text if any, prefixed with the capitalized kind.
+std::string media_label(const MediaAttachment& m) {
+    std::string kind = media_kind_str(m.type);
+    if (!kind.empty())
+        kind[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(kind[0])));
+    return m.description.empty() ? kind : (kind + ": " + m.description);
+}
+} // namespace
+
+void CoreSession::play_one_media(const std::string& url, const std::string& kind,
+                                 const std::string& title) {
+    if (url.empty()) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("No media to play");
+        return;
+    }
+    // Audio streams in-app (seek/volume); video/gif/image go to the system player.
+    if (kind == "audio")
+        emit({{"event", "media_open"}, {"url", url}, {"title", title}});
+    else
+        emit({{"event", "open_url"}, {"url", url}});
+}
+
+void CoreSession::cmd_play_media(const json& cmd) {
+    // A specific attachment chosen from the picker plays directly.
+    if (cmd.contains("url")) {
+        play_one_media(cmd.value("url", std::string{}), cmd.value("kind", std::string{}),
+                       cmd.value("title", std::string{}));
+        return;
+    }
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const std::string row = cmd.value("id", std::string{});
+    const TimelineItem* item = find_item(tc, row);
+    const Status* s = item ? item->actionable_status() : nullptr;
+    std::vector<const MediaAttachment*> media;
+    if (s)
+        for (const auto& m : s->media_attachments)
+            if (!m.url.empty())
+                media.push_back(&m);
+    if (media.empty()) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("No media to play");
+        return;
+    }
+    if (media.size() == 1) {
+        play_one_media(media[0]->url, media_kind_str(media[0]->type), media_label(*media[0]));
+        return;
+    }
+    // Multiple attachments: let the user pick which one to play.
+    json items = json::array();
+    for (const auto* m : media)
+        items.push_back({{"title", media_label(*m)},
+                         {"url", m->url},
+                         {"kind", media_kind_str(m->type)}});
+    emit({{"event", "media_picker"}, {"id", row}, {"items", std::move(items)}});
 }
 
 void CoreSession::cmd_move(const json& cmd) {
@@ -1660,6 +1839,10 @@ void CoreSession::invisible_step(int delta) {
         dest = 0;
     if (dest > static_cast<int>(items.size()) - 1)
         dest = static_cast<int>(items.size()) - 1;
+    // Pull in more posts as we approach a gap or the scrollback edge, exactly like
+    // the window does when you scroll - otherwise the invisible interface gets
+    // stuck at the edge of what's loaded (a gap, or the bottom of the buffer).
+    invisible_autoload(tc, dest);
     if (dest == idx) {
         sound_.play(sound::Earcon::Boundary); // hit an edge
         if (!settings_.invisible_repeat_at_edge)
@@ -1685,6 +1868,38 @@ void CoreSession::invisible_goto_edge(bool top) {
     tc->note_selection(id);
     emit({{"event", "select_row"}, {"id", id}});
     invisible_speak_index(dest);
+    invisible_autoload(tc, dest); // jumping to an edge may sit on a gap / scrollback boundary
+}
+
+void CoreSession::invisible_autoload(TimelineController* tc, int visible_index) {
+    if (!tc)
+        return;
+    const auto& items = tc->items();
+    const int count = static_cast<int>(items.size());
+    if (count == 0)
+        return;
+    // A tracked middle gap within a few rows -> fill it (reversed feeds keep older
+    // posts above, so scan both directions around the cursor). Mirrors the window's
+    // maybe_load_older so invisible navigation loads content the same way.
+    if (!tc->gaps().empty()) {
+        std::set<std::string> gap_after;
+        for (const auto& g : tc->gaps())
+            gap_after.insert(g.after_id);
+        for (int d = 0; d <= 5; ++d) {
+            for (int g : {visible_index + d, visible_index - d}) {
+                if (g < 0 || g >= count)
+                    continue;
+                if (gap_after.count(items[static_cast<size_t>(g)].id())) {
+                    tc->load_gap(items[static_cast<size_t>(g)].id());
+                    return;
+                }
+            }
+        }
+    }
+    // Near the scrollback edge (the bottom normally, the top when reversed) -> load older.
+    const bool near_edge = tc->reversed() ? (visible_index <= 9) : (visible_index >= count - 10);
+    if (near_edge)
+        tc->load_older();
 }
 
 void CoreSession::cmd_set_window_shown(const json& cmd) {
@@ -1709,6 +1924,7 @@ void CoreSession::cmd_check_for_update(const json& cmd) {
                   {"version", info.version},
                   {"notes", info.notes},
                   {"download_url", info.download_url},
+                  {"installer_url", info.installer_url},
                   {"error", info.error}});
         });
     });
@@ -1718,8 +1934,9 @@ void CoreSession::cmd_download_update(const json& cmd) {
     const std::string url = cmd.value("url", std::string{});
     if (url.empty())
         return;
+    const bool installer = cmd.value("installer", false);
     net::IHttpClient* http = http_.get();
-    worker_.post([this, http, url] {
+    worker_.post([this, http, url, installer] {
         net::HttpRequest req;
         req.method = "GET";
         req.url = url;
@@ -1730,7 +1947,8 @@ void CoreSession::cmd_download_update(const json& cmd) {
                                       : res.error;
         } else {
             std::error_code ec;
-            const auto p = std::filesystem::temp_directory_path(ec) / "FastSMRW-update.zip";
+            const char* name = installer ? "FastSMRW-Setup.exe" : "FastSMRW-update.zip";
+            const auto p = std::filesystem::temp_directory_path(ec) / name;
             std::ofstream out(p, std::ios::binary | std::ios::trunc);
             if (out) {
                 out.write(res.body.data(), static_cast<std::streamsize>(res.body.size()));
@@ -1740,11 +1958,11 @@ void CoreSession::cmd_download_update(const json& cmd) {
                 error = "Couldn't save the downloaded update.";
             }
         }
-        loop_.post([this, path, error] {
+        loop_.post([this, path, error, installer] {
             if (!error.empty())
                 emit({{"event", "update_error"}, {"error", error}});
             else
-                emit({{"event", "update_ready"}, {"path", path}});
+                emit({{"event", "update_ready"}, {"path", path}, {"installer", installer}});
         });
     });
 }
@@ -1781,6 +1999,12 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_select_timeline({{"dir", "next"}, {"speak_position", true}});
     if (a == "prev_tl")
         return cmd_select_timeline({{"dir", "prev"}, {"speak_position", true}});
+    if (a == "MoveTimelineUp")
+        return cmd_reorder_timeline({{"dir", "up"}});
+    if (a == "MoveTimelineDown")
+        return cmd_reorder_timeline({{"dir", "down"}});
+    if (a == "TogglePin")
+        return cmd_toggle_pin();
     if (a == "speak_item") {
         if (TimelineController* tc = current())
             invisible_speak_index(tc->visible_index_of(tc->selected_id()));
@@ -1803,6 +2027,45 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_boost({{"id", row}});
     if (a == "LikeToggle")
         return cmd_toggle_favorite({{"id", row}});
+    if (a == "PinPost")
+        return cmd_toggle_pin_post({{"id", row}});
+    if (a == "Enter") { // the configurable default action, like pressing Enter in the window
+        const TimelineItem* it = tc ? find_item(tc, row) : nullptr;
+        if (!it)
+            return;
+        if (it->is_user()) {
+            const std::string& ua = settings_.enter_user_action;
+            if (ua == "profile")
+                return cmd_open_user_profile({{"id", row}});
+            if (ua == "timeline")
+                return cmd_open_user_timeline({{"id", row}});
+            emit({{"event", "invisible_ui_action"}, {"action", "UserActions"}}); // the batch menu
+            return;
+        }
+        const std::string& pa = settings_.enter_post_action;
+        if (pa == "thread")
+            return cmd_open_thread({{"id", row}});
+        if (pa == "reply")
+            return cmd_compose_context({{"mode", "reply"}, {"id", row}});
+        if (pa == "links")
+            return cmd_open_post_links({{"id", row}});
+        return cmd_post_info({{"id", row}}); // default: view the post
+    }
+    if (a == "SecondaryAction") { // the configurable secondary interact (Shift+Enter); post-only
+        const TimelineItem* it = tc ? find_item(tc, row) : nullptr;
+        if (!it || it->is_user())
+            return;
+        const std::string& sa = settings_.secondary_post_action;
+        if (sa == "post_info")
+            return cmd_post_info({{"id", row}});
+        if (sa == "thread")
+            return cmd_open_thread({{"id", row}});
+        if (sa == "reply")
+            return cmd_compose_context({{"mode", "reply"}, {"id", row}});
+        if (sa == "links")
+            return cmd_open_post_links({{"id", row}});
+        return cmd_play_media({{"id", row}}); // default: play media
+    }
     if (a == "Reply")
         return cmd_compose_context({{"mode", "reply"}, {"id", row}});
     if (a == "Quote")
@@ -1825,8 +2088,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_close_timeline();
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
     if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio" ||
-        a == "Find" || a == "FindNext" || a == "FindPrev" || a == "EnterLayer" ||
-        a == "NewTimeline") {
+        a == "StopMedia" || a == "Find" || a == "FindNext" || a == "FindPrev" ||
+        a == "EnterLayer" || a == "NewTimeline") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }
@@ -1868,11 +2131,18 @@ void CoreSession::rebuild_timelines() {
         refresh_lists(account); // warm each account's list cache for Ctrl+T
         const std::string key = account->account_key();
         std::vector<TimelineSource> sources;
-        if (auto it = saved.find(key); it != saved.end() && !it->second.empty())
-            sources = it->second;
-        else
+        std::vector<bool> pins;
+        if (auto it = saved.find(key); it != saved.end() && !it->second.empty()) {
+            for (const SavedTimeline& st : it->second) {
+                sources.push_back(st.source);
+                pins.push_back(st.pinned);
+            }
+        } else {
             sources = account->default_timelines();
+        }
         auto v = build_timelines_for(account, sources);
+        for (size_t i = 0; i < v.size() && i < pins.size(); ++i)
+            v[i]->set_pinned(pins[i]);
         if (key == accounts_.selected_key())
             timelines_ = std::move(v);
         else
@@ -2185,8 +2455,9 @@ std::filesystem::path CoreSession::open_timelines_path() const {
     return config_path_.parent_path() / "open_timelines.json";
 }
 
-std::map<std::string, std::vector<TimelineSource>> CoreSession::load_open_timelines() const {
-    std::map<std::string, std::vector<TimelineSource>> out;
+std::map<std::string, std::vector<CoreSession::SavedTimeline>>
+CoreSession::load_open_timelines() const {
+    std::map<std::string, std::vector<SavedTimeline>> out;
     std::ifstream in(open_timelines_path(), std::ios::binary);
     if (!in)
         return out;
@@ -2198,7 +2469,7 @@ std::map<std::string, std::vector<TimelineSource>> CoreSession::load_open_timeli
                 if (arr.is_array())
                     for (const auto& j : arr)
                         if (auto s = source_from_json(j))
-                            out[key].push_back(*s);
+                            out[key].push_back({*s, j.value("pinned", false)});
     } catch (...) {
     }
     return out;
@@ -2209,8 +2480,12 @@ void CoreSession::save_open_timelines() const {
     auto add = [&](const std::string& key,
                    const std::vector<std::unique_ptr<TimelineController>>& v) {
         json arr = json::array();
-        for (const auto& tc : v)
-            arr.push_back(source_to_json(tc->source()));
+        for (const auto& tc : v) {
+            json j = source_to_json(tc->source());
+            if (tc->pinned())
+                j["pinned"] = true;
+            arr.push_back(std::move(j));
+        }
         root[key] = arr;
     };
     if (!accounts_.selected_key().empty())
@@ -2313,6 +2588,8 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::mutes();
     if (kind == "blocks")
         return TimelineSource::blocks();
+    if (kind == "follow_requests")
+        return TimelineSource::follow_requests();
     return std::nullopt;
 }
 
@@ -2351,7 +2628,8 @@ void CoreSession::emit_timelines() {
         const TimelineSource& s = tc->source();
         tls.push_back({{"title", s.title()},
                        {"kind", s.cache_key()},
-                       {"dismissable", s.is_dismissable()},
+                       {"dismissable", s.is_dismissable() && !tc->pinned()},
+                       {"pinned", tc->pinned()},
                        {"user_list", s.is_user_list()}});
     }
     emit({{"event", "timelines_changed"},
@@ -2398,6 +2676,13 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
     if (const Status* s = item.actionable_status()) {
         r["favorited"] = s->favourited;
         r["boosted"] = s->boosted;
+    }
+    // A follow-request notification: surface the requester so Enter can accept/reject.
+    if (const Notification* n = item.notification();
+        n && n->type == Notification::Kind::FollowRequest) {
+        r["follow_request"] = true;
+        r["account_id"] = n->account.id;
+        r["acct"] = n->account.acct.empty() ? n->account.username : n->account.acct;
     }
     return r;
 }

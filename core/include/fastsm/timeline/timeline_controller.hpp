@@ -50,6 +50,12 @@ public:
     void set_reversed(bool reversed);
     bool reversed() const { return reversed_ && source_.is_time_ordered(); }
 
+    // "Pinned tab": the user has locked this timeline so it can't be dismissed.
+    // Purely a per-controller flag (persisted with the open-timelines list); it
+    // has no effect on fetching/ordering.
+    void set_pinned(bool pinned) { pinned_ = pinned; }
+    bool pinned() const { return pinned_; }
+
     void load_cached();
     void refresh();
     void load_older();
@@ -68,6 +74,11 @@ public:
     // Optimistic toggles on the row at `visible_index`; returns the new state.
     bool toggle_favorite(int visible_index);
     bool toggle_boost(int visible_index);
+    // Pin/unpin one of your own posts to your profile. Returns 1 if now pinned, 0
+    // if now unpinned, or -1 if the row isn't your own post (nothing changes).
+    int toggle_pin_post(int visible_index);
+    // Replace the poll on a row's status (after voting) and refresh the view.
+    void set_poll(const std::string& row_id, const Poll& poll);
 
     void post(const PostDraft& draft, std::function<void(bool)> done);
     void edit_post(const std::string& id, const PostDraft& draft, std::function<void(bool)> done);
@@ -110,6 +121,7 @@ private:
     std::vector<TimelineItem> raw_;     // everything fetched/cached (canonical newest-first)
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     bool reversed_ = false;             // global reverse-timelines preference
+    bool pinned_ = false;               // user "pinned" this tab (locks dismissal)
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     // Page-boundary cursors (row id -> cursor to fetch the page just below it),

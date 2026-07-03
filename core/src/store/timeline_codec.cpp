@@ -9,7 +9,7 @@ namespace {
 // Bump this whenever the on-disk layout changes so older caches are rejected
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url.
-constexpr char kMagic[4] = {'F', 'S', 'C', '4'};
+constexpr char kMagic[4] = {'F', 'S', 'C', '5'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -159,7 +159,11 @@ void write_poll(Writer& w, const Poll& p) {
     w.boolean(p.expired);
     w.boolean(p.multiple);
     w.i32(p.votes_count);
+    w.i32(p.voters_count);
     w.boolean(p.voted);
+    w.u32(static_cast<std::uint32_t>(p.own_votes.size()));
+    for (int v : p.own_votes)
+        w.i32(v);
     w.u32(static_cast<std::uint32_t>(p.options.size()));
     for (const auto& o : p.options) {
         w.str(o.title);
@@ -174,7 +178,11 @@ Poll read_poll(Reader& r) {
     p.expired = r.boolean();
     p.multiple = r.boolean();
     p.votes_count = r.i32();
+    p.voters_count = r.i32();
     p.voted = r.boolean();
+    const std::uint32_t ov = r.u32();
+    for (std::uint32_t i = 0; i < ov && r.ok; ++i)
+        p.own_votes.push_back(r.i32());
     const std::uint32_t n = r.u32();
     for (std::uint32_t i = 0; i < n && r.ok; ++i) {
         Poll::Option o;

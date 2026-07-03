@@ -96,16 +96,20 @@ std::string compose_fields(const std::vector<SpeechItem<Field>>& fields, Getter 
     return out;
 }
 
+std::string media_type_noun(MediaAttachment::Kind k); // defined below
+std::string capitalize(std::string s);
+
+// Each attachment as "Type" or "Type: description", so the media kind is always
+// spoken (and shown in Post Info).
 std::string media_summary(const std::vector<MediaAttachment>& media) {
-    std::vector<std::string> described;
-    for (const auto& m : media)
+    std::vector<std::string> parts;
+    for (const auto& m : media) {
+        std::string part = capitalize(media_type_noun(m.type));
         if (!m.description.empty())
-            described.push_back(m.description);
-    if (described.empty()) {
-        const size_t n = media.size();
-        return std::to_string(n) + (n == 1 ? " attachment" : " attachments");
+            part += ": " + m.description;
+        parts.push_back(std::move(part));
     }
-    return "Attachments: " + join(described, "; ");
+    return join(parts, "; ");
 }
 
 std::string stats(const Status& s) {
@@ -479,6 +483,47 @@ std::vector<PostLink> post_links(const Status& status) {
     return out;
 }
 
+// Poll block for Post Info. Before voting (and while open) the option titles are
+// listed without counts (Mastodon hides them until you vote); once you've voted or
+// the poll has closed, each option shows its votes and percentage, your own picks
+// are marked, and a summary line follows.
+static std::string poll_text(const Poll& p, std::int64_t now) {
+    std::string out = "\nPoll";
+    if (p.multiple)
+        out += " (choose one or more)";
+    out += ":\n";
+    const bool results = p.voted || p.expired;
+    auto is_mine = [&](int i) {
+        for (int v : p.own_votes)
+            if (v == i)
+                return true;
+        return false;
+    };
+    for (size_t i = 0; i < p.options.size(); ++i) {
+        const auto& o = p.options[i];
+        out += "- " + o.title;
+        if (results) {
+            const int denom = p.multiple ? p.voters_count : p.votes_count;
+            const int pct = denom > 0 ? (o.votes_count * 100 + denom / 2) / denom : 0;
+            out += " — " + std::to_string(o.votes_count) +
+                   (o.votes_count == 1 ? " vote (" : " votes (") + std::to_string(pct) + "%)";
+            if (is_mine(static_cast<int>(i)))
+                out += " (your vote)";
+        }
+        out += "\n";
+    }
+    if (results) {
+        out += std::to_string(p.votes_count) + (p.votes_count == 1 ? " vote" : " votes");
+        if (p.multiple && p.voters_count > 0)
+            out += " from " + std::to_string(p.voters_count) +
+                   (p.voters_count == 1 ? " voter" : " voters");
+        out += p.expired ? ". Poll closed.\n" : ". You have voted.\n";
+    } else if (p.expired) {
+        out += "Poll closed.\n";
+    }
+    return out;
+}
+
 std::string post_info(const Status& s, std::int64_t now) {
     std::string out;
     out += s.account.best_name() + " (@" + s.account.acct + ")\n";
@@ -486,16 +531,16 @@ std::string post_info(const Status& s, std::int64_t now) {
     if (s.has_content_warning())
         out += "Content warning: " + *s.spoiler_text + "\n";
     out += "\n" + s.text + "\n";
+    if (s.poll)
+        out += poll_text(*s.poll, now);
     if (!s.media_attachments.empty()) {
-        std::vector<std::string> descs;
-        for (const auto& m : s.media_attachments)
-            if (!m.description.empty())
-                descs.push_back(m.description);
         out += "\n";
-        if (descs.empty())
-            out += std::to_string(s.media_attachments.size()) + " attachment(s)\n";
-        else
-            out += "Attachments: " + join(descs, "; ") + "\n";
+        for (const auto& m : s.media_attachments) {
+            out += capitalize(media_type_noun(m.type));
+            if (!m.description.empty())
+                out += ": " + m.description;
+            out += "\n";
+        }
     }
     if (std::string counts = stats(s); !counts.empty()) // only non-zero counts (Mac parity)
         out += "\n" + counts;

@@ -72,6 +72,13 @@ struct TimelineItem {
         return s ? &s->display_status() : nullptr;
     }
 
+    // Whether this row is a pinned post (user timelines float pinned posts to the
+    // top). The flag lives on the outer status (only set for a user's own pins).
+    bool is_pinned() const {
+        const auto* s = std::get_if<Status>(&value);
+        return s && s->pinned;
+    }
+
     // Sort key (unix seconds); 0 for users (which are not time-ordered).
     std::int64_t sort_date() const {
         if (const auto* s = std::get_if<Status>(&value))

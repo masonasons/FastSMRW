@@ -45,21 +45,6 @@ MediaAttachment map_media(const json& j) {
     return m;
 }
 
-Poll map_poll(const json& j) {
-    Poll p;
-    p.id = str(j, "id");
-    p.expires_at = date(j, "expires_at");
-    p.expired = j.value("expired", false);
-    p.multiple = j.value("multiple", false);
-    p.votes_count = j.value("votes_count", 0);
-    p.voted = j.value("voted", false);
-    if (auto it = j.find("options"); it != j.end() && it->is_array()) {
-        for (const auto& o : *it)
-            p.options.push_back({str(o, "title"), o.value("votes_count", 0)});
-    }
-    return p;
-}
-
 Notification::Kind notif_kind(const std::string& t) {
     if (t == "follow")
         return Notification::Kind::Follow;
@@ -81,6 +66,26 @@ Notification::Kind notif_kind(const std::string& t) {
 }
 
 } // namespace
+
+Poll map_poll(const json& j) {
+    Poll p;
+    p.id = str(j, "id");
+    p.expires_at = date(j, "expires_at");
+    p.expired = j.value("expired", false);
+    p.multiple = j.value("multiple", false);
+    p.votes_count = j.value("votes_count", 0);
+    p.voters_count = j.value("voters_count", 0);
+    p.voted = j.value("voted", false);
+    if (auto it = j.find("own_votes"); it != j.end() && it->is_array())
+        for (const auto& v : *it)
+            if (v.is_number_integer())
+                p.own_votes.push_back(v.get<int>());
+    if (auto it = j.find("options"); it != j.end() && it->is_array()) {
+        for (const auto& o : *it)
+            p.options.push_back({str(o, "title"), o.value("votes_count", 0)});
+    }
+    return p;
+}
 
 User map_user(const json& j) {
     User u;

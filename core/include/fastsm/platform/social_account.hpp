@@ -157,6 +157,15 @@ public:
     virtual bool unboost(const Status& status) = 0;
     virtual bool favorite(const Status& status) = 0;
     virtual bool unfavorite(const Status& status) = 0;
+    // Pin / unpin one of YOUR OWN posts to your profile. Optional: platforms that
+    // don't support it (Bluesky) inherit these no-op stubs.
+    virtual bool pin_post(const Status&) { return false; }
+    virtual bool unpin_post(const Status&) { return false; }
+    // Vote on a poll (choices = selected option indexes). Returns the updated poll,
+    // or nullopt on failure / if unsupported.
+    virtual std::optional<Poll> vote_poll(const std::string&, const std::vector<int>&) {
+        return std::nullopt;
+    }
 
     // --- User relationship actions (optional; Mastodon + Bluesky) ---
     // Fetch a fuller profile for an account (counts, bio) when the row's User is
@@ -170,6 +179,9 @@ public:
     virtual bool unmute(const std::string&) { return false; }
     virtual bool block(const std::string&) { return false; }
     virtual bool unblock(const std::string&) { return false; }
+    // Accept / reject a pending follow request (id = the requesting account id).
+    virtual bool authorize_follow_request(const std::string&) { return false; }
+    virtual bool reject_follow_request(const std::string&) { return false; }
     // Show or hide a followed account's boosts in the home timeline.
     virtual bool set_show_boosts(const std::string&, bool) { return false; }
 

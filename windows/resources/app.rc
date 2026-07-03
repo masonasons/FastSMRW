@@ -231,6 +231,22 @@ BEGIN
                -1, 10, 74, 224, 26
 END
 
+IDD_SET_BEHAVIOR DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Behavior"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "When you press Enter on a &post:", -1, 10, 13, 118, 9
+    COMBOBOX   IDC_SET_ENTER_POST, 130, 11, 100, 90, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "When you press Enter on a &user:", -1, 10, 35, 118, 9
+    COMBOBOX   IDC_SET_ENTER_USER, 130, 33, 100, 90, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT      "When you press &Shift+Enter on a post:", -1, 10, 57, 118, 9
+    COMBOBOX   IDC_SET_SECOND_POST, 130, 55, 100, 90, CBS_DROPDOWNLIST | WS_TABSTOP
+    AUTOCHECKBOX "Play &audio in the background (no player window; stop with Ctrl+S)", IDC_SET_MEDIA_BG, 10, 78, 224, 12
+    LTEXT      "These also control the invisible-interface Default/Secondary action keys and the layer's Enter and Shift+Enter keys.",
+               -1, 10, 96, 224, 26
+END
+
 IDD_KEYMAP_MANAGER DIALOGEX 0, 0, 340, 260
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Keyboard Manager"

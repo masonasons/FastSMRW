@@ -63,6 +63,23 @@ std::string zip_asset_url(const json& release) {
     return {};
 }
 
+// The installer asset's download URL (a name containing "setup"/"installer" and
+// ending in .exe), or "".
+std::string installer_asset_url(const json& release) {
+    if (auto it = release.find("assets"); it != release.end() && it->is_array())
+        for (const auto& a : *it) {
+            std::string name = a.value("name", std::string());
+            std::string lower;
+            for (char c : name)
+                lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            const bool is_exe = lower.size() >= 4 && lower.compare(lower.size() - 4, 4, ".exe") == 0;
+            if (is_exe && (lower.find("setup") != std::string::npos ||
+                           lower.find("installer") != std::string::npos))
+                return a.value("browser_download_url", std::string());
+        }
+    return {};
+}
+
 bool looks_like_sha(const std::string& s) {
     if (s.size() < 7)
         return false;
@@ -111,6 +128,7 @@ UpdateInfo check_latest(net::IHttpClient& http, const std::string& current_commi
     const std::string remote = release_commit(rel);
     info.notes = rel.value("body", std::string());
     info.download_url = zip_asset_url(rel);
+    info.installer_url = installer_asset_url(rel);
     info.version = remote.substr(0, 7);
     if (remote.empty() || info.download_url.empty()) {
         info.error = "No usable 'latest' build was published.";
@@ -160,6 +178,7 @@ UpdateInfo check_stable(net::IHttpClient& http, const std::string& current_versi
     info.version = best_version;
     info.notes = best->value("body", std::string());
     info.download_url = zip_asset_url(*best);
+    info.installer_url = installer_asset_url(*best);
     info.available = compare_versions(best_version, current_version) > 0 && !info.download_url.empty();
     return info;
 }

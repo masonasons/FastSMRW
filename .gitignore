@@ -4,6 +4,10 @@
 /out/
 .vs/
 
+# Release artifacts (produced by build.bat / CI)
+/FastSMRW.zip
+/FastSMRWInstaller.exe
+
 # Fetched dependencies (see download-deps.bat)
 /deps/
 

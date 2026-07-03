@@ -14,6 +14,7 @@
 #include "lists_manager_dialog.hpp"
 #include "new_timeline_dialog.hpp"
 #include "server_filters_dialog.hpp"
+#include "media_player_window.hpp"
 #include "post_info_dialog.hpp"
 #include "user_profile_dialog.hpp"
 #include "settings_dialog.hpp"
@@ -31,6 +32,7 @@ namespace {
 constexpr wchar_t kClassName[] = L"FastSMRWMain";
 constexpr int kTimelinesPaneWidth = 220;
 constexpr int kMinWidth = 920;
+constexpr UINT_PTR kMediaBgTimer = 1; // WM_TIMER id for background-audio end polling
 constexpr int kMinHeight = 720;
 
 enum {
@@ -50,6 +52,7 @@ enum {
     ID_OPEN_BROWSER,
     ID_OPEN_LINKS,
     ID_NEW_TIMELINE,
+    ID_TOGGLE_PIN,
     ID_CLOSE_TIMELINE,
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
@@ -72,6 +75,8 @@ enum {
     ID_LIST_MANAGER,
     ID_VIEW_MUTES,
     ID_VIEW_BLOCKS,
+    ID_FOLLOW_REQUESTS,
+    ID_STOP_MEDIA,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
 
@@ -182,10 +187,12 @@ HMENU build_menu() {
     AppendMenuW(app, MF_STRING, ID_LIST_MANAGER, L"&Lists…");
     AppendMenuW(app, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
     AppendMenuW(app, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
+    AppendMenuW(app, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
     AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
     AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
+    AppendMenuW(app, MF_STRING, ID_STOP_MEDIA, L"S&top Media Playback\tCtrl+S");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_HIDE_WINDOW, L"&Hide Window\tCtrl+W");
     AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
@@ -208,6 +215,7 @@ HMENU build_menu() {
 
     HMENU timeline = CreatePopupMenu();
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
+    AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tBackspace");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_FIND, L"&Find…\tCtrl+F");
@@ -240,6 +248,7 @@ HMENU build_menu() {
 } // namespace
 
 MainWindow::MainWindow(HINSTANCE inst) : inst_(inst) {}
+MainWindow::~MainWindow() = default; // here, where MediaPlayback is a complete type
 
 void MainWindow::event_sink(void* user, const char* event_json, size_t len) {
     auto* self = static_cast<MainWindow*>(user);
@@ -273,6 +282,8 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
+        {FVIRTKEY | FCONTROL, 'P', ID_TOGGLE_PIN}, // Ctrl+P: pin/unpin the current tab
+        {FVIRTKEY | FCONTROL, 'S', ID_STOP_MEDIA}, // Ctrl+S: stop background audio
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
         {FVIRTKEY | FCONTROL, 'W', ID_HIDE_WINDOW}, // Ctrl+W: hide the window
@@ -482,6 +493,13 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
+    case WM_TIMER:
+        if (wp == kMediaBgTimer && media_bg_ && media_bg_->completed()) {
+            media_bg_->stop(); // background audio finished; clear it
+            KillTimer(hwnd_, kMediaBgTimer);
+        }
+        return 0;
+
     case WM_DESTROY:
         // Remove the global input hooks while we're still alive and pumping, so a
         // modifier held during close (e.g. Alt+F4) isn't left stuck by the hook
@@ -557,6 +575,23 @@ void MainWindow::populate_timelines_list() {
         ListView_SetItemState(timelines_list_, current_, LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
     updating_selection_ = false;
+}
+
+void MainWindow::update_pin_menu() {
+    // Check the "Pin Timeline" item and flip its label to "Unpin" when the current
+    // tab is pinned, so the toggle state is announced by the screen reader.
+    HMENU bar = GetMenu(hwnd_);
+    if (!bar)
+        return;
+    const Timeline* tl = current();
+    const bool pinned = tl && tl->pinned;
+    MENUITEMINFOW mii{};
+    mii.cbSize = sizeof(mii);
+    mii.fMask = MIIM_STATE | MIIM_STRING;
+    mii.fState = pinned ? MFS_CHECKED : MFS_UNCHECKED;
+    std::wstring label = pinned ? L"Un&pin Timeline\tCtrl+P" : L"&Pin Timeline\tCtrl+P";
+    mii.dwTypeData = label.data();
+    SetMenuItemInfoW(bar, ID_TOGGLE_PIN, FALSE, &mii);
 }
 
 void MainWindow::maybe_load_older(int row) {
@@ -693,6 +728,12 @@ void MainWindow::on_view_keydown(int vk) {
     case 'F':
         do_favorite();
         break;
+    case 'P': { // pin/unpin your own post to your profile (core rejects others' posts)
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "toggle_pin_post"}, {"id", id}});
+        break;
+    }
     case 'R':
         compose("reply");
         break;
@@ -714,15 +755,102 @@ void MainWindow::on_view_keydown(int vk) {
             dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
         break;
     }
-    case VK_RETURN:
-        if (Timeline* t = current(); t && t->user_list)
-            show_user_actions(); // batch follow/mute/block on selected users
-        else
-            do_post_info();
+    case VK_RETURN: {
+        Timeline* t = current();
+        const int fr = selected_row();
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        const bool follow_req = t && fr >= 0 && fr < static_cast<int>(t->rows.size()) &&
+                                t->rows[static_cast<size_t>(fr)].follow_request;
+        if (shift && t && !t->user_list && !follow_req) {
+            do_secondary_post_action(); // Shift+Enter: the secondary interact (Behavior tab)
+        } else if (follow_req) {
+            do_follow_request_action(t->rows[static_cast<size_t>(fr)]); // accept/reject
+        } else if (t && t->user_list) {
+            do_enter_user_action(); // configurable (Behavior tab)
+        } else {
+            do_enter_post_action(); // configurable (Behavior tab)
+        }
         break;
+    }
     default:
         break;
     }
+}
+
+void MainWindow::do_enter_post_action() {
+    const std::string a = settings_.value("enter_post_action", std::string("post_info"));
+    const std::string id = selected_id();
+    if (a == "thread") {
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
+    } else if (a == "reply") {
+        compose("reply");
+    } else if (a == "links") {
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_post_links"}, {"id", id}});
+    } else {
+        do_post_info();
+    }
+}
+
+void MainWindow::do_secondary_post_action() {
+    const std::string a = settings_.value("secondary_post_action", std::string("play_media"));
+    const std::string id = selected_id();
+    if (id.empty())
+        return;
+    if (a == "post_info")
+        do_post_info();
+    else if (a == "thread")
+        dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
+    else if (a == "reply")
+        compose("reply");
+    else if (a == "links")
+        dispatch_cmd({{"cmd", "open_post_links"}, {"id", id}});
+    else
+        dispatch_cmd({{"cmd", "play_media"}, {"id", id}});
+}
+
+void MainWindow::do_enter_user_action() {
+    const std::string a = settings_.value("enter_user_action", std::string("actions"));
+    const std::string id = selected_id();
+    if (a == "profile") {
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_user_profile"}, {"id", id}});
+    } else if (a == "timeline") {
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+    } else {
+        show_user_actions();
+    }
+}
+
+void MainWindow::do_follow_request_action(const Row& r) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+    AppendMenuW(menu, MF_STRING, 1, L"&Accept");
+    AppendMenuW(menu, MF_STRING, 2, L"&Reject");
+    POINT pt{0, 0};
+    RECT rc;
+    const int frow = selected_row();
+    if (frow >= 0 && ListView_GetItemRect(timeline_view_, frow, &rc, LVIR_BOUNDS)) {
+        pt.x = rc.left;
+        pt.y = rc.bottom;
+        ClientToScreen(timeline_view_, &pt);
+    } else {
+        GetCursorPos(&pt);
+    }
+    const int chosen = static_cast<int>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd_,
+        nullptr));
+    DestroyMenu(menu);
+    if (chosen != 1 && chosen != 2)
+        return;
+    const char* action = chosen == 1 ? "authorize_request" : "reject_request";
+    dispatch_cmd({{"cmd", "set_relationship"},
+                  {"account_id", r.account_id},
+                  {"acct", r.acct},
+                  {"action", action}});
 }
 
 void MainWindow::do_boost() {
@@ -771,14 +899,28 @@ void MainWindow::ev_post_info(const json& e) {
     const std::wstring text = to_wide(e.value("text", std::string{}));
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
     const bool browser_ok = e.value("has_url", false);
+    PollInfo poll;
+    if (e.contains("poll") && e["poll"].is_object()) {
+        poll.present = true;
+        poll.multiple = e["poll"].value("multiple", false);
+        for (const auto& o : e["poll"].value("options", json::array()))
+            poll.options.push_back(to_wide(o.get<std::string>()));
+    }
     const std::string keep_id = selected_id();
     auto guard = enter_modal();
-    auto action = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok);
+    PostInfoResult res = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, poll);
     restore_selection(keep_id);
     leave_modal(guard);
-    if (!action)
+    if (!res.action)
         return;
-    switch (*action) {
+    if (*res.action == PostInfoAction::Vote) {
+        json choices = json::array();
+        for (int c : res.choices)
+            choices.push_back(c);
+        dispatch_cmd({{"cmd", "vote_poll"}, {"id", id}, {"choices", std::move(choices)}});
+        return;
+    }
+    switch (*res.action) {
     case PostInfoAction::Reply:
         dispatch_cmd({{"cmd", "compose_context"}, {"mode", "reply"}, {"id", id}});
         break;
@@ -803,6 +945,8 @@ void MainWindow::ev_post_info(const json& e) {
     case PostInfoAction::ViewAuthor:
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
         break;
+    case PostInfoAction::Vote:
+        break; // handled above
     }
 }
 
@@ -997,11 +1141,20 @@ void MainWindow::show_user_actions() {
         const wchar_t* label;
         const char* action;
     };
-    static const Act kActs[] = {
+    static const Act kUserActs[] = {
         {L"&Follow", "follow"}, {L"&Unfollow", "unfollow"}, {L"&Mute", "mute"},
         {L"Un&mute", "unmute"}, {L"&Block", "block"},       {L"Un&block", "unblock"},
     };
-    const int kActCount = static_cast<int>(sizeof(kActs) / sizeof(kActs[0]));
+    // The Follow Requests buffer offers Accept/Reject instead.
+    static const Act kReqActs[] = {
+        {L"&Accept", "authorize_request"},
+        {L"&Reject", "reject_request"},
+    };
+    const bool requests = tc->kind == "followRequests";
+    const Act* kActs = requests ? kReqActs : kUserActs;
+    const int kActCount =
+        requests ? static_cast<int>(sizeof(kReqActs) / sizeof(kReqActs[0]))
+                 : static_cast<int>(sizeof(kUserActs) / sizeof(kUserActs[0]));
     HMENU menu = CreatePopupMenu();
     if (!menu)
         return;
@@ -1195,6 +1348,12 @@ void MainWindow::handle_command(int id) {
     case ID_VIEW_BLOCKS:
         dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "blocks"}});
         break;
+    case ID_FOLLOW_REQUESTS:
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "follow_requests"}});
+        break;
+    case ID_STOP_MEDIA:
+        stop_media();
+        break;
     case ID_CHECK_UPDATES:
         announce("Checking for updates…");
         dispatch_cmd({{"cmd", "check_for_update"}, {"silent", false}});
@@ -1270,6 +1429,9 @@ void MainWindow::handle_command(int id) {
     }
     case ID_NEW_TIMELINE:
         do_new_timeline();
+        break;
+    case ID_TOGGLE_PIN:
+        dispatch_cmd({{"cmd", "toggle_pin"}});
         break;
     case ID_CLOSE_TIMELINE:
         dispatch_cmd({{"cmd", "close_timeline"}});
@@ -1360,6 +1522,10 @@ void MainWindow::on_event(const std::string& js) {
         ev_action_catalog(e);
     else if (ev == "invisible_ui_action")
         ev_invisible_ui_action(e);
+    else if (ev == "media_open")
+        ev_media_open(e);
+    else if (ev == "media_picker")
+        ev_media_picker(e);
     else if (ev == "client_filter")
         ev_client_filter(e);
     else if (ev == "server_filters")
@@ -1395,6 +1561,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.title = to_wide(t.value("title", std::string{}));
         tl.kind = t.value("kind", std::string{});
         tl.dismissable = t.value("dismissable", false);
+        tl.pinned = t.value("pinned", false);
         tl.user_list = t.value("user_list", false);
         if (same_account)
             for (const auto& old : timelines_) // carry rows/position for the same timeline
@@ -1412,6 +1579,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
     load_pending_ = false; // switching timelines resets the paging guard
     populate_timelines_list();
     bind_current_to_view(/*force=*/true); // a switch always rebinds (even to an empty timeline)
+    update_pin_menu();
     // Match the Mac's focusTable(): when a NEW timeline appears (e.g. opening a
     // thread), put focus on the posts so the user lands on the content. Only on a
     // spawn (the count grew) — not a plain switch, or arrowing the timelines list
@@ -1434,6 +1602,9 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.favorited = r.value("favorited", false);
         row.boosted = r.value("boosted", false);
         row.gap_after = r.value("gap_after", false);
+        row.follow_request = r.value("follow_request", false);
+        row.account_id = r.value("account_id", std::string{});
+        row.acct = r.value("acct", std::string{});
         tl.rows.push_back(std::move(row));
     }
     if (tl.selected_id.empty()) // first load: adopt the core's remembered position
@@ -1460,6 +1631,16 @@ void MainWindow::ev_settings(const json& e) {
     }
 }
 
+bool MainWindow::installed_mode() const {
+    // The installer drops installed.txt next to the exe; a portable zip never has it.
+    wchar_t exe[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring p = exe;
+    const size_t slash = p.find_last_of(L"\\/");
+    const std::wstring marker = p.substr(0, slash) + L"\\installed.txt";
+    return GetFileAttributesW(marker.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
 void MainWindow::ev_update_status(const json& e) {
     const bool silent = e.value("silent", false);
     const std::string error = e.value("error", std::string{});
@@ -1468,6 +1649,7 @@ void MainWindow::ev_update_status(const json& e) {
     const std::string version = e.value("version", std::string{});
     const std::string notes = e.value("notes", std::string{});
     pending_update_url_ = e.value("download_url", std::string{});
+    pending_installer_url_ = e.value("installer_url", std::string{});
 
     if (!error.empty()) {
         if (!silent)
@@ -1481,7 +1663,11 @@ void MainWindow::ev_update_status(const json& e) {
                         MB_OK | MB_ICONINFORMATION);
         return;
     }
-    if (pending_update_url_.empty())
+    // An installed copy (installed.txt marker) updates via the setup exe when the
+    // release ships one; a portable copy uses the zip.
+    const bool use_installer = installed_mode() && !pending_installer_url_.empty();
+    const std::string& url = use_installer ? pending_installer_url_ : pending_update_url_;
+    if (url.empty())
         return; // nothing to download
 
     std::wstring msg;
@@ -1497,16 +1683,25 @@ void MainWindow::ev_update_status(const json& e) {
     }
     if (MessageBoxW(hwnd_, msg.c_str(), L"Update Available", MB_YESNO | MB_ICONQUESTION) == IDYES) {
         announce("Downloading update…");
-        dispatch_cmd({{"cmd", "download_update"}, {"url", pending_update_url_}});
+        dispatch_cmd({{"cmd", "download_update"}, {"url", url}, {"installer", use_installer}});
     }
 }
 
 void MainWindow::ev_update_ready(const json& e) {
-    const std::string zip = e.value("path", std::string{});
-    if (zip.empty()) {
+    const std::string path = e.value("path", std::string{});
+    if (path.empty()) {
         announce("Update download failed.");
         return;
     }
+    // Installed copy: run the downloaded setup silently, then quit so it can
+    // replace the running files. It writes the installed.txt marker again itself.
+    if (e.value("installer", false)) {
+        announce("Installing update and restarting…");
+        ShellExecuteW(hwnd_, L"open", to_wide(path).c_str(), L"/SILENT", nullptr, SW_SHOWNORMAL);
+        DestroyWindow(hwnd_);
+        return;
+    }
+    const std::string zip = path; // portable copy: extract the zip over the run folder
     wchar_t exe[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
     std::wstring exe_path = exe;
@@ -1755,7 +1950,83 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
         do_find_prev();
     } else if (a == "NewTimeline") {
         do_new_timeline(); // requests spawnable list; ev_spawnable opens the dialog
+    } else if (a == "UserActions") {
+        show_user_actions(); // the Enter default on a user, from the invisible interface
+    } else if (a == "StopMedia") {
+        stop_media();
     }
+}
+
+void MainWindow::ev_media_open(const json& e) {
+    const std::wstring url = to_wide(e.value("url", std::string{}));
+    const std::wstring title = to_wide(e.value("title", std::string{}));
+    if (url.empty())
+        return;
+    if (settings_.value("media_background", false)) { // no window; stop with Ctrl+S
+        play_media_background(url, title);
+        return;
+    }
+    leave_layer(); // a window is opening; leave the layer (restores an overlay)
+    const bool played = show_media_player(hwnd_, inst_, title, url,
+                                          [this](const std::wstring& m) { announce(to_utf8(m)); });
+    if (!played) // couldn't stream it (e.g. an unsupported codec) -> system player
+        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
+}
+
+void MainWindow::play_media_background(const std::wstring& url, const std::wstring& title) {
+    if (!media_bg_)
+        media_bg_ = std::make_unique<MediaPlayback>();
+    if (media_bg_->play(url)) {
+        announce("Playing " + to_utf8(title));
+        SetTimer(hwnd_, kMediaBgTimer, 1000, nullptr); // auto-clear when it ends
+    } else {
+        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
+    }
+}
+
+void MainWindow::stop_media() {
+    if (media_bg_ && media_bg_->active()) {
+        media_bg_->stop();
+        KillTimer(hwnd_, kMediaBgTimer);
+        announce("Stopped");
+    }
+}
+
+void MainWindow::ev_media_picker(const json& e) {
+    const std::string id = e.value("id", std::string{});
+    const auto items = e.value("items", json::array());
+    if (items.empty())
+        return;
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+    for (size_t i = 0; i < items.size(); ++i)
+        AppendMenuW(menu, MF_STRING, static_cast<UINT>(i + 1),
+                    to_wide(items[i].value("title", std::string{})).c_str());
+    POINT pt{0, 0};
+    RECT rc;
+    const int frow = selected_row();
+    if (frow >= 0 && ListView_GetItemRect(timeline_view_, frow, &rc, LVIR_BOUNDS)) {
+        pt.x = rc.left;
+        pt.y = rc.bottom;
+        ClientToScreen(timeline_view_, &pt);
+    } else {
+        GetCursorPos(&pt);
+    }
+    auto guard = enter_modal(); // works even when the window is hidden (invisible interface)
+    const int chosen = static_cast<int>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd_,
+        nullptr));
+    leave_modal(guard);
+    DestroyMenu(menu);
+    if (chosen <= 0 || chosen > static_cast<int>(items.size()))
+        return;
+    const auto& it = items[static_cast<size_t>(chosen - 1)];
+    dispatch_cmd({{"cmd", "play_media"},
+                  {"id", id},
+                  {"url", it.value("url", std::string{})},
+                  {"kind", it.value("kind", std::string{})},
+                  {"title", it.value("title", std::string{})}});
 }
 
 void MainWindow::ev_compose_context(const json& e) {

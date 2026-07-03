@@ -60,6 +60,59 @@ void test_mastodon_instance_max_chars() {
     CHECK_EQ(account.max_chars(), 1000); // now the instance's real limit
 }
 
+namespace {
+// Serves a user's normal statuses feed, plus a separate ?pinned=true response.
+// The pinned post (id 10, old) also appears in the normal feed to exercise dedup.
+struct FakeUserPostsHttp : net::IHttpClient {
+    net::HttpResponse send(const net::HttpRequest& req) override {
+        net::HttpResponse res;
+        res.status = 200;
+        if (req.url.find("pinned=true") != std::string::npos) {
+            res.body =
+                R"([{"id":"10","content":"<p>pinned</p>","account":{"id":"u1","acct":"bob"},"created_at":"2020-01-01T00:00:00.000Z"}])";
+        } else {
+            res.body =
+                R"([{"id":"20","content":"<p>new</p>","account":{"id":"u1","acct":"bob"},"created_at":"2024-03-01T00:00:00.000Z"},)"
+                R"({"id":"15","content":"<p>mid</p>","account":{"id":"u1","acct":"bob"},"created_at":"2024-02-01T00:00:00.000Z"},)"
+                R"({"id":"10","content":"<p>pinned-dup</p>","account":{"id":"u1","acct":"bob"},"created_at":"2020-01-01T00:00:00.000Z"}])";
+        }
+        return res;
+    }
+};
+} // namespace
+
+void test_mastodon_user_pinned_posts() {
+    FakeUserPostsHttp http;
+    MastodonCredentials cred;
+    cred.instance_url = "https://example.social";
+    cred.access_token = "tok";
+    User me;
+    me.id = "me";
+    MastodonAccount account(cred, me, &http);
+
+    // First page: the pinned post floats to the top and is flagged; its duplicate
+    // copy in the normal feed is dropped (the pinned one wins); the rest keep order.
+    const TimelinePage page =
+        account.items(TimelineSource::user_posts("u1", "@bob"), 40, PageCursor::start());
+    CHECK_EQ(page.items.size(), size_t(3));
+    if (page.items.size() == 3) {
+        CHECK_EQ(page.items[0].id(), std::string("s:10"));
+        CHECK(page.items[0].is_pinned());
+        CHECK_EQ(page.items[1].id(), std::string("s:20"));
+        CHECK(!page.items[1].is_pinned());
+        CHECK_EQ(page.items[2].id(), std::string("s:15"));
+    }
+
+    // Paging older (a max_id cursor) must NOT prepend pinned posts again.
+    const TimelinePage older =
+        account.items(TimelineSource::user_posts("u1", "@bob"), 40, PageCursor::max_id("20"));
+    CHECK(!older.items.empty());
+    if (!older.items.empty()) {
+        CHECK_EQ(older.items[0].id(), std::string("s:20"));
+        CHECK(!older.items[0].is_pinned());
+    }
+}
+
 void test_mastodon_thread_fetch() {
     FakeThreadHttp http;
     MastodonCredentials cred;

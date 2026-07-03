@@ -20,6 +20,12 @@ struct AppSettings {
     bool confirm_block = true;
     bool show_mentions_in_notifications = true;
     bool reverse_timelines = false; // newest at the bottom (oldest-first) for time-ordered feeds
+    // What pressing Enter (or the "Enter" invisible action) does by default.
+    std::string enter_post_action = "post_info"; // post_info | thread | reply | links
+    std::string enter_user_action = "actions";   // actions | profile | timeline
+    // The secondary interact (Shift+Enter / "SecondaryAction") on a post.
+    std::string secondary_post_action = "play_media"; // play_media | post_info | thread | reply | links
+    bool media_background = false; // play audio without opening the player window
     int auto_refresh_seconds = 0; // 0 = off; otherwise poll interval
     bool streaming_enabled = false; // real-time streaming (Mastodon)
     // Invisible interface (Windows): control the client from any window.

@@ -149,11 +149,13 @@ KeyBindings layer_keymap() {
         {"left", "prev_tl"},         {"right", "next_tl"},
         {"home", "top_item"},        {"end", "bottom_item"},
         {"pageup", "prev_item_jump"}, {"pagedown", "next_item_jump"},
-        {"space", "open_thread"},    {"return", "View"},
+        {"space", "open_thread"},    {"return", "Enter"},
+        {"shift+return", "SecondaryAction"},
         {"r", "Reply"},              {"b", "BoostToggle"},
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
-        {"t", "NewTimeline"},        {"u", "UserTimeline"},
+        {"p", "PinPost"},            {"t", "NewTimeline"},
+        {"u", "UserTimeline"},
         {"o", "Url"},                {"w", "ToggleWindow"},
         {"back", "CloseTimeline"}, // canonical name for Backspace (matches vk_to_base)
     };
@@ -172,13 +174,15 @@ std::string layer_help_text() {
            "Page Up: Jump up\n"
            "Page Down: Jump down\n"
            "Space: Open thread\n"
-           "Enter: Post info\n"
+           "Enter: Default action (view post, or your Behavior choice)\n"
+           "Shift+Enter: Secondary action (play media, or your Behavior choice)\n"
            "R: Reply\n"
            "Q: Quote\n"
            "E: Edit\n"
            "N: New post\n"
            "B: Boost or unboost\n"
            "F: Like or unlike\n"
+           "P: Pin or unpin your post to your profile\n"
            "T: New timeline\n"
            "U: User's timeline\n"
            "O: Open links\n"
@@ -246,7 +250,9 @@ const std::vector<ActionDef>& action_catalog() {
         {"BoostToggle", "Boost / Unboost", "control+shift+win+r"},
         {"LikeToggle", "Like / Unlike", "alt+win+i"},
         {"View", "Post info", "alt+win+v"},
-        {"Url", "Open link in post", "alt+win+return"},
+        {"Enter", "Default action (like Enter)", "alt+win+return"},
+        {"SecondaryAction", "Secondary action (like Shift+Enter)", "alt+shift+win+return"},
+        {"Url", "Open link in post", ""}, // unbound by default (was alt+win+return)
         {"open_thread", "View thread", "alt+win+t"},
         // --- user actions ---
         {"UserTimeline", "Open user timeline", "alt+win+u"},
@@ -256,12 +262,17 @@ const std::vector<ActionDef>& action_catalog() {
         {"BlockToggle", "Block / Unblock user", "control+shift+win+b"},
         // --- timeline / app ---
         {"NewTimeline", "New timeline", ""}, // unbound by default (in-app Ctrl+T); opens the dialog
+        {"MoveTimelineUp", "Move timeline up", ""},       // unbound (in-app Shift+Up)
+        {"MoveTimelineDown", "Move timeline down", ""},   // unbound (in-app Shift+Down)
+        {"TogglePin", "Pin / unpin timeline", ""},        // unbound (in-app Ctrl+P)
+        {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
         {"CloseTimeline", "Close timeline", "alt+win+'"},
         {"ToggleWindow", "Show / hide window", "control+win+w"},
         {"EnterLayer", "Open the layer", ""}, // unbound: call up the layer from hotkey/keyhook mode
         {"Options", "Settings", "alt+win+o"},
         {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
         {"StopAudio", "Stop audio / speech", "control+win+shift+return"},
+        {"StopMedia", "Stop media playback", "control+alt+win+s"},
     };
     return catalog;
 }

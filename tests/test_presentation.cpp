@@ -203,6 +203,36 @@ void test_presenter_stats_nonzero() {
     present::SpeechConfig::set_current(present::SpeechSettings::defaults()); // restore
 }
 
+void test_presenter_poll() {
+    const std::int64_t now = 2000;
+    // A poll the viewer has voted in shows counts, percentages and their own pick.
+    Status voted;
+    voted.account.acct = "a@x";
+    Poll p;
+    p.id = "7";
+    p.voted = true;
+    p.votes_count = 4;
+    p.options = {{"Yes", 3}, {"No", 1}};
+    p.own_votes = {0};
+    voted.poll = p;
+    const std::string out = present::post_info(voted, now);
+    CHECK(out.find("Yes \xE2\x80\x94 3 votes (75%)") != std::string::npos);
+    CHECK(out.find("(your vote)") != std::string::npos);
+    CHECK(out.find("No \xE2\x80\x94 1 vote (25%)") != std::string::npos);
+
+    // An open, not-yet-voted poll lists options WITHOUT revealing counts.
+    Status open;
+    open.account.acct = "a@x";
+    Poll q;
+    q.id = "8";
+    q.votes_count = 10;
+    q.options = {{"Left", 6}, {"Right", 4}};
+    open.poll = q;
+    const std::string o2 = present::post_info(open, now);
+    CHECK(o2.find("- Left\n") != std::string::npos);
+    CHECK(o2.find("60%") == std::string::npos); // counts hidden until you vote
+}
+
 void test_reply_participants() {
     Status s;
     s.account.acct = "alice@x.social";

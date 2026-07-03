@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@ namespace fastsmui {
 
 class ServerFiltersDialog; // manager modal; non-null while open (like keymap_mgr_)
 class ListsManagerDialog;  // Lists manager modal; non-null while open
+class MediaPlayback;       // windowless background audio playback (media_player_window.hpp)
 
 // The main application window: a left "Timelines" list and a right virtual
 // "Timeline" posts list. It is a pure client of the core's C ABI: it dispatches
@@ -28,6 +30,7 @@ class ListsManagerDialog;  // Lists manager modal; non-null while open
 class MainWindow {
 public:
     explicit MainWindow(HINSTANCE inst);
+    ~MainWindow(); // defined in the .cpp (media_bg_ needs the complete MediaPlayback)
 
     bool create();
     HWND hwnd() const { return hwnd_; }
@@ -47,12 +50,16 @@ private:
         std::wstring text;
         bool favorited = false;
         bool boosted = false;
-        bool gap_after = false; // unloaded posts follow this row (auto-fill)
+        bool gap_after = false;      // unloaded posts follow this row (auto-fill)
+        bool follow_request = false; // a follow-request notification (Enter accepts/rejects)
+        std::string account_id;      // requester's account id (follow-request rows)
+        std::string acct;            // requester's handle (follow-request rows)
     };
     struct Timeline {
         std::wstring title;
         std::string kind;
         bool dismissable = false;
+        bool pinned = false;    // user pinned this tab (locked from dismissal)
         bool user_list = false; // rows are users: multi-select + batch actions
         bool reversed = false;  // oldest at top, newest at bottom (load older from the top)
         std::vector<Row> rows;
@@ -69,6 +76,7 @@ private:
     void create_children();
     void layout();
     void populate_timelines_list();
+    void update_pin_menu(); // reflect the current tab's pin state on the Pin menu item
     void bind_current_to_view(bool force = false);
     void maybe_load_older(int row); // pull the next page when near the bottom
     Timeline* current();
@@ -105,6 +113,12 @@ private:
     void compose(const char* mode); // dispatch compose_context for the selection
     void do_post_info();
     void show_user_actions(); // batch follow/mute/block on a user list
+    void do_follow_request_action(const Row& r); // accept/reject a follow request (Enter)
+    void do_enter_post_action();                 // Enter on a post (configurable)
+    void do_enter_user_action();                 // Enter on a user (configurable)
+    void do_secondary_post_action();             // Shift+Enter on a post (configurable)
+    void play_media_background(const std::wstring& url, const std::wstring& title);
+    void stop_media(); // stop windowless background audio
     void do_new_timeline();
     void do_add_account();
     void do_settings();
@@ -129,6 +143,8 @@ private:
     void ev_layer_keymap(const nlohmann::json& e);
     void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
+    void ev_media_open(const nlohmann::json& e);   // stream audio in the in-app player
+    void ev_media_picker(const nlohmann::json& e); // choose which media to play
     void ev_client_filter(const nlohmann::json& e);  // open the per-timeline client filter dialog
     void ev_server_filters(const nlohmann::json& e); // open / refresh the server filters manager
     void ev_user_lists(const nlohmann::json& e);     // open the add/remove-from-lists checklist
@@ -161,8 +177,11 @@ private:
     // event; the driver registers them and maps WM_HOTKEY ids back to actions.
     HotkeyDriver hotkey_driver_;   // mode "hotkey" (RegisterHotKey)
     KeyhookDriver keyhook_driver_; // mode "keyhook" (WH_KEYBOARD_LL)
+    std::unique_ptr<MediaPlayback> media_bg_; // windowless background audio playback
     std::string invisible_mode_ = "off";
+    bool installed_mode() const;            // installed.txt marker present (vs portable)
     std::string pending_update_url_;        // FastSMRW.zip URL from the last check
+    std::string pending_installer_url_;     // FastSMRWInstaller.exe URL from the last check
     bool startup_update_checked_ = false;   // guard the one-shot startup check
     std::map<std::string, std::string> invisible_bindings_; // key -> action
     std::vector<KmAction> action_catalog_;                  // for the Keyboard Manager

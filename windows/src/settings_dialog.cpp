@@ -651,6 +651,73 @@ INT_PTR CALLBACK UpdatesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     return FALSE;
 }
 
+// Behavior page: what pressing Enter on a post / a user does by default.
+const char* const kEnterPostActions[] = {"post_info", "thread", "reply", "links"};
+const wchar_t* const kEnterPostLabels[] = {L"View post (info)", L"View thread", L"Reply",
+                                           L"Open links"};
+const char* const kEnterUserActions[] = {"actions", "profile", "timeline"};
+const wchar_t* const kEnterUserLabels[] = {L"User actions menu", L"View profile",
+                                           L"View their timeline"};
+const char* const kSecondPostActions[] = {"play_media", "post_info", "thread", "reply", "links"};
+const wchar_t* const kSecondPostLabels[] = {L"Play media", L"View post (info)", L"View thread",
+                                            L"Reply", L"Open links"};
+
+INT_PTR CALLBACK BehaviorProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        Ctx* ctx = on_init(dlg, lp);
+        HWND post = GetDlgItem(dlg, IDC_SET_ENTER_POST);
+        int psel = 0;
+        for (int i = 0; i < static_cast<int>(std::size(kEnterPostActions)); ++i) {
+            SendMessageW(post, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(kEnterPostLabels[i]));
+            if (ctx->settings.enter_post_action == kEnterPostActions[i])
+                psel = i;
+        }
+        SendMessageW(post, CB_SETCURSEL, psel, 0);
+        HWND usr = GetDlgItem(dlg, IDC_SET_ENTER_USER);
+        int usel = 0;
+        for (int i = 0; i < static_cast<int>(std::size(kEnterUserActions)); ++i) {
+            SendMessageW(usr, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(kEnterUserLabels[i]));
+            if (ctx->settings.enter_user_action == kEnterUserActions[i])
+                usel = i;
+        }
+        SendMessageW(usr, CB_SETCURSEL, usel, 0);
+        HWND sec = GetDlgItem(dlg, IDC_SET_SECOND_POST);
+        int ssel = 0;
+        for (int i = 0; i < static_cast<int>(std::size(kSecondPostActions)); ++i) {
+            SendMessageW(sec, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(kSecondPostLabels[i]));
+            if (ctx->settings.secondary_post_action == kSecondPostActions[i])
+                ssel = i;
+        }
+        SendMessageW(sec, CB_SETCURSEL, ssel, 0);
+        checked(dlg, IDC_SET_MEDIA_BG, ctx->settings.media_background);
+        return TRUE;
+    }
+    case WM_NOTIFY:
+        if (is_apply(lp)) {
+            Ctx* ctx = ctx_of(dlg);
+            const int p =
+                static_cast<int>(SendDlgItemMessageW(dlg, IDC_SET_ENTER_POST, CB_GETCURSEL, 0, 0));
+            if (p >= 0 && p < static_cast<int>(std::size(kEnterPostActions)))
+                ctx->settings.enter_post_action = kEnterPostActions[p];
+            const int u =
+                static_cast<int>(SendDlgItemMessageW(dlg, IDC_SET_ENTER_USER, CB_GETCURSEL, 0, 0));
+            if (u >= 0 && u < static_cast<int>(std::size(kEnterUserActions)))
+                ctx->settings.enter_user_action = kEnterUserActions[u];
+            const int se =
+                static_cast<int>(SendDlgItemMessageW(dlg, IDC_SET_SECOND_POST, CB_GETCURSEL, 0, 0));
+            if (se >= 0 && se < static_cast<int>(std::size(kSecondPostActions)))
+                ctx->settings.secondary_post_action = kSecondPostActions[se];
+            ctx->settings.media_background = is_checked(dlg, IDC_SET_MEDIA_BG);
+            ctx->applied = true;
+            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 PROPSHEETPAGEW make_page(HINSTANCE inst, int dlg, DLGPROC proc, Ctx* ctx) {
     PROPSHEETPAGEW page{};
     page.dwSize = sizeof(page);
@@ -679,6 +746,7 @@ std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
         make_page(inst, IDD_SET_SPEECH, SpeechProc, &ctx),
         make_page(inst, IDD_SET_ADVANCED, AdvancedProc, &ctx),
         make_page(inst, IDD_SET_CONFIRM, ConfirmProc, &ctx),
+        make_page(inst, IDD_SET_BEHAVIOR, BehaviorProc, &ctx),
         make_page(inst, IDD_SET_INVISIBLE, InvisibleProc, &ctx),
         make_page(inst, IDD_SET_UPDATES, UpdatesProc, &ctx),
     };

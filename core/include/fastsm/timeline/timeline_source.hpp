@@ -28,6 +28,7 @@ struct TimelineSource {
         List,        // a Mastodon list timeline (param = list id)
         Mutes,       // the account's muted users; rows are users
         Blocks,      // the account's blocked users; rows are users
+        FollowRequests, // accounts requesting to follow you; rows are users
     };
 
     Kind kind = Kind::Home;
@@ -74,6 +75,8 @@ struct TimelineSource {
             return "Muted Users";
         case Kind::Blocks:
             return "Blocked Users";
+        case Kind::FollowRequests:
+            return "Follow Requests";
         }
         return "Timeline";
     }
@@ -119,6 +122,8 @@ struct TimelineSource {
             return "mutes";
         case Kind::Blocks:
             return "blocks";
+        case Kind::FollowRequests:
+            return "followRequests";
         }
         return "timeline";
     }
@@ -139,6 +144,7 @@ struct TimelineSource {
         case Kind::List:
         case Kind::Mutes:
         case Kind::Blocks:
+        case Kind::FollowRequests:
             return false;
         default:
             return true;
@@ -152,7 +158,7 @@ struct TimelineSource {
     // Rows are users (not statuses), so the UI offers multi-select + batch actions.
     bool is_user_list() const {
         return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople ||
-               kind == Kind::Mutes || kind == Kind::Blocks;
+               kind == Kind::Mutes || kind == Kind::Blocks || kind == Kind::FollowRequests;
     }
     // Mastodon paginates these by item id (max_id), so scrollback can be re-seeded
     // from the oldest loaded row after a cache load.
@@ -209,6 +215,7 @@ struct TimelineSource {
         case Kind::SearchPeople:
         case Kind::Mutes:
         case Kind::Blocks:
+        case Kind::FollowRequests:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -255,6 +262,7 @@ struct TimelineSource {
     }
     static TimelineSource mutes() { return {Kind::Mutes}; }
     static TimelineSource blocks() { return {Kind::Blocks}; }
+    static TimelineSource follow_requests() { return {Kind::FollowRequests}; }
 };
 
 } // namespace fastsm

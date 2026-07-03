@@ -113,6 +113,12 @@
 #define IDC_SET_UPDATE_BRANCH 391
 #define IDC_SET_UPDATE_STARTUP 392
 
+#define IDD_SET_BEHAVIOR    393
+#define IDC_SET_ENTER_POST  394
+#define IDC_SET_ENTER_USER  395
+#define IDC_SET_SECOND_POST 396
+#define IDC_SET_MEDIA_BG    397
+
 // Keyboard Manager dialog + its binding-capture sub-dialog.
 #define IDD_KEYMAP_MANAGER  400
 #define IDC_KM_KEYMAP       401
