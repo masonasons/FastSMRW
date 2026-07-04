@@ -50,6 +50,7 @@ enum {
     ID_VIEW_THREAD,
     ID_USER_TIMELINE,
     ID_USER_PROFILE,
+    ID_FOLLOW_TOGGLE,
     ID_OPEN_BROWSER,
     ID_OPEN_LINKS,
     ID_NEW_TIMELINE,
@@ -211,6 +212,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_USER_TIMELINE, L"Open &User Timeline");
     AppendMenuW(status, MF_STRING, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
+    AppendMenuW(status, MF_STRING, ID_FOLLOW_TOGGLE, L"Fo&llow / Unfollow\tCtrl+L");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_OPEN_LINKS, L"Open &Links\tCtrl+O");
     AppendMenuW(status, MF_STRING, ID_OPEN_BROWSER, L"Open in Browser");
@@ -305,6 +307,7 @@ bool MainWindow::create() {
         {FVIRTKEY, VK_F3, ID_FIND_NEXT},             // F3: find next
         {FVIRTKEY | FSHIFT, VK_F3, ID_FIND_PREV},    // Shift+F3: find previous
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
+        {FVIRTKEY | FCONTROL, 'L', ID_FOLLOW_TOGGLE}, // Ctrl+L: follow/unfollow the author
         {FVIRTKEY | FCONTROL, 'O', ID_OPEN_LINKS},   // Ctrl+O: open links in the post
         {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
         {FVIRTKEY | FCONTROL, VK_DOWN, ID_MOVE_DOWN}, // jump down by movement unit
@@ -755,7 +758,7 @@ void MainWindow::on_view_keydown(int vk) {
     case 'U': { // open the author's posts (Ctrl+U is the accelerator for profile)
         const std::string id = selected_id();
         if (!id.empty())
-            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}, {"pick", true}});
         break;
     }
     case 'H': // follow a hashtag; prompt pre-fills with this post's hashtags
@@ -1068,6 +1071,11 @@ void MainWindow::ev_user_picker(const json& e) {
         AppendMenuW(menu, MF_STRING, cmd_id++, to_wide("@" + acct).c_str());
         list.push_back({u.value("id", std::string{}), acct});
     }
+    // Always offer a manual entry so you can act on someone by handle even if
+    // they aren't in this post.
+    const UINT manual_id = cmd_id;
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, manual_id, L"&Type a handle…");
     // Pop up at the selected row (matches the Mac's popUpAtSelectedRow).
     POINT pt{0, 0};
     const int row = selected_row();
@@ -1081,11 +1089,28 @@ void MainWindow::ev_user_picker(const json& e) {
     }
     const int chosen = track_popup(menu, pt);
     DestroyMenu(menu);
-    if (chosen <= 0 || chosen > static_cast<int>(list.size()))
+    if (chosen <= 0)
+        return;
+    // "Type a handle…" chosen: prompt for a handle and act on that instead.
+    if (chosen == static_cast<int>(manual_id)) {
+        const std::string handle = prompt_handle();
+        if (handle.empty())
+            return;
+        if (purpose == "timeline")
+            dispatch_cmd({{"cmd", "open_user_timeline"}, {"handle", handle}});
+        else if (purpose == "follow_toggle")
+            dispatch_cmd({{"cmd", "follow_toggle"}, {"handle", handle}});
+        else
+            dispatch_cmd({{"cmd", "open_user_profile"}, {"handle", handle}});
+        return;
+    }
+    if (chosen > static_cast<int>(list.size()))
         return;
     const auto& [account_id, acct] = list[static_cast<size_t>(chosen - 1)];
     if (purpose == "timeline")
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
+    else if (purpose == "follow_toggle")
+        dispatch_cmd({{"cmd", "follow_toggle"}, {"account_id", account_id}, {"acct", acct}});
     else
         dispatch_cmd({{"cmd", "open_user_profile"}, {"id", row_id}, {"account_id", account_id}});
 }
@@ -1264,7 +1289,49 @@ std::wstring lowered(std::wstring s) {
         c = static_cast<wchar_t>(std::towlower(c));
     return s;
 }
+
+// "Type a handle…" prompt: a single edit box that returns the typed handle
+// (leading '@' and surrounding spaces trimmed), or nullopt if cancelled/empty.
+struct HandleCtx {
+    std::optional<std::string> result;
+};
+INT_PTR CALLBACK handle_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_INITDIALOG) {
+        SetWindowLongPtrW(dlg, DWLP_USER, static_cast<LONG_PTR>(lp));
+        SetFocus(GetDlgItem(dlg, IDC_EH_EDIT));
+        return FALSE; // focus set explicitly
+    }
+    if (msg == WM_COMMAND) {
+        if (LOWORD(wp) == IDOK) {
+            auto* ctx = reinterpret_cast<HandleCtx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            wchar_t buf[256] = {0};
+            GetDlgItemTextW(dlg, IDC_EH_EDIT, buf, 256);
+            std::wstring h = buf;
+            const size_t b = h.find_first_not_of(L" \t@");
+            const size_t e = h.find_last_not_of(L" \t");
+            h = (b == std::wstring::npos) ? std::wstring{} : h.substr(b, e - b + 1);
+            if (!h.empty() && ctx)
+                ctx->result = to_utf8(h);
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        if (LOWORD(wp) == IDCANCEL) {
+            EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
 } // namespace
+
+std::string MainWindow::prompt_handle() {
+    HandleCtx ctx;
+    auto guard = enter_modal();
+    DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_ENTER_HANDLE), hwnd_, &handle_proc,
+                    reinterpret_cast<LPARAM>(&ctx));
+    leave_modal(guard);
+    return ctx.result.value_or(std::string{});
+}
 
 void MainWindow::do_find() {
     FindCtx ctx;
@@ -1427,13 +1494,19 @@ void MainWindow::handle_command(int id) {
     case ID_USER_TIMELINE: {
         const std::string id = selected_id();
         if (!id.empty())
-            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+            dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}, {"pick", true}});
         break;
     }
     case ID_USER_PROFILE: {
         const std::string id = selected_id();
         if (!id.empty())
-            dispatch_cmd({{"cmd", "open_user_profile"}, {"id", id}});
+            dispatch_cmd({{"cmd", "open_user_profile"}, {"id", id}, {"pick", true}});
+        break;
+    }
+    case ID_FOLLOW_TOGGLE: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "follow_toggle"}, {"id", id}, {"pick", true}});
         break;
     }
     case ID_NEW_TIMELINE:

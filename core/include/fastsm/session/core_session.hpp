@@ -115,6 +115,13 @@ private:
     void cmd_open_following(const nlohmann::json& cmd);
     void open_user_list(const nlohmann::json& cmd, bool following);
     void cmd_user_action(const nlohmann::json& cmd); // batch follow/mute/block
+    // Follow the post author if not following, unfollow if following. Resolves the
+    // target user the same way the u / Ctrl+U actions do (picker for multi-user posts).
+    void cmd_follow_toggle(const nlohmann::json& cmd);
+    void follow_toggle_user(SocialAccount* acct, const std::string& id, const std::string& handle);
+    // Resolve a typed handle to a User off-thread, then run `then` on the loop
+    // thread; announces an error if the handle can't be found.
+    void resolve_handle(const std::string& handle, std::function<void(const User&)> then);
     void cmd_reorder_timeline(const nlohmann::json& cmd); // move current timeline up/down
     void cmd_toggle_pin(); // pin/unpin the current tab (locks/unlocks dismissal)
     void cmd_close_timeline();

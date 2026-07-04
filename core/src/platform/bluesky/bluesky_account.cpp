@@ -299,6 +299,24 @@ std::optional<User> BlueskyAccount::fetch_profile(const std::string& id) {
     }
 }
 
+std::optional<User> BlueskyAccount::lookup_user(const std::string& handle) {
+    // getProfile's `actor` accepts a handle as well as a DID, so a typed handle
+    // resolves directly. A leading '@' is tolerated and stripped.
+    std::string h = handle;
+    if (!h.empty() && h.front() == '@')
+        h.erase(h.begin());
+    if (h.empty())
+        return std::nullopt;
+    auto body = get_profile_body(h);
+    if (!body)
+        return std::nullopt;
+    try {
+        return bluesky::map_author(json::parse(*body));
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<Relationship> BlueskyAccount::relationship(const std::string& id) {
     auto body = get_profile_body(id);
     if (!body)

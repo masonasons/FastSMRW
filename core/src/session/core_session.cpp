@@ -388,6 +388,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_following(cmd);
     else if (c == "user_action")
         cmd_user_action(cmd);
+    else if (c == "follow_toggle")
+        cmd_follow_toggle(cmd);
     else if (c == "reorder_timeline")
         cmd_reorder_timeline(cmd);
     else if (c == "toggle_pin")
@@ -1295,6 +1297,82 @@ void CoreSession::cmd_user_action(const json& cmd) {
     });
 }
 
+void CoreSession::follow_toggle_user(SocialAccount* acct, const std::string& id,
+                                     const std::string& handle) {
+    if (!acct || id.empty())
+        return;
+    worker_.post([this, acct, id, handle] {
+        // Look up the current relationship so we know which way to toggle. If we
+        // can't tell (no relationship support / a lookup failure), assume we're not
+        // following yet and follow.
+        std::optional<Relationship> rel = acct->relationship(id);
+        const bool following = rel && (rel->following || rel->requested);
+        const std::string action = following ? "unfollow" : "follow";
+        const bool ok = following ? acct->unfollow(id) : acct->follow(id);
+        loop_.post([this, ok, action, handle] {
+            if (!ok) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Action failed");
+                return;
+            }
+            emit_announce(relationship_message(action, handle));
+        });
+    });
+}
+
+void CoreSession::cmd_follow_toggle(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct)
+        return;
+    // A specific user was chosen (from the picker menu).
+    if (cmd.contains("account_id")) {
+        const std::string aid = cmd.value("account_id", std::string{});
+        follow_toggle_user(acct, aid, cmd.value("acct", std::string{}));
+        return;
+    }
+    // A handle was typed manually ("Type a handle…"): resolve it, then toggle.
+    if (cmd.contains("handle")) {
+        resolve_handle(cmd.value("handle", std::string{}), [this](const User& u) {
+            if (SocialAccount* a = accounts_.selected())
+                follow_toggle_user(a, u.id, u.acct.empty() ? u.username : u.acct);
+        });
+        return;
+    }
+    TimelineController* tc = current();
+    const std::string row_id = cmd.value("id", std::string{});
+    const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
+    if (!item)
+        return;
+    const std::vector<User> users = users_in_post(*item);
+    if (users.empty())
+        return;
+    // With "pick" the UI always wants the menu; otherwise a lone user toggles straight.
+    if (users.size() == 1 && !cmd.value("pick", false)) {
+        const User& u = users.front();
+        follow_toggle_user(acct, u.id, u.acct.empty() ? u.username : u.acct);
+        return;
+    }
+    emit_user_picker("follow_toggle", row_id, users); // let the UI pick which user
+}
+
+void CoreSession::resolve_handle(const std::string& handle,
+                                 std::function<void(const User&)> then) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || handle.empty())
+        return;
+    worker_.post([this, acct, handle, then = std::move(then)]() mutable {
+        std::optional<User> u = acct->lookup_user(handle);
+        loop_.post([this, u = std::move(u), then = std::move(then), handle]() mutable {
+            if (!u || u->id.empty()) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Couldn't find " + handle);
+                return;
+            }
+            then(*u);
+        });
+    });
+}
+
 void CoreSession::emit_user_picker(const std::string& purpose, const std::string& row_id,
                                    const std::vector<User>& users) {
     json arr = json::array();
@@ -1316,6 +1394,14 @@ void CoreSession::cmd_open_user_timeline(const json& cmd) {
             spawn_source(TimelineSource::user_posts(aid, "@" + cmd.value("acct", std::string{})));
         return;
     }
+    // A handle was typed manually ("Type a handle…"): resolve it, then open.
+    if (cmd.contains("handle")) {
+        resolve_handle(cmd.value("handle", std::string{}), [this](const User& u) {
+            spawn_source(
+                TimelineSource::user_posts(u.id, "@" + (u.acct.empty() ? u.username : u.acct)));
+        });
+        return;
+    }
     TimelineController* tc = current();
     const std::string row_id = cmd.value("id", std::string{});
     const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
@@ -1324,7 +1410,9 @@ void CoreSession::cmd_open_user_timeline(const json& cmd) {
     const std::vector<User> users = users_in_post(*item);
     if (users.empty())
         return;
-    if (users.size() == 1) {
+    // With "pick" the UI always wants the menu (so "Type a handle…" is reachable);
+    // otherwise a lone user opens straight away.
+    if (users.size() == 1 && !cmd.value("pick", false)) {
         const User& u = users.front();
         spawn_source(
             TimelineSource::user_posts(u.id, "@" + (u.acct.empty() ? u.username : u.acct)));
@@ -1336,6 +1424,12 @@ void CoreSession::cmd_open_user_timeline(const json& cmd) {
 void CoreSession::cmd_open_user_profile(const json& cmd) {
     if (!accounts_.selected())
         return;
+    // A handle was typed manually ("Type a handle…"): resolve it, then show it.
+    if (cmd.contains("handle")) {
+        resolve_handle(cmd.value("handle", std::string{}),
+                       [this](const User& u) { emit_user_profile(u); });
+        return;
+    }
     TimelineController* tc = current();
     const std::string row_id = cmd.value("id", std::string{});
     const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
@@ -1354,7 +1448,8 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
             }
         return;
     }
-    if (users.size() == 1) {
+    // With "pick" the UI always wants the menu; otherwise a lone user opens straight.
+    if (users.size() == 1 && !cmd.value("pick", false)) {
         emit_user_profile(users.front());
         return;
     }
@@ -2193,9 +2288,11 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     if (a == "open_thread")
         return cmd_open_thread({{"id", row}});
     if (a == "UserTimeline")
-        return cmd_open_user_timeline({{"id", row}});
+        return cmd_open_user_timeline({{"id", row}, {"pick", true}});
     if (a == "UserProfile")
-        return cmd_open_user_profile({{"id", row}});
+        return cmd_open_user_profile({{"id", row}, {"pick", true}});
+    if (a == "FollowToggle")
+        return cmd_follow_toggle({{"id", row}, {"pick", true}});
     if (a == "CloseTimeline")
         return cmd_close_timeline();
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
@@ -2205,8 +2302,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }
-    // FollowToggle / MuteToggle / BlockToggle need relationship round-trips;
-    // deferred to a later phase.
+    // MuteToggle / BlockToggle need relationship round-trips; deferred to a later
+    // phase. (FollowToggle is handled above via cmd_follow_toggle.)
 }
 
 // --- helpers ---

@@ -182,6 +182,11 @@ public:
     // Fetch a fuller profile for an account (counts, bio) when the row's User is
     // sparse, or nullopt to use the User already in hand (Mastodon).
     virtual std::optional<User> fetch_profile(const std::string&) { return std::nullopt; }
+    // Resolve a typed handle (e.g. "alice@example.com" or "alice.bsky.social", a
+    // leading '@' is tolerated) to a User, or nullopt if it can't be found. Runs
+    // synchronously on the worker thread. Lets the user look up someone by handle
+    // even when they aren't in any open timeline.
+    virtual std::optional<User> lookup_user(const std::string&) { return std::nullopt; }
     // The viewer's relationship to an account, or nullopt if unsupported/failed.
     virtual std::optional<Relationship> relationship(const std::string&) { return std::nullopt; }
     virtual bool follow(const std::string&) { return false; }

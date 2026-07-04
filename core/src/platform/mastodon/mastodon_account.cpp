@@ -705,6 +705,41 @@ std::optional<User> MastodonAccount::fetch_profile(const std::string& id) {
     }
 }
 
+std::optional<User> MastodonAccount::lookup_user(const std::string& handle) {
+    // Resolve a typed handle to a full account. /accounts/lookup takes the acct
+    // form (user@domain, or just user for a local account); a leading '@' is
+    // stripped. Falls back to a resolving search so a handle from an instance this
+    // server hasn't seen yet still gets fetched.
+    std::string h = handle;
+    if (!h.empty() && h.front() == '@')
+        h.erase(h.begin());
+    if (h.empty())
+        return std::nullopt;
+    std::string body;
+    long status = 0;
+    const std::string lurl =
+        credentials_.instance_url + "/api/v1/accounts/lookup?acct=" + util::percent_encode(h);
+    if (request("GET", lurl, "", "", body, status)) {
+        try {
+            json j = json::parse(body);
+            if (j.is_object() && j.contains("id"))
+                return mastodon::map_user(j);
+        } catch (...) {
+        }
+    }
+    const std::string surl = credentials_.instance_url + "/api/v1/accounts/search?q=" +
+                             util::percent_encode(h) + "&limit=1&resolve=true";
+    if (request("GET", surl, "", "", body, status)) {
+        try {
+            json arr = json::parse(body);
+            if (arr.is_array() && !arr.empty() && arr[0].is_object() && arr[0].contains("id"))
+                return mastodon::map_user(arr[0]);
+        } catch (...) {
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {
     const std::string url = credentials_.instance_url + "/api/v1/accounts/relationships?id[]=" + id;
     std::string body;

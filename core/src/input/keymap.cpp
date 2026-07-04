@@ -156,6 +156,7 @@ KeyBindings layer_keymap() {
         {"e", "Edit"},               {"n", "Post"},
         {"p", "PinPost"},            {"t", "NewTimeline"},
         {"u", "UserTimeline"},        {"h", "FollowHashtag"},
+        {"l", "FollowToggle"},        // L follows/unfollows the post author
         {"shift+h", "ToggleWindow"}, // Shift+H shows/hides the window
         {"o", "Url"},                {"w", "CloseTimeline"}, // W closes the current timeline
     };
@@ -185,6 +186,7 @@ std::string layer_help_text() {
            "P: Pin or unpin your post to your profile\n"
            "T: New timeline\n"
            "U: User's timeline\n"
+           "L: Follow or unfollow the user\n"
            "H: Follow a hashtag\n"
            "O: Open links\n"
            "W: Close timeline\n"

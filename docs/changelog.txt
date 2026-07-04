@@ -1,6 +1,13 @@
 FastSMRW changelog
 ==================
 
+0.1.4
+-----
+
+- Follow or unfollow a post's author with Ctrl+L (also in the Status menu, L in the layer, and Alt+Windows+L in the invisible interface); it follows if you don't yet, and unfollows if you do.
+- Open a user timeline, open a user profile, or follow now always show a menu with a "Type a handle…" option, so you can look up or follow anyone by handle even if they aren't in your timeline.
+
+
 0.1.3
 -----
 

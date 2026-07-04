@@ -235,3 +235,8 @@
 #define IDC_FHM_LIST          546
 #define IDC_FHM_OPEN          547
 #define IDC_FHM_UNFOLLOW      548
+
+// "Type a handle" prompt (manual user entry for timeline / profile / follow).
+#define IDD_ENTER_HANDLE      550
+#define IDC_EH_LABEL          551
+#define IDC_EH_EDIT           552

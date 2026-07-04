@@ -139,6 +139,7 @@ private:
     void ev_post_info(const nlohmann::json& e);
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
+    std::string prompt_handle(); // modal "Type a handle…" box; "" if cancelled/empty
     void ev_url_picker(const nlohmann::json& e); // choose among links found in a post
     void ev_keymap(const nlohmann::json& e);
     void ev_layer_keymap(const nlohmann::json& e);
