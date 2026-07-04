@@ -72,11 +72,14 @@ public:
     void set_max_refresh_pages(int n) { max_refresh_pages_ = n < 1 ? 1 : n; }
 
     // Optimistic toggles on the row at `visible_index`; returns the new state.
-    bool toggle_favorite(int visible_index);
-    bool toggle_boost(int visible_index);
+    // `done(ok, active)` runs on the main thread once the server responds so the
+    // caller can chime only on success (ok) — active = the resulting state.
+    bool toggle_favorite(int visible_index, std::function<void(bool ok, bool active)> done = {});
+    bool toggle_boost(int visible_index, std::function<void(bool ok, bool active)> done = {});
     // Pin/unpin one of your own posts to your profile. Returns 1 if now pinned, 0
     // if now unpinned, or -1 if the row isn't your own post (nothing changes).
-    int toggle_pin_post(int visible_index);
+    // `done(ok, active)` fires after the server responds (not for the -1 case).
+    int toggle_pin_post(int visible_index, std::function<void(bool ok, bool active)> done = {});
     // Replace the poll on a row's status (after voting) and refresh the view.
     void set_poll(const std::string& row_id, const Poll& poll);
 

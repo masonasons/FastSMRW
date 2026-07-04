@@ -24,7 +24,6 @@ enum class StatusSpeechField {
     Favorited,
     Boosted,
     Visibility,
-    ReplyIndicator,
     Source,
 };
 

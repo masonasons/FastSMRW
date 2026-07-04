@@ -49,16 +49,25 @@ std::vector<SpeechItem<Field>> items_from_json(const json& arr, FromKey from_key
 AppSettings settings_from_json(const json& root) {
     AppSettings settings;
     settings.sounds_enabled = root.value("sounds_enabled", true);
+    settings.sound_volume = root.value("sound_volume", 100);
+    settings.boundary_sound = root.value("boundary_sound", true);
     settings.enter_to_send = root.value("enter_to_send", false);
     settings.soundpack = root.value("soundpack", std::string("Default"));
+    if (auto it = root.find("account_soundpacks"); it != root.end() && it->is_object())
+        for (const auto& [key, pack] : it->items())
+            if (pack.is_string())
+                settings.account_soundpacks[key] = pack.get<std::string>();
     settings.fetch_pages = root.value("fetch_pages", 3);
     settings.cache_limit = root.value("cache_limit", 200);
     settings.confirm_boost = root.value("confirm_boost", false);
+    settings.confirm_unboost = root.value("confirm_unboost", false);
     settings.confirm_favorite = root.value("confirm_favorite", false);
+    settings.confirm_unfavorite = root.value("confirm_unfavorite", false);
     settings.confirm_clear_timeline = root.value("confirm_clear_timeline", true);
     settings.confirm_block = root.value("confirm_block", true);
-    settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 0);
-    settings.streaming_enabled = root.value("streaming_enabled", false);
+    settings.confirm_unblock = root.value("confirm_unblock", false);
+    settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 60);
+    settings.streaming_enabled = root.value("streaming_enabled", true);
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.reverse_timelines = root.value("reverse_timelines", false);
     settings.enter_post_action = root.value("enter_post_action", std::string("post_info"));
@@ -102,14 +111,22 @@ AppSettings settings_from_json(const json& root) {
 json settings_to_json(const AppSettings& settings) {
     json root;
     root["sounds_enabled"] = settings.sounds_enabled;
+    root["sound_volume"] = settings.sound_volume;
+    root["boundary_sound"] = settings.boundary_sound;
     root["enter_to_send"] = settings.enter_to_send;
     root["soundpack"] = settings.soundpack;
+    root["account_soundpacks"] = json::object();
+    for (const auto& [key, pack] : settings.account_soundpacks)
+        root["account_soundpacks"][key] = pack;
     root["fetch_pages"] = settings.fetch_pages;
     root["cache_limit"] = settings.cache_limit;
     root["confirm_boost"] = settings.confirm_boost;
+    root["confirm_unboost"] = settings.confirm_unboost;
     root["confirm_favorite"] = settings.confirm_favorite;
+    root["confirm_unfavorite"] = settings.confirm_unfavorite;
     root["confirm_clear_timeline"] = settings.confirm_clear_timeline;
     root["confirm_block"] = settings.confirm_block;
+    root["confirm_unblock"] = settings.confirm_unblock;
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;

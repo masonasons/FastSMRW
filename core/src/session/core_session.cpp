@@ -330,6 +330,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_get_settings();
     else if (c == "update_settings")
         cmd_update_settings(cmd);
+    else if (c == "get_account_settings")
+        cmd_get_account_settings();
+    else if (c == "set_account_settings")
+        cmd_set_account_settings(cmd);
     else if (c == "select_timeline")
         cmd_select_timeline(cmd);
     else if (c == "select_account")
@@ -544,11 +548,13 @@ void CoreSession::cmd_remove_account(const json& cmd) {
     const std::string removed = cmd.value("key", std::string{});
     const bool was_selected = removed == accounts_.selected_key();
     accounts_.remove(removed); // may auto-select the first remaining account
+    settings_.account_soundpacks.erase(removed); // drop its per-account soundpack
     save_config();
     parked_.erase(removed);
     if (was_selected) {
         timelines_.clear(); // drop the removed account's (displayed) timelines
         current_ = 0;
+        apply_active_soundpack(); // follow the newly-selected account's pack
         const std::string now = accounts_.selected_key();
         if (auto it = parked_.find(now); it != parked_.end()) {
             timelines_ = std::move(it->second);
@@ -593,6 +599,33 @@ void CoreSession::cmd_update_settings(const json& cmd) {
     save_config();
     emit_settings();
     emit_all_timelines(); // a speech-order change re-renders every row
+}
+
+std::string CoreSession::soundpack_for(const SocialAccount* account) const {
+    if (account) {
+        auto it = settings_.account_soundpacks.find(account->account_key());
+        if (it != settings_.account_soundpacks.end() && !it->second.empty())
+            return it->second;
+    }
+    return settings_.soundpack;
+}
+
+void CoreSession::apply_active_soundpack() {
+    sound_.set_soundpack(soundpack_for(accounts_.selected()));
+}
+
+void CoreSession::cmd_get_account_settings() { emit_account_settings(); }
+
+void CoreSession::cmd_set_account_settings(const json& cmd) {
+    SocialAccount* a = accounts_.selected();
+    if (!a)
+        return;
+    if (cmd.contains("soundpack")) {
+        settings_.account_soundpacks[a->account_key()] = cmd.value("soundpack", std::string{});
+        apply_active_soundpack(); // this IS the selected account, so it takes effect now
+    }
+    save_config();
+    emit_settings(); // keep the main Settings snapshot fresh (it round-trips this map)
 }
 
 // --- timelines ---
@@ -1506,6 +1539,7 @@ void CoreSession::cmd_close_timeline() {
     sound_.play(sound::Earcon::Close);
     emit_timelines();
     emit_all_timelines();
+    update_streaming(); // a streamable timeline may have closed -> drop its stream
 }
 
 void CoreSession::cmd_clear_timeline() {
@@ -1532,8 +1566,13 @@ void CoreSession::cmd_toggle_boost(const json& cmd) {
     const int idx = tc->visible_index_of(cmd.value("id", std::string{}));
     if (idx < 0)
         return;
-    if (tc->toggle_boost(idx))
-        sound_.play(sound::Earcon::Boost);
+    // Chime only once the server confirms (no sound on un-boost, matching before).
+    tc->toggle_boost(idx, [this](bool ok, bool active) {
+        if (!ok)
+            sound_.play(sound::Earcon::Error);
+        else if (active)
+            sound_.play(sound::Earcon::Boost);
+    });
 }
 
 void CoreSession::cmd_toggle_favorite(const json& cmd) {
@@ -1543,8 +1582,11 @@ void CoreSession::cmd_toggle_favorite(const json& cmd) {
     const int idx = tc->visible_index_of(cmd.value("id", std::string{}));
     if (idx < 0)
         return;
-    const bool now = tc->toggle_favorite(idx);
-    sound_.play(now ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+    // Chime only once the server confirms the (un)favorite.
+    tc->toggle_favorite(idx, [this](bool ok, bool active) {
+        sound_.play(!ok ? sound::Earcon::Error
+                        : (active ? sound::Earcon::Favorite : sound::Earcon::Unfavorite));
+    });
 }
 
 void CoreSession::cmd_toggle_pin_post(const json& cmd) {
@@ -1554,14 +1596,18 @@ void CoreSession::cmd_toggle_pin_post(const json& cmd) {
     const int idx = tc->visible_index_of(cmd.value("id", std::string{}));
     if (idx < 0)
         return;
-    const int r = tc->toggle_pin_post(idx);
-    if (r < 0) { // not your own post (or not pinnable)
+    const int r = tc->toggle_pin_post(idx, [this](bool ok, bool active) {
+        if (!ok) {
+            sound_.play(sound::Earcon::Error);
+            return;
+        }
+        sound_.play(active ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+        emit_announce(active ? "Pinned to your profile" : "Unpinned from your profile");
+    });
+    if (r < 0) { // not your own post (or not pinnable) — synchronous rejection
         sound_.play(sound::Earcon::Error);
         emit_announce("You can only pin your own posts to your profile.");
-        return;
     }
-    sound_.play(r ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
-    emit_announce(r ? "Pinned to your profile" : "Unpinned from your profile");
 }
 
 void CoreSession::cmd_post(const json& cmd) {
@@ -1570,8 +1616,13 @@ void CoreSession::cmd_post(const json& cmd) {
         return;
     PostDraft draft = draft_from_json(cmd.value("draft", json::object()));
     const std::string edit_id = cmd.value("edit_id", std::string{});
-    auto done = [this](bool ok) {
-        sound_.play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
+    // A reply gets its own chime (send_reply); new posts/quotes use send_post.
+    const bool is_reply = draft.reply_to_id.has_value() && !draft.reply_to_id->empty();
+    auto done = [this, is_reply](bool ok) {
+        if (!ok)
+            sound_.play(sound::Earcon::Error);
+        else
+            sound_.play(is_reply ? sound::Earcon::ReplySent : sound::Earcon::PostSent);
         emit({{"event", "post_result"}, {"ok", ok}});
     };
     if (!edit_id.empty())
@@ -1597,9 +1648,14 @@ void CoreSession::cmd_compose_context(const json& cmd) {
     ctx["platform"] = account->platform() == Platform::Mastodon ? "mastodon" : "bluesky";
 
     const Status* target = nullptr;
+    const User* booster = nullptr;
     if (!id.empty())
-        if (const TimelineItem* item = find_item(tc, id))
+        if (const TimelineItem* item = find_item(tc, id)) {
             target = item->actionable_status();
+            // A boost carries the booster on the wrapper; offer them as a recipient.
+            if (const Status* wrapper = item->status(); wrapper && wrapper->reblog)
+                booster = &wrapper->account;
+        }
 
     if (mode == "reply" && target) {
         ctx["title"] = "Reply";
@@ -1608,8 +1664,9 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         // ones left checked; the mention text is no longer baked into the body.
         if (account->platform() == Platform::Mastodon) {
             json parts = json::array();
-            for (const auto& p : present::reply_participants(*target, account->me()))
-                parts.push_back({{"acct", p.acct}, {"display_name", p.display_name}});
+            for (const auto& p : present::reply_participants(*target, account->me(), booster))
+                parts.push_back(
+                    {{"acct", p.acct}, {"display_name", p.display_name}, {"checked", p.checked}});
             ctx["reply_participants"] = parts;
         }
         if (target->visibility)
@@ -2295,6 +2352,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_follow_toggle({{"id", row}, {"pick", true}});
     if (a == "CloseTimeline")
         return cmd_close_timeline();
+    if (a == "AccountSettings")
+        return cmd_get_account_settings(); // emits account_settings -> UI opens the dialog
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
     if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio" ||
         a == "StopMedia" || a == "Find" || a == "FindNext" || a == "FindPrev" ||
@@ -2402,6 +2461,7 @@ void CoreSession::switch_account(const std::string& new_key) {
         parked_[old] = std::move(timelines_); // park the account we're leaving
     timelines_.clear();
     accounts_.select(new_key);
+    apply_active_soundpack(); // foreground earcons now sound in the new account's pack
     current_ = 0;
     if (auto it = parked_.find(new_key); it != parked_.end()) {
         timelines_ = std::move(it->second); // unpark the warm timelines
@@ -2437,7 +2497,8 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
     tc->on_received_new = [this, p](int n) {
         if (n > 0)
             if (auto name = p->source().new_items_sound_name())
-                sound_.play_named(*name);
+                // A background account's chime sounds in that account's own pack.
+                sound_.play_named(*name, soundpack_for(p->account()));
     };
     return tc;
 }
@@ -2492,10 +2553,13 @@ void CoreSession::apply_timeline_settings(TimelineController& tc) {
 
 void CoreSession::apply_settings() {
     sound_.set_enabled(settings_.sounds_enabled);
-    sound_.set_soundpack(settings_.soundpack);
+    sound_.set_volume(std::clamp(settings_.sound_volume, 0, 100) / 100.0f);
+    apply_active_soundpack(); // the selected account's pack (or the global default)
     present::SpeechConfig::set_current(settings_.speech);
     present::TextConfig::set_current(settings_.text);
     cache_.set_max_entries(settings_.cache_limit);
+    if (settings_.cache_limit <= 0)
+        cache_.clear_all(); // caching turned off: wipe any existing cache files now
     // Re-apply per-timeline settings to every open timeline, displayed or parked,
     // so a change (e.g. toggling mentions in Notifications) takes effect at once.
     for (auto& tc : timelines_)
@@ -2768,34 +2832,59 @@ void CoreSession::update_streaming() {
     }
     log::write("update_streaming: enabled, " + std::to_string(accounts_.accounts().size()) +
                " account(s), " + std::to_string(streams_.size()) + " existing stream(s)");
-    // Ensure one live stream per streaming-capable account (started once, left
-    // running across account switches). The callback routes each event to the
-    // owning account's timelines by key, whether displayed or parked.
+    // One live SSE connection per (account, stream URL) covering every OPEN
+    // timeline whose source can stream -- home/notifications (shared user stream),
+    // local, federated, each hashtag, each list. Keyed by "account_key\nurl" so
+    // Home and Notifications collapse onto one connection. Events route to the
+    // matching open timeline (by cache_key) whether it's displayed or parked.
     std::set<std::string> live;
     for (SocialAccount* account : accounts_.accounts()) {
         const std::string key = account->account_key();
-        live.insert(key);
-        if (!account->user_stream_request())
-            continue; // this platform/account doesn't stream (e.g. Bluesky)
-        auto& client = streams_[key];
-        if (client)
-            continue; // already streaming
-        log::write("update_streaming: starting stream for " + key);
-        client = std::make_unique<StreamingClient>(http_.get(), &loop_);
-        client->start(account, [this, key](StreamItem item) {
-            if (auto* tls = timelines_for_account(key))
-                for (auto& tc : *tls)
-                    if (tc->source().kind == item.target) {
-                        tc->ingest_realtime(std::move(item.item));
-                        break;
-                    }
-        });
+        auto* tls = timelines_for_account(key);
+        if (!tls)
+            continue;
+        for (const auto& tc : *tls) {
+            const TimelineSource src = tc->source();
+            auto spec = account->stream_request_for(src);
+            if (!spec)
+                continue; // this timeline can't stream (bookmarks, searches, Bluesky, ...)
+            const std::string skey = key + "\n" + spec->url;
+            if (!live.insert(skey).second)
+                continue; // already ensured this connection (e.g. Home after Notifications)
+            auto& client = streams_[skey];
+            if (client)
+                continue; // already streaming
+            // The source whose "update" events this connection carries. The user
+            // stream (home+notifications) feeds Home; notifications route themselves.
+            TimelineSource route =
+                src.kind == TimelineSource::Kind::Notifications ? TimelineSource::home() : src;
+            log::write("update_streaming: starting stream " + skey);
+            client = std::make_unique<StreamingClient>(http_.get(), &loop_);
+            client->start(account, *spec, route, [this, key](StreamItem item) {
+                auto* dest = timelines_for_account(key);
+                if (!dest)
+                    return;
+                const std::string target = item.target.cache_key();
+                // A streamed mention notification also feeds an open Mentions
+                // timeline -- which stores the post itself, not the notification row.
+                const Notification* n = item.item.notification();
+                const bool is_mention =
+                    n && n->type == Notification::Kind::Mention && n->status;
+                for (auto& tc : *dest) {
+                    const TimelineSource& s = tc->source();
+                    if (s.cache_key() == target)
+                        tc->ingest_realtime(TimelineItem{item.item});
+                    else if (is_mention && s.kind == TimelineSource::Kind::Mentions)
+                        tc->ingest_realtime(TimelineItem{*n->status});
+                }
+            });
+        }
     }
-    for (auto it = streams_.begin(); it != streams_.end();) { // drop streams for gone accounts
+    for (auto it = streams_.begin(); it != streams_.end();) { // drop unwanted / gone streams
         if (live.count(it->first)) {
             it = std::next(it);
         } else {
-            log::write("update_streaming: dropping stream for gone account " + it->first);
+            log::write("update_streaming: dropping stream " + it->first);
             it = streams_.erase(it);
         }
     }
@@ -2861,6 +2950,18 @@ void CoreSession::emit_settings() {
     emit({{"event", "settings"},
           {"settings", store::settings_to_json(settings_)},
           {"soundpacks", packs}});
+}
+
+void CoreSession::emit_account_settings() {
+    SocialAccount* a = accounts_.selected();
+    json packs = json::array();
+    for (const auto& p : sound_.list_soundpacks())
+        packs.push_back(p);
+    emit({{"event", "account_settings"},
+          {"account_key", a ? a->account_key() : std::string{}},
+          {"acct", a ? a->me().acct : std::string{}},
+          {"soundpack", soundpack_for(a)}, // the effective pack, for pre-selection
+          {"soundpacks", std::move(packs)}});
 }
 
 void CoreSession::emit_accounts() {

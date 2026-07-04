@@ -112,7 +112,7 @@ BEGIN
     AUTOCHECKBOX "&Reverse timelines (newest at the bottom)", IDC_SET_REVERSE, 10, 154, 224, 12
 END
 
-IDD_SET_AUDIO DIALOGEX 0, 0, 240, 160
+IDD_SET_AUDIO DIALOGEX 0, 0, 240, 180
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Audio"
 FONT 9, "Segoe UI"
@@ -123,6 +123,11 @@ BEGIN
     PUSHBUTTON "&Open Soundpacks Folder", IDC_SET_OPENPACKS, 10, 52, 130, 14
     LTEXT      "A Default pack is built in. Add your own pack to the soundpacks folder, then pick it here.",
                -1, 10, 72, 220, 18
+    LTEXT      "&Volume:", IDC_SET_VOLUME_LABEL, 10, 96, 220, 9
+    CONTROL    "", IDC_SET_VOLUME, "msctls_trackbar32",
+               TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 10, 108, 220, 22
+    AUTOCHECKBOX "Play a sound at the top or &bottom of a timeline (in the window)",
+                 IDC_SET_BOUNDARY, 10, 138, 224, 12
 END
 
 IDD_SET_SPEECH DIALOGEX 0, 0, 240, 264
@@ -195,9 +200,12 @@ FONT 9, "Segoe UI"
 BEGIN
     LTEXT      "Show a confirmation before:", -1, 10, 10, 220, 9
     AUTOCHECKBOX "&Boosting", IDC_SET_CONFIRM_BOOST, 10, 24, 200, 12
-    AUTOCHECKBOX "&Favoriting", IDC_SET_CONFIRM_FAV, 10, 40, 200, 12
-    AUTOCHECKBOX "&Clearing a timeline", IDC_SET_CONFIRM_CLEAR, 10, 56, 200, 12
-    AUTOCHECKBOX "Bloc&king a user", IDC_SET_CONFIRM_BLOCK, 10, 72, 200, 12
+    AUTOCHECKBOX "Unb&oosting", IDC_SET_CONFIRM_UNBOOST, 10, 40, 200, 12
+    AUTOCHECKBOX "&Favoriting", IDC_SET_CONFIRM_FAV, 10, 56, 200, 12
+    AUTOCHECKBOX "Un&favoriting", IDC_SET_CONFIRM_UNFAV, 10, 72, 200, 12
+    AUTOCHECKBOX "&Clearing a timeline", IDC_SET_CONFIRM_CLEAR, 10, 88, 200, 12
+    AUTOCHECKBOX "Bloc&king a user", IDC_SET_CONFIRM_BLOCK, 10, 104, 200, 12
+    AUTOCHECKBOX "&Unblocking a user", IDC_SET_CONFIRM_UNBLOCK, 10, 120, 200, 12
 END
 
 IDD_SET_INVISIBLE DIALOGEX 0, 0, 240, 160
@@ -470,6 +478,19 @@ BEGIN
     EDITTEXT      IDC_EH_EDIT, 10, 24, 220, 12, ES_AUTOHSCROLL | WS_TABSTOP
     DEFPUSHBUTTON "OK", IDOK, 124, 56, 50, 14
     PUSHBUTTON    "Cancel", IDCANCEL, 180, 56, 50, 14
+END
+
+IDD_ACCOUNT_SETTINGS DIALOGEX 0, 0, 240, 180
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Account Settings"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT         "&Soundpack for this account:", IDC_AS_SOUND_LABEL, 8, 8, 224, 9
+    LISTBOX       IDC_AS_SOUNDPACK, 8, 20, 224, 120,
+                  LBS_STANDARD | LBS_NOINTEGRALHEIGHT | WS_TABSTOP | WS_VSCROLL
+    PUSHBUTTON    "&Open Soundpacks Folder", IDC_AS_OPENPACKS, 8, 146, 110, 14
+    DEFPUSHBUTTON "OK", IDOK, 124, 160, 50, 14
+    PUSHBUTTON    "Cancel", IDCANCEL, 180, 160, 50, 14
 END
 
 IDD_LIST_EDIT DIALOGEX 0, 0, 240, 128

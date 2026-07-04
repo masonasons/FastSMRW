@@ -1,6 +1,30 @@
 FastSMRW changelog
 ==================
 
+0.1.5
+-----
+
+- Each account can now have its own soundpack: open the new Account Settings dialog (Account menu, Ctrl+Shift+Comma, or the invisible interface) and pick one.
+- New "Me" menu holding Lists, View Muted Users, View Blocked Users, View Follow Requests, and Followed Hashtags.
+- Tidied the menus: New Post now lives in the Status menu and Refresh Timeline in the Timeline menu.
+- The Status menu's Boost and Favorite now show a check mark when the focused post is already boosted or favorited.
+- The Status menu shortcuts are consistent again (Reply R, Boost B, Favorite F, Quote Q).
+- Shift+F1 now checks for updates.
+- You can set separate confirmations for undoing an action (unboosting, unfavoriting, unblocking), independent of doing it.
+- When you reply to a boosted post, the booster is offered as a recipient but left unchecked, so you can mention them only if you want to.
+- New installs now auto-refresh every minute and have streaming on by default.
+- Setting cached posts per timeline to 0 now turns caching off and clears the existing cache files.
+- Fixed: a quoted post's link is no longer left sitting in the post's text, since the quote is already shown on its own.
+- Real-time streaming (Mastodon) now covers Local, Federated, hashtag, and list timelines too, not just Home and Notifications.
+- Sending a reply now plays the reply sound instead of the new-post sound.
+- Fixed: a streamed mention no longer plays the notification chime when you've hidden mentions from the Notifications buffer.
+- Streamed mentions now also drop into your Mentions timeline (Mastodon) when you have one open, not just Notifications.
+- New master sound volume slider on the Audio settings tab.
+- New Audio setting to turn off the chime played at the top or bottom of a timeline.
+- Boost, favorite, and pin sounds now play only once the action actually succeeds, instead of the moment you press the key.
+- Removed the "Reply indicator" speech option, which never did anything.
+
+
 0.1.4
 -----
 

@@ -3,9 +3,24 @@
 #include "fastsm/util/date_parsing.hpp"
 #include "fastsm/util/demojify.hpp"
 #include "fastsm/util/html_stripper.hpp"
+#include "fastsm/util/quote_text.hpp"
 #include "fastsm/util/relative_date.hpp"
 
 using namespace fastsm::util;
+
+void test_strip_quote_url() {
+    // Exact quoted URL appended at the end is removed.
+    CHECK_EQ(strip_quote_url("Great point https://mastodon.social/@alice/123",
+                             "https://mastodon.social/@alice/123"),
+             std::string("Great point"));
+    // Leading RE:/QT: <url> reference is removed.
+    CHECK_EQ(strip_quote_url("RE: https://example.com/x my thoughts", ""),
+             std::string("my thoughts"));
+    // Trailing bare status URL removed even without a known quoted URL.
+    CHECK_EQ(strip_quote_url("nice https://example.com/@bob/999", ""), std::string("nice"));
+    // No quote URL present: text untouched.
+    CHECK_EQ(strip_quote_url("just a normal post", ""), std::string("just a normal post"));
+}
 
 void test_html_stripping() {
     CHECK_EQ(strip_html("<p>hello &amp; <a href=\"x\">world</a></p>"),

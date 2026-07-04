@@ -356,7 +356,8 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 it.iItem = static_cast<int>(i);
                 it.pszText = const_cast<wchar_t*>(req.recipients[i].display.c_str());
                 ListView_InsertItem(lv, &it);
-                ListView_SetCheckState(lv, static_cast<int>(i), TRUE);
+                ListView_SetCheckState(lv, static_cast<int>(i),
+                                       req.recipients[i].checked ? TRUE : FALSE);
             }
             // Shift the Post label + edit box to the right of the recipient list.
             auto client_rect = [&](int cid) {

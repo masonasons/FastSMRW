@@ -120,11 +120,11 @@ struct StreamRequest {
     net::Headers headers;
 };
 
-// One parsed streaming event: a timeline item and which open timeline it belongs
-// to (a status update -> Home, a notification -> Notifications).
+// One parsed streaming event: a timeline item and which open timeline it feeds
+// (a status update -> the stream's source; a notification -> Notifications).
 struct StreamItem {
     TimelineItem item;
-    TimelineSource::Kind target = TimelineSource::Kind::Home;
+    TimelineSource target; // kind + param, so hashtag/list route to the right tab
 };
 
 class SocialAccount {
@@ -244,15 +244,23 @@ public:
 
     // --- Real-time streaming (optional; Mastodon SSE user stream) ---
 
-    // The long-lived request to open for the user's real-time stream, or nullopt
-    // if this platform/account doesn't stream.
-    virtual std::optional<StreamRequest> user_stream_request() const { return std::nullopt; }
-    // Parse one streaming event into a timeline item and its target timeline, or
-    // nullopt for events we ignore (delete, keep-alives, filters, ...).
+    // The long-lived SSE request to open so `source` streams in real time, or
+    // nullopt if that source can't stream on this platform. Home and Notifications
+    // share one connection (the user stream); Local/Federated/Hashtag/List each
+    // have their own endpoint.
+    virtual std::optional<StreamRequest> stream_request_for(const TimelineSource& source) const {
+        (void)source;
+        return std::nullopt;
+    }
+    // Parse one streaming event into a timeline item and the timeline it feeds, or
+    // nullopt for events we ignore (delete, keep-alives, filters, ...). `route` is
+    // the source whose "update" events this stream carries.
     virtual std::optional<StreamItem> parse_stream_event(const std::string& event,
-                                                         const std::string& data) const {
+                                                         const std::string& data,
+                                                         const TimelineSource& route) const {
         (void)event;
         (void)data;
+        (void)route;
         return std::nullopt;
     }
 };

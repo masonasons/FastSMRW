@@ -1045,24 +1045,53 @@ bool MastodonAccount::delete_server_filter(const std::string& id) {
     return request("DELETE", url, "", "", body, status);
 }
 
-std::optional<StreamRequest> MastodonAccount::user_stream_request() const {
-    // The user stream delivers home-timeline updates + notifications over SSE.
+std::optional<StreamRequest> MastodonAccount::stream_request_for(const TimelineSource& source) const {
+    // Map a timeline to its Mastodon SSE endpoint. Home + Notifications ride the
+    // one `user` stream; the public/hashtag/list feeds each have their own.
+    std::string path;
+    switch (source.kind) {
+    case TimelineSource::Kind::Home:
+    case TimelineSource::Kind::Notifications:
+        path = "user";
+        break;
+    case TimelineSource::Kind::Local:
+        path = "public/local";
+        break;
+    case TimelineSource::Kind::Federated:
+        path = "public";
+        break;
+    case TimelineSource::Kind::Hashtag:
+        if (source.param.empty())
+            return std::nullopt;
+        path = "hashtag?tag=" + util::percent_encode(source.param);
+        break;
+    case TimelineSource::Kind::List:
+        if (source.param.empty())
+            return std::nullopt;
+        path = "list?list=" + util::percent_encode(source.param);
+        break;
+    default:
+        return std::nullopt; // bookmarks/favorites/user lists/searches/remote don't stream
+    }
     StreamRequest r;
-    r.url = credentials_.instance_url + "/api/v1/streaming/user";
+    r.url = credentials_.instance_url + "/api/v1/streaming/" + path;
     r.headers = {{"Authorization", "Bearer " + credentials_.access_token}};
     return r;
 }
 
 std::optional<StreamItem> MastodonAccount::parse_stream_event(const std::string& event,
-                                                              const std::string& data) const {
+                                                              const std::string& data,
+                                                              const TimelineSource& route) const {
     try {
         if (event == "update") {
-            return StreamItem{TimelineItem{mastodon::map_status(json::parse(data))},
-                              TimelineSource::Kind::Home};
+            // A status update feeds the timeline this stream is for (home, local,
+            // federated, a hashtag, a list...).
+            return StreamItem{TimelineItem{mastodon::map_status(json::parse(data))}, route};
         }
         if (event == "notification") {
+            // Notifications only arrive on the user stream and always feed Notifications.
             return StreamItem{TimelineItem{mastodon::map_notification(json::parse(data))},
-                              TimelineSource::Kind::Notifications};
+                              TimelineSource::notifications()};
         }
     } catch (...) {
         // Malformed payload — ignore this event.

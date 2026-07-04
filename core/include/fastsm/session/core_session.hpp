@@ -56,6 +56,8 @@ private:
     void cmd_start();
     void cmd_get_settings();
     void cmd_update_settings(const nlohmann::json& cmd);
+    void cmd_get_account_settings();               // -> account_settings event
+    void cmd_set_account_settings(const nlohmann::json& cmd); // {soundpack}
     void cmd_select_timeline(const nlohmann::json& cmd);
     void cmd_select_account(const nlohmann::json& cmd);
     void cmd_refresh();
@@ -218,7 +220,11 @@ private:
     // Event builders.
     void emit(const nlohmann::json& event);
     void emit_settings(); // settings + available soundpacks
+    void emit_account_settings(); // focused account's handle + soundpack + pack list
     void emit_accounts();
+    // The soundpack an account should sound in (its override, or the global default).
+    std::string soundpack_for(const SocialAccount* account) const;
+    void apply_active_soundpack(); // point the mixer at the selected account's pack
     void emit_timelines();
     void emit_timeline(int index);
     void emit_announce(const std::string& message);

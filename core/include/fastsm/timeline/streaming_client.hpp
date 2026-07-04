@@ -23,10 +23,12 @@ public:
     StreamingClient(const StreamingClient&) = delete;
     StreamingClient& operator=(const StreamingClient&) = delete;
 
-    // (Re)start streaming for `account`; `on_item` runs on the main thread once
-    // per parsed event. No-op if the account doesn't support streaming. The
-    // account must outlive the client (the owner stops before destroying it).
-    void start(SocialAccount* account, std::function<void(StreamItem)> on_item);
+    // (Re)start the SSE connection `spec` for `account`; `on_item` runs on the
+    // main thread once per parsed event. `route` is the source whose "update"
+    // events this stream carries (home/local/a hashtag/...). The account must
+    // outlive the client (the owner stops before destroying it).
+    void start(SocialAccount* account, const StreamRequest& spec, TimelineSource route,
+               std::function<void(StreamItem)> on_item);
 
     // Stop and join the connection thread (aborts a blocked read promptly).
     void stop();

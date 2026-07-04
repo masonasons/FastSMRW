@@ -13,11 +13,15 @@ namespace fastsm::present {
 struct ReplyParticipant {
     std::string acct;         // handle without the leading '@'
     std::string display_name; // label for the checklist (falls back to the handle)
+    bool checked = true;       // pre-checked in the dialog (the booster is offered unchecked)
 };
 
 // Ordered, de-duplicated reply participants for replying to `status` as `me`
-// (author + everyone they mentioned, minus yourself).
-std::vector<ReplyParticipant> reply_participants(const Status& status, const User& me);
+// (author + everyone they mentioned, minus yourself). When `booster` is given
+// (the account that boosted the post being replied to), they're appended
+// unchecked so you can opt into mentioning them but don't by default.
+std::vector<ReplyParticipant> reply_participants(const Status& status, const User& me,
+                                                 const User* booster = nullptr);
 
 // Ordered, de-duplicated "@a @b " mention prefix for replying to `status` as
 // `me` (author + everyone they mentioned, minus yourself). "" if no one to

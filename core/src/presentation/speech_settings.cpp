@@ -32,8 +32,6 @@ const char* field_key(StatusSpeechField f) {
         return "boosted";
     case StatusSpeechField::Visibility:
         return "visibility";
-    case StatusSpeechField::ReplyIndicator:
-        return "replyIndicator";
     case StatusSpeechField::Source:
         return "source";
     }
@@ -68,8 +66,6 @@ const char* field_display_name(StatusSpeechField f) {
         return "Boosted state";
     case StatusSpeechField::Visibility:
         return "Visibility";
-    case StatusSpeechField::ReplyIndicator:
-        return "Reply indicator";
     case StatusSpeechField::Source:
         return "Posting app / source";
     }
@@ -210,8 +206,8 @@ SpeechSettings SpeechSettings::defaults() {
     s.status = {
         {S::BoostedBy}, {S::Author},     {S::Handle, false}, {S::ContentWarning},
         {S::Text},      {S::Quote},      {S::Media},         {S::Poll},
-        {S::ReplyIndicator, false},      {S::Time},          {S::Stats},
-        {S::Favorited}, {S::Boosted},    {S::Visibility, false}, {S::Source, false},
+        {S::Time},      {S::Stats},      {S::Favorited},     {S::Boosted},
+        {S::Visibility, false},          {S::Source, false},
     };
     s.user = {
         {U::Author}, {U::Handle},  {U::Bot},            {U::Locked},

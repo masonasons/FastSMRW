@@ -25,6 +25,8 @@ const char* earcon_file(Earcon e) {
         return "boundary";
     case Earcon::PostSent:
         return "send_post";
+    case Earcon::ReplySent:
+        return "send_reply";
     case Earcon::Boost:
         return "send_repost";
     case Earcon::Favorite:
@@ -115,15 +117,14 @@ void SoundManager::set_soundpack(const std::string& name) {
     }
 }
 
-std::vector<std::filesystem::path> SoundManager::search_dirs() const {
+std::vector<std::filesystem::path> SoundManager::search_dirs(const std::string& pack) const {
     std::vector<std::filesystem::path> dirs;
-    const bool is_default = active_pack_.empty() || active_pack_ == "Default" ||
-                            active_pack_ == "default";
+    const bool is_default = pack.empty() || pack == "Default" || pack == "default";
     if (!is_default) {
         if (!user_packs_dir_.empty())
-            dirs.push_back(user_packs_dir_ / active_pack_);
+            dirs.push_back(user_packs_dir_ / pack);
         if (!bundled_packs_dir_.empty())
-            dirs.push_back(bundled_packs_dir_ / active_pack_);
+            dirs.push_back(bundled_packs_dir_ / pack);
     }
     // Default pack fallback (always last).
     if (!user_packs_dir_.empty())
@@ -133,10 +134,10 @@ std::vector<std::filesystem::path> SoundManager::search_dirs() const {
     return dirs;
 }
 
-std::filesystem::path SoundManager::resolve(const std::string& base) const {
+std::filesystem::path SoundManager::resolve(const std::string& base, const std::string& pack) const {
     static const char* kExts[] = {".ogg", ".wav", ".mp3"};
     std::error_code ec;
-    for (const auto& dir : search_dirs()) {
+    for (const auto& dir : search_dirs(pack)) {
         for (const char* ext : kExts) {
             std::filesystem::path candidate = dir / (base + ext);
             if (std::filesystem::exists(candidate, ec))
@@ -167,16 +168,17 @@ std::vector<std::string> SoundManager::list_soundpacks() const {
     return packs;
 }
 
-void SoundManager::play(Earcon e) {
+void SoundManager::play(Earcon e, const std::string& pack) {
     const char* base = earcon_file(e);
     if (base && *base)
-        play_named(base);
+        play_named(base, pack);
 }
 
-void SoundManager::play_named(const std::string& base) {
+void SoundManager::play_named(const std::string& base, const std::string& pack) {
     if (!enabled_ || !impl_->ok)
         return;
-    const std::filesystem::path path = resolve(base);
+    // Empty pack means "use whatever set_soundpack selected".
+    const std::filesystem::path path = resolve(base, pack.empty() ? active_pack_ : pack);
     if (path.empty())
         return;
 

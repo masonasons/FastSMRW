@@ -44,6 +44,8 @@ public:
               const std::optional<PageCursor>& scrollback, bool truncated,
               const std::vector<CacheGap>& gaps, const std::vector<CacheGap>& marks) const;
     void remove(const std::string& key) const;
+    // Delete every cached timeline file (used when caching is turned off).
+    void clear_all() const;
 
     void set_max_entries(int n) { max_entries_ = n; }
     int max_entries() const { return max_entries_; }

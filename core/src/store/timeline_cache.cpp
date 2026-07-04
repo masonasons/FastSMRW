@@ -62,7 +62,11 @@ LoadedTimeline TimelineCache::load(const std::string& key) const {
 void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>& items,
                          const std::optional<PageCursor>& scrollback, bool truncated_in,
                          const std::vector<CacheGap>& gaps, const std::vector<CacheGap>& marks) const {
-    const size_t cap = static_cast<size_t>(max_entries_ < 0 ? 0 : max_entries_);
+    if (max_entries_ <= 0) { // caching disabled: never leave a file behind
+        remove(key);
+        return;
+    }
+    const size_t cap = static_cast<size_t>(max_entries_);
     const bool over_cap = items.size() > cap; // backstop cap (caller usually pre-caps)
     const bool truncated = truncated_in || over_cap;
     std::vector<TimelineItem> capped;
@@ -109,6 +113,16 @@ void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>
 void TimelineCache::remove(const std::string& key) const {
     std::error_code ec;
     std::filesystem::remove(file_for(key), ec);
+}
+
+void TimelineCache::clear_all() const {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir_, ec))
+        return;
+    for (const auto& entry : std::filesystem::directory_iterator(dir_, ec)) {
+        if (entry.is_regular_file(ec) && entry.path().extension() == ".fsc")
+            std::filesystem::remove(entry.path(), ec);
+    }
 }
 
 } // namespace fastsm::store

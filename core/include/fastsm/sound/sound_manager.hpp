@@ -15,7 +15,8 @@ namespace fastsm::sound {
 enum class Earcon {
     Navigate, // silent — row movement is conveyed by the screen reader
     Boundary, // hit the top/bottom of a list
-    PostSent, // a post or reply was sent
+    PostSent, // a new post was sent
+    ReplySent, // a reply was sent (distinct chime, like FastSM for Windows)
     Boost,    // a boost (repost) succeeded; not played on un-boost
     Favorite,
     Unfavorite,
@@ -53,16 +54,19 @@ public:
     // ["Default", <user packs sorted>].
     std::vector<std::string> list_soundpacks() const;
 
-    void play(Earcon e);
-    void play_named(const std::string& base);
+    // Play an earcon / named sound. `pack` overrides which soundpack to draw from
+    // (empty = the active pack set by set_soundpack); used so a background
+    // account's chime can sound in that account's pack.
+    void play(Earcon e, const std::string& pack = {});
+    void play_named(const std::string& base, const std::string& pack = {});
 
 private:
     struct Impl;
     Impl* impl_;
 
-    // Ordered pack directories to search for a sound (active pack, then default).
-    std::vector<std::filesystem::path> search_dirs() const;
-    std::filesystem::path resolve(const std::string& base) const;
+    // Ordered pack directories to search for a sound (the named pack, then default).
+    std::vector<std::filesystem::path> search_dirs(const std::string& pack) const;
+    std::filesystem::path resolve(const std::string& base, const std::string& pack) const;
 
     std::filesystem::path user_packs_dir_;
     std::filesystem::path bundled_packs_dir_;

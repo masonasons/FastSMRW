@@ -5,6 +5,7 @@
 
 #include "fastsm/util/date_parsing.hpp"
 #include "fastsm/util/html_stripper.hpp"
+#include "fastsm/util/quote_text.hpp"
 
 using nlohmann::json;
 
@@ -202,6 +203,9 @@ Status map_status(const json& j) {
     } else if (auto it = j.find("quoted_status"); it != j.end() && it->is_object()) {
         s.quote = std::make_shared<Status>(map_status(*it));
     }
+    // The quote is presented on its own, so drop its URL from this post's text.
+    if (s.quote)
+        s.text = util::strip_quote_url(s.text, s.quote->url);
     return s;
 }
 

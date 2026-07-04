@@ -154,6 +154,7 @@ INT_PTR CALLBACK AudioProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_INITDIALOG: {
         Ctx* ctx = on_init(dlg, lp);
         checked(dlg, IDC_SET_SOUNDS, ctx->settings.sounds_enabled);
+        checked(dlg, IDC_SET_BOUNDARY, ctx->settings.boundary_sound);
         HWND combo = GetDlgItem(dlg, IDC_SET_SOUNDPACK);
         int sel = 0;
         for (size_t i = 0; i < ctx->soundpacks.size(); ++i) {
@@ -163,6 +164,9 @@ INT_PTR CALLBACK AudioProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 sel = static_cast<int>(i);
         }
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
+        HWND vol = GetDlgItem(dlg, IDC_SET_VOLUME);
+        SendMessageW(vol, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+        SendMessageW(vol, TBM_SETPOS, TRUE, std::clamp(ctx->settings.sound_volume, 0, 100));
         return TRUE;
     }
     case WM_COMMAND:
@@ -176,6 +180,9 @@ INT_PTR CALLBACK AudioProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         if (is_apply(lp)) {
             Ctx* ctx = ctx_of(dlg);
             ctx->settings.sounds_enabled = is_checked(dlg, IDC_SET_SOUNDS);
+            ctx->settings.boundary_sound = is_checked(dlg, IDC_SET_BOUNDARY);
+            ctx->settings.sound_volume =
+                static_cast<int>(SendDlgItemMessageW(dlg, IDC_SET_VOLUME, TBM_GETPOS, 0, 0));
             const int sel = static_cast<int>(
                 SendDlgItemMessageW(dlg, IDC_SET_SOUNDPACK, CB_GETCURSEL, 0, 0));
             if (sel >= 0 && sel < static_cast<int>(ctx->soundpacks.size()))
@@ -542,18 +549,24 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     case WM_INITDIALOG: {
         Ctx* ctx = on_init(dlg, lp);
         checked(dlg, IDC_SET_CONFIRM_BOOST, ctx->settings.confirm_boost);
+        checked(dlg, IDC_SET_CONFIRM_UNBOOST, ctx->settings.confirm_unboost);
         checked(dlg, IDC_SET_CONFIRM_FAV, ctx->settings.confirm_favorite);
+        checked(dlg, IDC_SET_CONFIRM_UNFAV, ctx->settings.confirm_unfavorite);
         checked(dlg, IDC_SET_CONFIRM_CLEAR, ctx->settings.confirm_clear_timeline);
         checked(dlg, IDC_SET_CONFIRM_BLOCK, ctx->settings.confirm_block);
+        checked(dlg, IDC_SET_CONFIRM_UNBLOCK, ctx->settings.confirm_unblock);
         return TRUE;
     }
     case WM_NOTIFY:
         if (is_apply(lp)) {
             Ctx* ctx = ctx_of(dlg);
             ctx->settings.confirm_boost = is_checked(dlg, IDC_SET_CONFIRM_BOOST);
+            ctx->settings.confirm_unboost = is_checked(dlg, IDC_SET_CONFIRM_UNBOOST);
             ctx->settings.confirm_favorite = is_checked(dlg, IDC_SET_CONFIRM_FAV);
+            ctx->settings.confirm_unfavorite = is_checked(dlg, IDC_SET_CONFIRM_UNFAV);
             ctx->settings.confirm_clear_timeline = is_checked(dlg, IDC_SET_CONFIRM_CLEAR);
             ctx->settings.confirm_block = is_checked(dlg, IDC_SET_CONFIRM_BLOCK);
+            ctx->settings.confirm_unblock = is_checked(dlg, IDC_SET_CONFIRM_UNBLOCK);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

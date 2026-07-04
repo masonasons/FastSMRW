@@ -73,6 +73,9 @@
 #define IDC_SET_SOUNDS      321
 #define IDC_SET_SOUNDPACK   322
 #define IDC_SET_OPENPACKS   323
+#define IDC_SET_VOLUME_LABEL 324
+#define IDC_SET_VOLUME      325
+#define IDC_SET_BOUNDARY    326
 #define IDD_SET_SPEECH      330
 #define IDC_SET_SPEECH_LIST 331
 #define IDC_SET_SPEECH_UP   332
@@ -104,6 +107,9 @@
 #define IDC_SET_CONFIRM_FAV   352
 #define IDC_SET_CONFIRM_CLEAR 353
 #define IDC_SET_CONFIRM_BLOCK 354
+#define IDC_SET_CONFIRM_UNBOOST 700
+#define IDC_SET_CONFIRM_UNFAV   701
+#define IDC_SET_CONFIRM_UNBLOCK 702
 #define IDD_SET_INVISIBLE   355
 #define IDC_SET_INVIS_MODE  356
 #define IDC_SET_INVIS_LAYERKEY 357
@@ -240,3 +246,9 @@
 #define IDD_ENTER_HANDLE      550
 #define IDC_EH_LABEL          551
 #define IDC_EH_EDIT           552
+
+// Per-account settings dialog (soundpack for the focused account).
+#define IDD_ACCOUNT_SETTINGS  555
+#define IDC_AS_SOUND_LABEL    556
+#define IDC_AS_SOUNDPACK      557
+#define IDC_AS_OPENPACKS      558

@@ -10,7 +10,7 @@ using namespace fastsm::present;
 
 void test_speech_defaults() {
     const auto d = SpeechSettings::defaults();
-    CHECK_EQ(d.status.size(), size_t(15));
+    CHECK_EQ(d.status.size(), size_t(14));
     CHECK_EQ(d.user.size(), size_t(8));
     for (const auto& it : d.status) {
         if (it.field == StatusSpeechField::Handle)
@@ -28,7 +28,7 @@ void test_speech_normalized() {
     partial.status = {{StatusSpeechField::Text, true}, {StatusSpeechField::Author, false}};
     const auto norm = partial.normalized();
 
-    CHECK_EQ(norm.status.size(), size_t(15)); // every field present exactly once
+    CHECK_EQ(norm.status.size(), size_t(14)); // every field present exactly once
     CHECK(norm.status[0].field == StatusSpeechField::Text);   // saved order kept
     CHECK(norm.status[1].field == StatusSpeechField::Author);
     CHECK(!norm.status[1].enabled);                           // saved toggle kept

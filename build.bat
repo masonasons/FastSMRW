@@ -93,7 +93,7 @@ echo === Building FastSMRW [%CONFIG%] ===
 
 REM ---- 1) core -> fastsm_core.lib ----
 set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\winhttp_client.cpp core\src\net\sse_parser.cpp core\src\models\serialization.cpp"
-set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp core\src\util\log.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\quote_text.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp core\src\util\log.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\mastodon\mastodon_map.cpp core\src\platform\mastodon\mastodon_account.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\platform\bluesky\bluesky_account.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\auth\mastodon_auth.cpp core\src\auth\bluesky_auth.cpp"
@@ -140,7 +140,7 @@ echo Compiling resources...
 rc /nologo /I windows\resources /fo "%BUILD%\app.res" windows\resources\app.rc
 if errorlevel 1 goto error
 echo Compiling and linking FastSMRW.exe...
-set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\client_filters_dialog.cpp windows\src\server_filters_dialog.cpp windows\src\list_membership_dialog.cpp windows\src\lists_manager_dialog.cpp windows\src\hashtag_dialog.cpp windows\src\media_player_window.cpp windows\src\invisible_hotkeys.cpp windows\src\invisible_keyhook.cpp windows\src\keymap_manager_dialog.cpp windows\src\win_speech.cpp"
+set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\client_filters_dialog.cpp windows\src\server_filters_dialog.cpp windows\src\list_membership_dialog.cpp windows\src\lists_manager_dialog.cpp windows\src\hashtag_dialog.cpp windows\src\account_settings_dialog.cpp windows\src\media_player_window.cpp windows\src\invisible_hotkeys.cpp windows\src\invisible_keyhook.cpp windows\src\keymap_manager_dialog.cpp windows\src\win_speech.cpp"
 cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib oleaut32.lib winmm.lib strmiids.lib %USPEECH_LIB%
 if errorlevel 1 goto error
 

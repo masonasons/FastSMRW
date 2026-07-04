@@ -10,6 +10,7 @@
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
 #include "client_filters_dialog.hpp"
+#include "account_settings_dialog.hpp"
 #include "hashtag_dialog.hpp"
 #include "list_membership_dialog.hpp"
 #include "lists_manager_dialog.hpp"
@@ -66,6 +67,7 @@ enum {
     ID_PREV_ACCOUNT,
     ID_NEXT_ACCOUNT,
     ID_ADD_ACCOUNT,
+    ID_ACCOUNT_SETTINGS,
     ID_KEYMAP_MANAGER,
     ID_FIND,
     ID_FIND_NEXT,
@@ -184,29 +186,32 @@ HMENU build_menu() {
     HMENU app = CreatePopupMenu();
     AppendMenuW(app, MF_STRING, ID_ABOUT, L"&About FastSMRW");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+,");
+    AppendMenuW(app, MF_STRING, ID_SETTINGS, L"&Settings…\tCtrl+Comma");
     AppendMenuW(app, MF_STRING, ID_KEYMAP_MANAGER, L"&Keyboard Manager…");
     AppendMenuW(app, MF_STRING, ID_SERVER_FILTER, L"Ser&ver Filters…");
-    AppendMenuW(app, MF_STRING, ID_LIST_MANAGER, L"&Lists…");
-    AppendMenuW(app, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
-    AppendMenuW(app, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
-    AppendMenuW(app, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
-    AppendMenuW(app, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
-    AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…");
+    AppendMenuW(app, MF_STRING, ID_CHECK_UPDATES, L"Check for &Updates…\tShift+F1");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(app, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
-    AppendMenuW(app, MF_STRING, ID_REFRESH, L"&Refresh Timeline\tCtrl+R");
     AppendMenuW(app, MF_STRING, ID_STOP_MEDIA, L"S&top Media Playback\tCtrl+S");
     AppendMenuW(app, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(app, MF_STRING, ID_HIDE_WINDOW, L"&Hide Window\tCtrl+H");
     AppendMenuW(app, MF_STRING, ID_QUIT, L"&Quit FastSMRW\tCtrl+Q");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
 
+    HMENU me = CreatePopupMenu();
+    AppendMenuW(me, MF_STRING, ID_LIST_MANAGER, L"&Lists…");
+    AppendMenuW(me, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
+    AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
+    AppendMenuW(me, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
+    AppendMenuW(me, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
+    AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(me), L"&Me");
+
     HMENU status = CreatePopupMenu();
+    AppendMenuW(status, MF_STRING, ID_NEW_POST, L"&New Post\tCtrl+N");
+    AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_REPLY, L"&Reply\tR");
-    AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tCtrl+Shift+B");
-    AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tCtrl+Shift+D");
-    AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tCtrl+Shift+Q");
+    AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tB");
+    AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tF");
+    AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tQ");
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
     AppendMenuW(status, MF_STRING, ID_VIEW_THREAD, L"View &Thread");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
@@ -220,6 +225,7 @@ HMENU build_menu() {
 
     HMENU timeline = CreatePopupMenu();
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
+    AppendMenuW(timeline, MF_STRING, ID_REFRESH, L"Re&fresh Timeline\tCtrl+R");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tCtrl+W");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
@@ -242,6 +248,7 @@ HMENU build_menu() {
 
     HMENU account = CreatePopupMenu();
     AppendMenuW(account, MF_STRING, ID_ADD_ACCOUNT, L"&Add Account…\tCtrl+Shift+A");
+    AppendMenuW(account, MF_STRING, ID_ACCOUNT_SETTINGS, L"Account &Settings…\tCtrl+Shift+Comma");
     AppendMenuW(account, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(account, MF_STRING, ID_PREV_ACCOUNT, L"&Previous Account\tCtrl+[");
     AppendMenuW(account, MF_STRING, ID_NEXT_ACCOUNT, L"&Next Account\tCtrl+]");
@@ -290,13 +297,11 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'P', ID_TOGGLE_PIN}, // Ctrl+P: pin/unpin the current tab
         {FVIRTKEY | FCONTROL, 'S', ID_STOP_MEDIA}, // Ctrl+S: stop background audio
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
+        {FVIRTKEY | FCONTROL | FSHIFT, VK_OEM_COMMA, ID_ACCOUNT_SETTINGS}, // Ctrl+Shift+Comma
         {FVIRTKEY | FCONTROL, 'Q', ID_QUIT},
         {FVIRTKEY | FCONTROL, 'W', ID_CLOSE_TIMELINE}, // Ctrl+W: close the current timeline
         {FVIRTKEY | FCONTROL, 'H', ID_HIDE_WINDOW},    // Ctrl+H: hide the window
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
-        {FVIRTKEY | FCONTROL | FSHIFT, 'B', ID_BOOST},
-        {FVIRTKEY | FCONTROL | FSHIFT, 'D', ID_FAVORITE},
-        {FVIRTKEY | FCONTROL | FSHIFT, 'Q', ID_QUOTE},
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY | FCONTROL, VK_DELETE, ID_CLEAR_TIMELINE},          // clear focused timeline
@@ -306,6 +311,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL | FSHIFT, 'F', ID_CLIENT_FILTER}, // Ctrl+Shift+F: client filters
         {FVIRTKEY, VK_F3, ID_FIND_NEXT},             // F3: find next
         {FVIRTKEY | FSHIFT, VK_F3, ID_FIND_PREV},    // Shift+F3: find previous
+        {FVIRTKEY | FSHIFT, VK_F1, ID_CHECK_UPDATES}, // Shift+F1: check for updates
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
         {FVIRTKEY | FCONTROL, 'L', ID_FOLLOW_TOGGLE}, // Ctrl+L: follow/unfollow the author
         {FVIRTKEY | FCONTROL, 'O', ID_OPEN_LINKS},   // Ctrl+O: open links in the post
@@ -453,6 +459,12 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             dispatch_cmd({{"cmd", "perform_action"}, {"action", action}});
         return 0;
     }
+
+    case WM_INITMENUPOPUP:
+        // Reflect the focused post's state on the Status menu (Boost / Favorite
+        // show a check mark, which screen readers announce, when already done).
+        update_menu_checks(reinterpret_cast<HMENU>(wp));
+        break;
 
     case WM_COMMAND:
         if (HIWORD(wp) == 0 || HIWORD(wp) == 1) { // menu or accelerator
@@ -718,7 +730,7 @@ void MainWindow::on_view_keydown(int vk) {
         const int count = tc ? static_cast<int>(tc->rows.size()) : 0;
         const int row = selected_row();
         const bool at_edge = (vk == VK_UP && row <= 0) || (vk == VK_DOWN && row >= count - 1);
-        if (at_edge && count > 0)
+        if (at_edge && count > 0 && settings_.value("boundary_sound", true))
             dispatch_cmd({{"cmd", "play_earcon"}, {"name", "boundary"}});
         break;
     }
@@ -862,6 +874,21 @@ void MainWindow::do_follow_request_action(const Row& r) {
                   {"action", action}});
 }
 
+void MainWindow::update_menu_checks(HMENU menu) {
+    // No-op unless this popup is the Status menu (which owns these items).
+    if (GetMenuState(menu, ID_BOOST, MF_BYCOMMAND) == static_cast<UINT>(-1))
+        return;
+    bool boosted = false, favorited = false;
+    Timeline* tc = current();
+    const int row = selected_row();
+    if (tc && row >= 0 && row < static_cast<int>(tc->rows.size())) {
+        boosted = tc->rows[static_cast<size_t>(row)].boosted;
+        favorited = tc->rows[static_cast<size_t>(row)].favorited;
+    }
+    CheckMenuItem(menu, ID_BOOST, MF_BYCOMMAND | (boosted ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(menu, ID_FAVORITE, MF_BYCOMMAND | (favorited ? MF_CHECKED : MF_UNCHECKED));
+}
+
 void MainWindow::do_boost() {
     Timeline* tc = current();
     const int row = selected_row();
@@ -871,6 +898,9 @@ void MainWindow::do_boost() {
     const bool boosting = !r.boosted;
     if (boosting && settings_.value("confirm_boost", false) &&
         !confirm(hwnd_, L"Boost this post?", L"Boost"))
+        return;
+    if (!boosting && settings_.value("confirm_unboost", false) &&
+        !confirm(hwnd_, L"Unboost this post?", L"Unboost"))
         return;
     dispatch_cmd({{"cmd", "toggle_boost"}, {"id", r.id}});
 }
@@ -884,6 +914,9 @@ void MainWindow::do_favorite() {
     const bool favoriting = !r.favorited;
     if (favoriting && settings_.value("confirm_favorite", false) &&
         !confirm(hwnd_, L"Favorite this post?", L"Favorite"))
+        return;
+    if (!favoriting && settings_.value("confirm_unfavorite", false) &&
+        !confirm(hwnd_, L"Unfavorite this post?", L"Unfavorite"))
         return;
     dispatch_cmd({{"cmd", "toggle_favorite"}, {"id", r.id}});
 }
@@ -1007,7 +1040,9 @@ void MainWindow::ev_user_profile(const json& e) {
         break;
     case UserProfileAction::ToggleBlock:
         if (rel.blocking) {
-            set_rel("unblock");
+            if (!settings_.value("confirm_unblock", false) ||
+                confirm(hwnd_, (L"Unblock @" + to_wide(acct) + L"?").c_str(), L"Unblock"))
+                set_rel("unblock");
         } else if (!settings_.value("confirm_block", true) ||
                    confirm(hwnd_, (L"Block @" + to_wide(acct) + L"?").c_str(), L"Block")) {
             set_rel("block");
@@ -1213,10 +1248,16 @@ void MainWindow::show_user_actions() {
     if (chosen <= 0 || chosen > kActCount)
         return;
     const char* action = kActs[chosen - 1].action;
-    if (std::string(action) == "block" && settings_.value("confirm_block", true)) {
+    const std::string act(action);
+    if (act == "block" && settings_.value("confirm_block", true)) {
         const std::wstring msg =
             count > 1 ? L"Block " + std::to_wstring(count) + L" users?" : L"Block this user?";
         if (!confirm(hwnd_, msg.c_str(), L"Block"))
+            return;
+    } else if (act == "unblock" && settings_.value("confirm_unblock", false)) {
+        const std::wstring msg =
+            count > 1 ? L"Unblock " + std::to_wstring(count) + L" users?" : L"Unblock this user?";
+        if (!confirm(hwnd_, msg.c_str(), L"Unblock"))
             return;
     }
     json jids = json::array();
@@ -1252,6 +1293,23 @@ void MainWindow::do_settings() {
     auto open_mgr = [this](HWND parent) { open_keymap_manager(parent); };
     if (auto result = show_settings_dialog(hwnd_, inst_, s, packs, open_mgr))
         dispatch_cmd({{"cmd", "update_settings"}, {"settings", store::settings_to_json(*result)}});
+}
+
+void MainWindow::ev_account_settings(const json& e) {
+    std::vector<std::string> packs;
+    for (const auto& p : e.value("soundpacks", json::array()))
+        packs.push_back(p.get<std::string>());
+    if (packs.empty())
+        packs.push_back("Default");
+    const std::string acct = e.value("acct", std::string{});
+    const std::string current = e.value("soundpack", std::string("Default"));
+    std::wstring title = acct.empty() ? L"Account Settings"
+                                      : L"Account Settings for @" + to_wide(acct);
+    auto guard = enter_modal();
+    auto chosen = show_account_settings_dialog(hwnd_, inst_, title, packs, current);
+    leave_modal(guard);
+    if (chosen)
+        dispatch_cmd({{"cmd", "set_account_settings"}, {"soundpack", *chosen}});
 }
 
 namespace {
@@ -1541,6 +1599,9 @@ void MainWindow::handle_command(int id) {
     case ID_ADD_ACCOUNT:
         do_add_account();
         break;
+    case ID_ACCOUNT_SETTINGS:
+        dispatch_cmd({{"cmd", "get_account_settings"}}); // core replies -> ev_account_settings
+        break;
     case ID_GO_BACK:
         dispatch_cmd({{"cmd", "go_back"}});
         break;
@@ -1582,6 +1643,8 @@ void MainWindow::on_event(const std::string& js) {
         announce(e.value("message", std::string{}));
     else if (ev == "settings")
         ev_settings(e);
+    else if (ev == "account_settings")
+        ev_account_settings(e);
     else if (ev == "compose_context")
         ev_compose_context(e);
     else if (ev == "spawnable_timelines")
@@ -2159,7 +2222,8 @@ void MainWindow::ev_compose_context(const json& e) {
     req.prefill_cw = e.value("prefill_cw", std::string{});
     for (const auto& p : e.value("reply_participants", json::array()))
         req.recipients.push_back({p.value("acct", std::string{}),
-                                  to_wide(p.value("display_name", p.value("acct", std::string{})))});
+                                  to_wide(p.value("display_name", p.value("acct", std::string{}))),
+                                  p.value("checked", true)});
     req.max_chars = e.value("max_chars", 500);
     req.enter_to_send = e.value("enter_to_send", false);
     if (e.contains("default_visibility"))

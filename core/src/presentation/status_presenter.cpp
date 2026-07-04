@@ -202,8 +202,6 @@ std::optional<std::string> status_field_string(StatusSpeechField field, const St
         return d.boosted ? std::optional<std::string>("Boosted") : std::nullopt;
     case StatusSpeechField::Visibility:
         return d.visibility ? std::optional(visibility_name(*d.visibility)) : std::nullopt;
-    case StatusSpeechField::ReplyIndicator:
-        return d.in_reply_to_id ? std::optional<std::string>("Reply") : std::nullopt;
     case StatusSpeechField::Source:
         return d.application_name ? std::optional("via " + *d.application_name) : std::nullopt;
     }

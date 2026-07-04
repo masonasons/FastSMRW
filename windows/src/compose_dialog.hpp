@@ -16,6 +16,7 @@ enum class ComposeMode { New, Reply, Quote, Edit };
 struct ComposeRecipient {
     std::string acct;     // handle without '@' (mentioned only if left checked)
     std::wstring display; // checklist label
+    bool checked = true;  // pre-checked state (the booster is offered unchecked)
 };
 
 // A media file staged for upload: bytes are already base64-encoded (the UI read

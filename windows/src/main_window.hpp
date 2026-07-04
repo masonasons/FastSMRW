@@ -111,6 +111,7 @@ private:
     void dispatch_cmd(const nlohmann::json& cmd);
     void do_boost();
     void do_favorite();
+    void update_menu_checks(HMENU menu); // check Boost/Favorite for the focused post
     void compose(const char* mode); // dispatch compose_context for the selection
     void do_post_info();
     void show_user_actions(); // batch follow/mute/block on a user list
@@ -134,6 +135,7 @@ private:
     void ev_timelines_changed(const nlohmann::json& e);
     void ev_timeline_updated(const nlohmann::json& e);
     void ev_settings(const nlohmann::json& e);
+    void ev_account_settings(const nlohmann::json& e); // per-account soundpack dialog
     void ev_compose_context(const nlohmann::json& e);
     void ev_spawnable(const nlohmann::json& e);
     void ev_post_info(const nlohmann::json& e);

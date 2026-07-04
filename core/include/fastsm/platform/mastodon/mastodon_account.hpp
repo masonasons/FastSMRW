@@ -72,9 +72,9 @@ public:
     bool update_server_filter(const ServerFilter& filter) override;
     bool delete_server_filter(const std::string& id) override;
 
-    std::optional<StreamRequest> user_stream_request() const override;
-    std::optional<StreamItem> parse_stream_event(const std::string& event,
-                                                 const std::string& data) const override;
+    std::optional<StreamRequest> stream_request_for(const TimelineSource& source) const override;
+    std::optional<StreamItem> parse_stream_event(const std::string& event, const std::string& data,
+                                                 const TimelineSource& route) const override;
 
     const MastodonCredentials& credentials() const { return credentials_; }
 

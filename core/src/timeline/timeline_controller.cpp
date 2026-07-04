@@ -124,13 +124,18 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
         raw_ = std::move(added);
         scrollback_cursor_ = next;
     } else {
+        // Only chime for rows that will actually be visible — e.g. a streamed
+        // mention shouldn't ping when mentions are hidden from Notifications.
+        int visible_new = 0;
+        for (const auto& it : added)
+            if (!filter_ || filter_(it))
+                ++visible_new;
         // Prepend the genuinely new rows, preserving server order.
-        const int new_count = static_cast<int>(added.size());
         added.insert(added.end(), std::make_move_iterator(raw_.begin()),
                      std::make_move_iterator(raw_.end()));
         raw_ = std::move(added);
-        if (new_count > 0 && on_received_new)
-            on_received_new(new_count);
+        if (visible_new > 0 && on_received_new)
+            on_received_new(visible_new);
     }
 
     // Keep rows newest-first by timestamp (notifications included — their
@@ -224,10 +229,14 @@ void TimelineController::persist() {
     // Snapshot on the main thread, write on the worker thread. The scrollback
     // cursor rides along so loading older posts resumes after a cache load.
     const int cap = cache_->max_entries();
+    if (cap <= 0) { // caching disabled: don't write, and drop any existing file
+        cache_->remove(source_.cache_key());
+        return;
+    }
     std::vector<TimelineItem> snapshot;
     std::optional<PageCursor> cursor;
     bool truncated = false;
-    if (cap <= 0 || static_cast<int>(raw_.size()) <= cap) {
+    if (static_cast<int>(raw_.size()) <= cap) {
         snapshot = raw_;
         cursor = scrollback_cursor_;
     } else {
@@ -438,7 +447,8 @@ void TimelineController::clear() {
         on_change();
 }
 
-bool TimelineController::toggle_favorite(int visible_index) {
+bool TimelineController::toggle_favorite(int visible_index,
+                                         std::function<void(bool, bool)> done) {
     if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
         return false;
     const std::string id = visible_[static_cast<size_t>(visible_index)].id();
@@ -457,10 +467,10 @@ bool TimelineController::toggle_favorite(int visible_index) {
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id] {
+    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->favorite(target) : account_->unfavorite(target);
-        if (!ok) {
-            main_->post([this, id, want] {
+        main_->post([this, id, want, ok, done = std::move(done)] {
+            if (!ok) {
                 if (TimelineItem* r = find_raw(id)) {
                     if (Status* st = r->mutable_actionable_status()) {
                         st->favourited = !want;
@@ -472,13 +482,15 @@ bool TimelineController::toggle_favorite(int visible_index) {
                     on_change();
                 if (on_error)
                     on_error(want ? "Favorite failed" : "Unfavorite failed");
-            });
-        }
+            }
+            if (done)
+                done(ok, want);
+        });
     });
     return want;
 }
 
-bool TimelineController::toggle_boost(int visible_index) {
+bool TimelineController::toggle_boost(int visible_index, std::function<void(bool, bool)> done) {
     if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
         return false;
     const std::string id = visible_[static_cast<size_t>(visible_index)].id();
@@ -497,10 +509,10 @@ bool TimelineController::toggle_boost(int visible_index) {
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id] {
+    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->boost(target) : account_->unboost(target);
-        if (!ok) {
-            main_->post([this, id, want] {
+        main_->post([this, id, want, ok, done = std::move(done)] {
+            if (!ok) {
                 if (TimelineItem* r = find_raw(id)) {
                     if (Status* st = r->mutable_actionable_status()) {
                         st->boosted = !want;
@@ -512,13 +524,15 @@ bool TimelineController::toggle_boost(int visible_index) {
                     on_change();
                 if (on_error)
                     on_error(want ? "Boost failed" : "Unboost failed");
-            });
-        }
+            }
+            if (done)
+                done(ok, want);
+        });
     });
     return want;
 }
 
-int TimelineController::toggle_pin_post(int visible_index) {
+int TimelineController::toggle_pin_post(int visible_index, std::function<void(bool, bool)> done) {
     if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
         return -1;
     const std::string id = visible_[static_cast<size_t>(visible_index)].id();
@@ -539,10 +553,10 @@ int TimelineController::toggle_pin_post(int visible_index) {
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id] {
+    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->pin_post(target) : account_->unpin_post(target);
-        if (!ok) {
-            main_->post([this, id, want] {
+        main_->post([this, id, want, ok, done = std::move(done)] {
+            if (!ok) {
                 if (TimelineItem* r = find_raw(id))
                     if (Status* st = r->mutable_status())
                         st->pinned = !want;
@@ -551,8 +565,10 @@ int TimelineController::toggle_pin_post(int visible_index) {
                     on_change();
                 if (on_error)
                     on_error(want ? "Pin failed" : "Unpin failed");
-            });
-        }
+            }
+            if (done)
+                done(ok, want);
+        });
     });
     return want ? 1 : 0;
 }

@@ -15,6 +15,7 @@ void test_codec_corrupt_is_miss();
 
 // From test_util.cpp
 void test_html_stripping();
+void test_strip_quote_url();
 void test_entity_decoding();
 void test_date_parsing();
 void test_relative_dates();
@@ -115,6 +116,7 @@ int main() {
     test_timeline_item_roundtrip();
     test_codec_corrupt_is_miss();
     test_html_stripping();
+    test_strip_quote_url();
     test_entity_decoding();
     test_date_parsing();
     test_relative_dates();

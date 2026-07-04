@@ -14,16 +14,26 @@ std::string lower(std::string s) {
 }
 } // namespace
 
-std::vector<ReplyParticipant> reply_participants(const Status& status, const User& me) {
+std::vector<ReplyParticipant> reply_participants(const Status& status, const User& me,
+                                                 const User* booster) {
     std::vector<ReplyParticipant> all;
     // The author of the post being replied to, then everyone they mentioned.
     all.push_back({status.account.acct, status.account.display_name.empty()
                                             ? (status.account.username.empty()
                                                    ? status.account.acct
                                                    : status.account.username)
-                                            : status.account.display_name});
+                                            : status.account.display_name,
+                   true});
     for (const auto& m : status.mentions)
-        all.push_back({m.acct, m.username.empty() ? m.acct : m.username});
+        all.push_back({m.acct, m.username.empty() ? m.acct : m.username, true});
+    // The booster of a boosted post: offered, but unchecked by default. Added
+    // last so if they're already the author/a mention that (checked) entry wins.
+    if (booster && !booster->acct.empty())
+        all.push_back({booster->acct, booster->display_name.empty()
+                                          ? (booster->username.empty() ? booster->acct
+                                                                       : booster->username)
+                                          : booster->display_name,
+                       false});
 
     const std::string mine = lower(me.acct);
     std::unordered_set<std::string> seen;
