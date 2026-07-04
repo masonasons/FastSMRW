@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.1.6
+-----
+
+- Fixed: In global hotkeys mode, invisible keys could not be held down.
+
+
 0.1.5
 -----
 

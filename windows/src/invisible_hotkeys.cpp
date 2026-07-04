@@ -85,7 +85,7 @@ void HotkeyDriver::set_bindings(const std::map<std::string, std::string>& key_to
         // MOD_NOREPEAT (Win7+) stops held keys from firing repeatedly. A combo
         // already owned by another process or the Windows shell (e.g. Win+arrow
         // Snap shortcuts) is refused here; the keyhook mode captures those.
-        if (RegisterHotKey(hwnd_, id, mods | MOD_NOREPEAT, vk))
+        if (RegisterHotKey(hwnd_, id, mods, vk))
             id_to_action_[id++] = action;
     }
 }
