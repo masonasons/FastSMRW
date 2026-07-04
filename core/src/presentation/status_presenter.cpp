@@ -556,6 +556,8 @@ std::string post_info(const Status& s, std::int64_t now) {
     }
     if (std::string counts = stats(s); !counts.empty()) // only non-zero counts (Mac parity)
         out += "\n" + counts;
+    if (s.application_name && !s.application_name->empty()) // the posting app, when known
+        out += "\nvia " + *s.application_name;
     return out;
 }
 

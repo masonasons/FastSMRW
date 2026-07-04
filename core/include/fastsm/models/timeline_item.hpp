@@ -47,6 +47,13 @@ struct TimelineItem {
     const User* user() const { return std::get_if<User>(&value); }
     const Notification* notification() const { return std::get_if<Notification>(&value); }
 
+    // A direct message / direct-visibility mention (played with the "messages"
+    // chime instead of the usual mentions/notification sound).
+    bool is_direct() const {
+        const Status* s = status();
+        return s && s->visibility && *s->visibility == Visibility::Direct;
+    }
+
     // The id this row paginates by (the outer status/notification/user id, not a
     // boost's underlying post) — used to seed scrollback after a cache load.
     std::string pagination_id() const {

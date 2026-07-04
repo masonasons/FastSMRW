@@ -36,6 +36,7 @@ public:
     bool unfavorite(const Status& status) override;
     bool pin_post(const Status& status) override;
     bool unpin_post(const Status& status) override;
+    bool delete_post(const Status& status) override;
     std::optional<Poll> vote_poll(const std::string& poll_id,
                                   const std::vector<int>& choices) override;
 

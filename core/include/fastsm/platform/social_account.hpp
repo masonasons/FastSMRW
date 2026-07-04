@@ -120,11 +120,14 @@ struct StreamRequest {
     net::Headers headers;
 };
 
-// One parsed streaming event: a timeline item and which open timeline it feeds
-// (a status update -> the stream's source; a notification -> Notifications).
+// One parsed streaming event. `op` says what to do with it: add a new row,
+// replace an edited post in place, or remove a deleted post.
 struct StreamItem {
-    TimelineItem item;
-    TimelineSource target; // kind + param, so hashtag/list route to the right tab
+    enum class Op { Add, Update, Delete };
+    Op op = Op::Add;
+    TimelineItem item;      // the post/notification (Add and Update)
+    TimelineSource target;  // kind + param, so hashtag/list route to the right tab (Add)
+    std::string removed_id; // the deleted status id (Delete)
 };
 
 class SocialAccount {
@@ -172,6 +175,8 @@ public:
     // don't support it (Bluesky) inherit these no-op stubs.
     virtual bool pin_post(const Status&) { return false; }
     virtual bool unpin_post(const Status&) { return false; }
+    // Delete one of YOUR OWN posts. Returns success.
+    virtual bool delete_post(const Status&) { return false; }
     // Vote on a poll (choices = selected option indexes). Returns the updated poll,
     // or nullopt on failure / if unsupported.
     virtual std::optional<Poll> vote_poll(const std::string&, const std::vector<int>&) {

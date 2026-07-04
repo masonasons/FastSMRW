@@ -11,6 +11,7 @@
 #include "app_messages.hpp"
 #include "client_filters_dialog.hpp"
 #include "account_settings_dialog.hpp"
+#include "fastsm/util/log.hpp"
 #include "hashtag_dialog.hpp"
 #include "list_membership_dialog.hpp"
 #include "lists_manager_dialog.hpp"
@@ -59,6 +60,7 @@ enum {
     ID_CLOSE_TIMELINE,
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
+    ID_LOAD_OLDER,
     ID_GO_BACK,
     ID_MOVE_UP,
     ID_MOVE_DOWN,
@@ -228,6 +230,7 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_STRING, ID_REFRESH, L"Re&fresh Timeline\tCtrl+R");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tCtrl+W");
+    AppendMenuW(timeline, MF_STRING, ID_LOAD_OLDER, L"Load &Older Posts\tPeriod");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_FIND, L"&Find…\tCtrl+F");
     AppendMenuW(timeline, MF_STRING, ID_FIND_NEXT, L"Find &Next\tF3");
@@ -433,6 +436,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        fastsm::log::write("invisible: perform action '" + *action + "'");
         dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
         // The keyhook swallowed the combo's non-modifier key, so the foreground
         // app saw Alt/Win pressed with no real key -> it drops into menu / Start
@@ -455,8 +459,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_HOTKEY: {
         // A global invisible-interface hotkey fired: run its core action.
         const std::string action = hotkey_driver_.action_for(static_cast<int>(wp));
-        if (!action.empty())
+        if (!action.empty()) {
+            fastsm::log::write("hotkeys: fired -> " + action);
             dispatch_cmd({{"cmd", "perform_action"}, {"action", action}});
+        }
         return 0;
     }
 
@@ -634,10 +640,20 @@ void MainWindow::maybe_load_older(int row) {
     }
     // Older posts are at the bottom normally, but at the top when reversed.
     const bool near_edge = tc->reversed ? (row <= 9) : (row >= count - 10);
-    if (count > 0 && near_edge) {
+    if (count > 0 && near_edge && settings_.value("auto_load_older", true)) {
         load_pending_ = true;
         dispatch_cmd({{"cmd", "load_older"}});
     }
+}
+
+void MainWindow::do_load_older() {
+    if (load_pending_)
+        return;
+    Timeline* tc = current();
+    if (!tc || tc->rows.empty())
+        return;
+    load_pending_ = true;
+    dispatch_cmd({{"cmd", "load_older"}});
 }
 
 void MainWindow::bind_current_to_view(bool force) {
@@ -775,6 +791,12 @@ void MainWindow::on_view_keydown(int vk) {
     }
     case 'H': // follow a hashtag; prompt pre-fills with this post's hashtags
         dispatch_cmd({{"cmd", "follow_hashtag_prompt"}, {"id", selected_id()}});
+        break;
+    case VK_DELETE: // delete your own post (only offered on your own rows)
+        do_delete_post();
+        break;
+    case VK_OEM_PERIOD: // manually load older posts
+        do_load_older();
         break;
     case VK_RETURN: {
         Timeline* t = current();
@@ -921,6 +943,19 @@ void MainWindow::do_favorite() {
     dispatch_cmd({{"cmd", "toggle_favorite"}, {"id", r.id}});
 }
 
+void MainWindow::do_delete_post() {
+    Timeline* tc = current();
+    const int row = selected_row();
+    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
+        return;
+    const Row& r = tc->rows[static_cast<size_t>(row)];
+    if (!r.is_mine) // Delete only acts on your own posts
+        return;
+    if (!settings_.value("confirm_delete_post", true) ||
+        confirm(hwnd_, L"Delete this post? This can't be undone.", L"Delete Post"))
+        dispatch_cmd({{"cmd", "delete_post"}, {"id", r.id}});
+}
+
 void MainWindow::compose(const char* mode) {
     json cmd = {{"cmd", "compose_context"}, {"mode", mode}};
     const std::string id = selected_id();
@@ -941,6 +976,7 @@ void MainWindow::ev_post_info(const json& e) {
     const std::wstring text = to_wide(e.value("text", std::string{}));
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
     const bool browser_ok = e.value("has_url", false);
+    const bool is_mine = e.value("is_mine", false);
     PollInfo poll;
     if (e.contains("poll") && e["poll"].is_object()) {
         poll.present = true;
@@ -950,7 +986,8 @@ void MainWindow::ev_post_info(const json& e) {
     }
     const std::string keep_id = selected_id();
     auto guard = enter_modal();
-    PostInfoResult res = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, poll);
+    PostInfoResult res =
+        show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, is_mine, poll);
     restore_selection(keep_id);
     leave_modal(guard);
     if (!res.action)
@@ -986,6 +1023,11 @@ void MainWindow::ev_post_info(const json& e) {
         break;
     case PostInfoAction::ViewAuthor:
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"id", id}});
+        break;
+    case PostInfoAction::Delete:
+        if (!settings_.value("confirm_delete_post", true) ||
+            confirm(hwnd_, L"Delete this post? This can't be undone.", L"Delete Post"))
+            dispatch_cmd({{"cmd", "delete_post"}, {"id", id}});
         break;
     case PostInfoAction::Vote:
         break; // handled above
@@ -1576,6 +1618,9 @@ void MainWindow::handle_command(int id) {
     case ID_CLOSE_TIMELINE:
         dispatch_cmd({{"cmd", "close_timeline"}});
         break;
+    case ID_LOAD_OLDER:
+        do_load_older();
+        break;
     case ID_CLEAR_TIMELINE:
         if (!settings_.value("confirm_clear_timeline", true) ||
             confirm(hwnd_, L"Clear this timeline? This removes the loaded posts and its cache.",
@@ -1750,6 +1795,7 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.text = to_wide(r.value("text", std::string{}));
         row.favorited = r.value("favorited", false);
         row.boosted = r.value("boosted", false);
+        row.is_mine = r.value("is_mine", false);
         row.gap_after = r.value("gap_after", false);
         row.follow_request = r.value("follow_request", false);
         row.account_id = r.value("account_id", std::string{});
@@ -1924,6 +1970,8 @@ void MainWindow::ev_keymap(const json& e) {
 
 // Install whichever driver the active mode calls for; keep the other idle.
 void MainWindow::install_active_driver() {
+    fastsm::log::write("invisible: install driver for mode '" + invisible_mode_ + "', " +
+                       std::to_string(invisible_bindings_.size()) + " binding(s)");
     if (invisible_mode_ == "hotkey") {
         keyhook_driver_.disable();
         hotkey_driver_.set_bindings(invisible_bindings_);
@@ -2117,9 +2165,6 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
             dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", true}});
         }
         open_keymap_manager(hwnd_);
-    } else if (a == "StopAudio") {
-        if (speaker_)
-            speaker_->stop();
     } else if (a == "Find") {
         do_find();
     } else if (a == "FindNext") {

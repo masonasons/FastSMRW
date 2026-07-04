@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cwctype>
+#include <fstream>
+#include <iterator>
 
 #include <commctrl.h>
+#include <commdlg.h>
 
 #include "../resources/resource.h"
 #include "utf.hpp"
@@ -321,6 +324,9 @@ INT_PTR KeymapManagerDialog::handle(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_KM_SAVE:
             do_save();
             return TRUE;
+        case IDC_KM_IMPORT:
+            do_import();
+            return TRUE;
         case IDCANCEL:
             if (dirty_ && !confirm_discard())
                 return TRUE;
@@ -575,6 +581,48 @@ void KeymapManagerDialog::do_save() {
     dirty_ = false;
     set_status();
     MessageBoxW(dlg_, L"Saved and made active.", L"Keyboard Manager", MB_OK | MB_ICONINFORMATION);
+}
+
+void KeymapManagerDialog::do_import() {
+    wchar_t path[MAX_PATH] = {0};
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = dlg_;
+    ofn.lpstrFilter = L"Keymap files (*.keymap)\0*.keymap\0All files (*.*)\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrTitle = L"Import Keymap";
+    if (!GetOpenFileNameW(&ofn))
+        return; // cancelled
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        MessageBoxW(dlg_, L"Couldn't open that file.", L"Import", MB_OK | MB_ICONERROR);
+        return;
+    }
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    // Name the imported keymap.
+    NameCtx ctx;
+    if (DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_KM_NEWNAME), dlg_, &name_proc,
+                        reinterpret_cast<LPARAM>(&ctx)) != IDOK ||
+        !ctx.ok)
+        return;
+    if (!valid_keymap_name(ctx.name)) {
+        MessageBoxW(dlg_, L"Use letters, digits, dashes, and underscores only.", L"Invalid name",
+                    MB_OK | MB_ICONERROR);
+        return;
+    }
+    const std::string name = to_utf8(ctx.name);
+    if (name == "default" ||
+        std::find(keymaps_.begin(), keymaps_.end(), name) != keymaps_.end()) {
+        MessageBoxW(dlg_, L"A keymap with that name already exists.", L"Name in use",
+                    MB_OK | MB_ICONERROR);
+        return;
+    }
+    // The core converts FastSM/FastSMRW action tokens, drops defaults, writes the
+    // file, and makes it active; then we adopt it (get_keymap refreshes the list).
+    dispatch_({{"cmd", "import_keymap"}, {"name", name}, {"text", text}});
+    switch_keymap(name);
 }
 
 bool KeymapManagerDialog::confirm_discard() {

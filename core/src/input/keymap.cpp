@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace fastsm::input {
@@ -195,6 +196,51 @@ std::string layer_help_text() {
            "Escape: Leave the layer";
 }
 
+std::map<std::string, std::string> import_fastsm_keymap(const std::string& text, int* dropped,
+                                                        std::set<std::string>* unbinds) {
+    // A few FastSM action tokens differ from FastSMRW's; the rest are identical.
+    static const std::unordered_map<std::string, std::string> kRename = {
+        {"Delete", "DeletePost"},          // FastSM's "Delete" = delete your post
+        {"AccountOptions", "AccountSettings"},
+        {"PinToggle", "PinPost"},
+    };
+    // Valid FastSMRW action ids + each action's normalized default key.
+    std::unordered_set<std::string> valid;
+    std::unordered_map<std::string, std::string> defaults;
+    for (const auto& a : action_catalog()) {
+        valid.insert(a.id);
+        if (auto n = normalize_key(a.default_key))
+            defaults[a.id] = *n;
+    }
+    std::map<std::string, std::string> out; // action -> key
+    int skipped = 0;
+    const ParsedKeymap parsed = parse_keymap(text); // key -> action (keys normalized)
+    for (const auto& [key, action] : parsed.bindings) {
+        std::string act = action;
+        if (auto it = kRename.find(act); it != kRename.end())
+            act = it->second;
+        if (!valid.count(act)) { // no FastSMRW equivalent -> skip
+            ++skipped;
+            continue;
+        }
+        if (auto d = defaults.find(act); d != defaults.end() && d->second == key)
+            continue; // already the FastSMRW default -> nothing to override
+        out[act] = key;
+    }
+    // Carry over unbind: lines (FastSMRW keymaps) for actions we recognize.
+    if (unbinds)
+        for (const auto& a : parsed.unbinds) {
+            std::string act = a;
+            if (auto it = kRename.find(act); it != kRename.end())
+                act = it->second;
+            if (valid.count(act))
+                unbinds->insert(act);
+        }
+    if (dropped)
+        *dropped = skipped;
+    return out;
+}
+
 KeyBindings default_bindings() {
     KeyBindings out;
     for (const auto& a : action_catalog()) {
@@ -269,6 +315,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"MoveTimelineDown", "Move timeline down", ""},   // unbound (in-app Shift+Down)
         {"TogglePin", "Pin / unpin timeline", ""},        // unbound (in-app Ctrl+P)
         {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
+        {"DeletePost", "Delete your post", "alt+win+delete"}, // in-app Delete; Win8.1 overrides
         {"FollowHashtag", "Follow a hashtag", "alt+win+h"}, // in-app / layer H
         {"ManageHashtags", "Manage followed hashtags", ""}, // unbound by default
         {"CloseTimeline", "Close timeline", "alt+win+'"},
@@ -277,7 +324,6 @@ const std::vector<ActionDef>& action_catalog() {
         {"Options", "Settings", "alt+win+o"},
         {"AccountSettings", "Account settings", ""}, // unbound by default (in-app Ctrl+Shift+,)
         {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
-        {"StopAudio", "Stop audio / speech", "control+win+shift+return"},
         {"StopMedia", "Stop media playback", "control+alt+win+s"},
     };
     return catalog;

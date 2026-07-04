@@ -5,6 +5,17 @@ FastSMRW changelog
 -----
 
 - Fixed: In global hotkeys mode, invisible keys could not be held down.
+- Delete your own posts: press Delete on one of your posts (or use the new Delete button in the post view). In the invisible interface it's Alt+Windows+Delete, or Control+Windows+Delete in the Windows 8.1 keymap. It confirms first, which you can turn off in Settings under Confirmation.
+- The post view now shows which app a post was made from ("via ...") when the server provides it.
+- Removed an unused "Stop audio / speech" shortcut that duplicated Stop Media.
+- Import a keymap: the Keyboard Manager has a new Import button that reads an old FastSM keymap (or a FastSMRW one a friend sent), converting the shortcuts to FastSMRW's actions and skipping any that already match a default.
+- Fixed: saving a keymap now writes atomically, so an interrupted save can no longer blank the keymap file.
+- A sound now plays when you open a new timeline (a thread, user, hashtag, list, search, and so on).
+- New "Automatically load older posts when you reach the end" option in Settings under Timelines; when it's off, press Period (or Timeline menu, Load Older Posts) to load older posts on demand.
+- Added behind-the-scenes logging for the invisible interface (global hotkeys and keyhook) to the log file, to help track down input issues.
+- A direct message (or direct-visibility mention) arriving in Mentions or Notifications now plays the "messages" sound instead of the usual mentions chime.
+- When a post you can see is edited, the change now shows up live over streaming (Mastodon); a post deleted at the source is now removed live too.
+- A post that a filter hides — or that matched a server filter — no longer plays a new-post sound.
 
 
 0.1.5

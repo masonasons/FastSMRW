@@ -33,6 +33,7 @@ public:
     bool unboost(const Status& status) override;
     bool favorite(const Status& status) override;
     bool unfavorite(const Status& status) override;
+    bool delete_post(const Status& status) override;
 
     std::optional<User> fetch_profile(const std::string& id) override;
     std::optional<User> lookup_user(const std::string& handle) override;

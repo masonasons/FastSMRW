@@ -32,7 +32,8 @@ public:
     // Callbacks fire on the main thread.
     std::function<void()> on_change;            // the visible list changed
     std::function<void(std::string)> on_error;  // a network action failed
-    std::function<void(int)> on_received_new;    // N new rows arrived on refresh
+    // N new rows arrived (that pass the filter); has_direct = any is a DM/direct mention.
+    std::function<void(int n, bool has_direct)> on_received_new;
 
     // The filtered rows the UI should display.
     const std::vector<TimelineItem>& items() const { return visible_; }
@@ -82,6 +83,10 @@ public:
     int toggle_pin_post(int visible_index, std::function<void(bool ok, bool active)> done = {});
     // Replace the poll on a row's status (after voting) and refresh the view.
     void set_poll(const std::string& row_id, const Poll& poll);
+    // Remove a row (e.g. a post you just deleted) and refresh + re-persist.
+    void remove_status(const std::string& id);
+    // Replace an edited post (matched by id) in place — from a streamed edit.
+    void update_status(const Status& updated);
 
     void post(const PostDraft& draft, std::function<void(bool)> done);
     void edit_post(const std::string& id, const PostDraft& draft, std::function<void(bool)> done);

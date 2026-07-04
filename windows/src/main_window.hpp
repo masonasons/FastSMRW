@@ -51,6 +51,7 @@ private:
         std::wstring text;
         bool favorited = false;
         bool boosted = false;
+        bool is_mine = false;        // your own post (can be deleted)
         bool gap_after = false;      // unloaded posts follow this row (auto-fill)
         bool follow_request = false; // a follow-request notification (Enter accepts/rejects)
         std::string account_id;      // requester's account id (follow-request rows)
@@ -79,7 +80,8 @@ private:
     void populate_timelines_list();
     void update_pin_menu(); // reflect the current tab's pin state on the Pin menu item
     void bind_current_to_view(bool force = false);
-    void maybe_load_older(int row); // pull the next page when near the bottom
+    void maybe_load_older(int row); // pull the next page when near the bottom (if auto is on)
+    void do_load_older();           // manually pull the next page (Period / Timeline menu)
     Timeline* current();
     int index_of_id(const Timeline& tl, const std::string& id) const;
     int selected_row() const;
@@ -111,6 +113,7 @@ private:
     void dispatch_cmd(const nlohmann::json& cmd);
     void do_boost();
     void do_favorite();
+    void do_delete_post(); // delete the focused post if it's yours (confirms first)
     void update_menu_checks(HMENU menu); // check Boost/Favorite for the focused post
     void compose(const char* mode); // dispatch compose_context for the selection
     void do_post_info();

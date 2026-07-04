@@ -66,10 +66,12 @@ AppSettings settings_from_json(const json& root) {
     settings.confirm_clear_timeline = root.value("confirm_clear_timeline", true);
     settings.confirm_block = root.value("confirm_block", true);
     settings.confirm_unblock = root.value("confirm_unblock", false);
+    settings.confirm_delete_post = root.value("confirm_delete_post", true);
     settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 60);
     settings.streaming_enabled = root.value("streaming_enabled", true);
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.reverse_timelines = root.value("reverse_timelines", false);
+    settings.auto_load_older = root.value("auto_load_older", true);
     settings.enter_post_action = root.value("enter_post_action", std::string("post_info"));
     settings.enter_user_action = root.value("enter_user_action", std::string("actions"));
     settings.secondary_post_action =
@@ -127,10 +129,12 @@ json settings_to_json(const AppSettings& settings) {
     root["confirm_clear_timeline"] = settings.confirm_clear_timeline;
     root["confirm_block"] = settings.confirm_block;
     root["confirm_unblock"] = settings.confirm_unblock;
+    root["confirm_delete_post"] = settings.confirm_delete_post;
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["reverse_timelines"] = settings.reverse_timelines;
+    root["auto_load_older"] = settings.auto_load_older;
     root["enter_post_action"] = settings.enter_post_action;
     root["enter_user_action"] = settings.enter_user_action;
     root["secondary_post_action"] = settings.secondary_post_action;

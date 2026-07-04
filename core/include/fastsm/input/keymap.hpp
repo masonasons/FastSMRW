@@ -54,6 +54,18 @@ std::string serialize_keymap(const std::map<std::string, std::string>& action_to
 // The default bindings (key -> action) built from the catalog's default_key.
 KeyBindings default_bindings();
 
+// Convert a shared .keymap file's contents (an old FastSM keymap, or a FastSMRW
+// keymap a friend sent) into the overrides (action -> key) to save as a FastSMRW
+// keymap. FastSM action tokens are renamed to the FastSMRW equivalents where they
+// differ; tokens with no FastSMRW action are dropped; and any binding that already
+// matches this action's FastSMRW default is dropped (so the result only carries
+// genuine changes). `dropped`, if non-null, receives the count of skipped
+// (unrecognized) bindings; `unbinds`, if non-null, receives the `unbind:` lines
+// for recognized actions (present in FastSMRW keymaps, not FastSM ones).
+std::map<std::string, std::string> import_fastsm_keymap(const std::string& text,
+                                                        int* dropped = nullptr,
+                                                        std::set<std::string>* unbinds = nullptr);
+
 // The Layer-mode keymap: bare keys (no modifiers, e.g. "up", "r") -> action,
 // used while the user is inside the "FastSM layer". Fixed (not user-editable).
 KeyBindings layer_keymap();

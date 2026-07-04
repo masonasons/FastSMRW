@@ -69,6 +69,7 @@
 #define IDC_SET_STREAMING   314
 #define IDC_SET_SHOW_MENTIONS 315
 #define IDC_SET_REVERSE       316
+#define IDC_SET_AUTOLOAD      317
 #define IDD_SET_AUDIO       320
 #define IDC_SET_SOUNDS      321
 #define IDC_SET_SOUNDPACK   322
@@ -110,6 +111,7 @@
 #define IDC_SET_CONFIRM_UNBOOST 700
 #define IDC_SET_CONFIRM_UNFAV   701
 #define IDC_SET_CONFIRM_UNBLOCK 702
+#define IDC_SET_CONFIRM_DELETE  703
 #define IDD_SET_INVISIBLE   355
 #define IDC_SET_INVIS_MODE  356
 #define IDC_SET_INVIS_LAYERKEY 357
@@ -136,6 +138,7 @@
 #define IDC_KM_UNBIND       407
 #define IDC_KM_RESET        408
 #define IDC_KM_SAVE         409
+#define IDC_KM_IMPORT       410
 #define IDD_KM_BINDING      420
 #define IDC_KMB_CTRL        421
 #define IDC_KMB_ALT         422
@@ -201,6 +204,7 @@
 #define IDC_POSTINFO_THREAD   367
 #define IDC_POSTINFO_AUTHOR   368
 #define IDC_POSTINFO_LINKS    369
+#define IDC_POSTINFO_DELETE   705
 
 #define IDD_USER_PROFILE      370
 #define IDC_PROFILE_TEXT      371

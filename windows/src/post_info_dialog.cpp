@@ -17,6 +17,7 @@ struct Ctx {
     const std::wstring* text;
     bool quote_ok;
     bool browser_ok;
+    bool is_mine; // your own post -> the Delete button is shown
     const PollInfo* poll;
     HWND poll_list = nullptr; // LISTBOX (single) or checklist LISTVIEW (multi)
     PostInfoResult result;
@@ -124,6 +125,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         enable_edit_select_all(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // Ctrl+A select-all
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_QUOTE), c->quote_ok);
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_BROWSER), c->browser_ok);
+        // Delete is only for your own posts; hide it entirely otherwise.
+        if (!c->is_mine)
+            ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_DELETE), SW_HIDE);
         build_poll_controls(dlg, c);
         SetFocus(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // read the post immediately
         return FALSE;                                 // focus set explicitly
@@ -173,6 +177,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_POSTINFO_AUTHOR:
             finish(PostInfoAction::ViewAuthor);
             return TRUE;
+        case IDC_POSTINFO_DELETE:
+            finish(PostInfoAction::Delete);
+            return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);
             return TRUE;
@@ -186,8 +193,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
-                                     bool quote_ok, bool browser_ok, const PollInfo& poll) {
-    Ctx ctx{&text, quote_ok, browser_ok, &poll, nullptr, {}};
+                                     bool quote_ok, bool browser_ok, bool is_mine,
+                                     const PollInfo& poll) {
+    Ctx ctx{&text, quote_ok, browser_ok, is_mine, &poll, nullptr, {}};
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_POST_INFO), parent, Proc,
                     reinterpret_cast<LPARAM>(&ctx));
     return ctx.result;

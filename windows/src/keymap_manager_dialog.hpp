@@ -63,6 +63,7 @@ private:
     void do_new();
     void do_delete();
     void do_save();
+    void do_import(); // import a FastSM / FastSMRW .keymap file as a new keymap
     bool confirm_discard(); // true if OK to lose unsaved changes
 
     HINSTANCE inst_;

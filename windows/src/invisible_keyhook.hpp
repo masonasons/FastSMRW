@@ -47,8 +47,9 @@ public:
 private:
     enum class Mode { Hotkeys, Layer };
     static LRESULT CALLBACK hook_proc(int code, WPARAM wp, LPARAM lp);
-    std::string key_string(DWORD vk) const;  // canonical modifiered key for a VK
-    std::string lookup(DWORD vk) const;      // hotkeys-mode action for a VK, or ""
+    std::string key_string(DWORD vk) const;             // canonical modifiered key for a VK
+    std::string lookup(DWORD vk) const;                 // hotkeys-mode action for a VK, or ""
+    std::string lookup_key(const std::string& key) const; // action for a canonical key, or ""
 
     HWND hwnd_ = nullptr;
     HHOOK hook_ = nullptr;

@@ -429,4 +429,12 @@ bool BlueskyAccount::unboost(const Status& status) {
     return delete_record("app.bsky.feed.repost", *t.repost_uri);
 }
 
+bool BlueskyAccount::delete_post(const Status& status) {
+    // The post's own at-uri is its id; deleting the record removes the post.
+    const Status& t = status.display_status();
+    if (t.id.empty())
+        return false;
+    return delete_record("app.bsky.feed.post", t.id);
+}
+
 } // namespace fastsm

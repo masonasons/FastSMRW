@@ -124,6 +124,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         checked(dlg, IDC_SET_STREAMING, ctx->settings.streaming_enabled);
         checked(dlg, IDC_SET_SHOW_MENTIONS, ctx->settings.show_mentions_in_notifications);
         checked(dlg, IDC_SET_REVERSE, ctx->settings.reverse_timelines);
+        checked(dlg, IDC_SET_AUTOLOAD, ctx->settings.auto_load_older);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -140,6 +141,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             ctx->settings.streaming_enabled = is_checked(dlg, IDC_SET_STREAMING);
             ctx->settings.show_mentions_in_notifications = is_checked(dlg, IDC_SET_SHOW_MENTIONS);
             ctx->settings.reverse_timelines = is_checked(dlg, IDC_SET_REVERSE);
+            ctx->settings.auto_load_older = is_checked(dlg, IDC_SET_AUTOLOAD);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
@@ -555,6 +557,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         checked(dlg, IDC_SET_CONFIRM_CLEAR, ctx->settings.confirm_clear_timeline);
         checked(dlg, IDC_SET_CONFIRM_BLOCK, ctx->settings.confirm_block);
         checked(dlg, IDC_SET_CONFIRM_UNBLOCK, ctx->settings.confirm_unblock);
+        checked(dlg, IDC_SET_CONFIRM_DELETE, ctx->settings.confirm_delete_post);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -567,6 +570,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             ctx->settings.confirm_clear_timeline = is_checked(dlg, IDC_SET_CONFIRM_CLEAR);
             ctx->settings.confirm_block = is_checked(dlg, IDC_SET_CONFIRM_BLOCK);
             ctx->settings.confirm_unblock = is_checked(dlg, IDC_SET_CONFIRM_UNBLOCK);
+            ctx->settings.confirm_delete_post = is_checked(dlg, IDC_SET_CONFIRM_DELETE);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

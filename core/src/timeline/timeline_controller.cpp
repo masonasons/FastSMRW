@@ -127,15 +127,24 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
         // Only chime for rows that will actually be visible — e.g. a streamed
         // mention shouldn't ping when mentions are hidden from Notifications.
         int visible_new = 0;
-        for (const auto& it : added)
-            if (!filter_ || filter_(it))
-                ++visible_new;
+        bool has_direct = false;
+        for (const auto& it : added) {
+            if (filter_ && !filter_(it))
+                continue; // hidden (client filter / hide filter / hidden mentions)
+            // A post that matched a server-side filter (even a "warn" one that's
+            // still shown) shouldn't chime.
+            if (const Status* s = it.status(); s && s->any_filter_matched())
+                continue;
+            ++visible_new;
+            if (it.is_direct())
+                has_direct = true; // a DM/direct mention -> the "messages" chime
+        }
         // Prepend the genuinely new rows, preserving server order.
         added.insert(added.end(), std::make_move_iterator(raw_.begin()),
                      std::make_move_iterator(raw_.end()));
         raw_ = std::move(added);
         if (visible_new > 0 && on_received_new)
-            on_received_new(visible_new);
+            on_received_new(visible_new, has_direct);
     }
 
     // Keep rows newest-first by timestamp (notifications included — their
@@ -571,6 +580,48 @@ int TimelineController::toggle_pin_post(int visible_index, std::function<void(bo
         });
     });
     return want ? 1 : 0;
+}
+
+void TimelineController::remove_status(const std::string& id) {
+    if (id.empty())
+        return;
+    const size_t before = raw_.size();
+    raw_.erase(std::remove_if(raw_.begin(), raw_.end(),
+                              [&](const TimelineItem& it) {
+                                  if (it.id() == id)
+                                      return true;
+                                  const Status* s = it.actionable_status();
+                                  return s && s->id == id;
+                              }),
+               raw_.end());
+    if (raw_.size() == before)
+        return; // nothing matched
+    rebuild_visible();
+    persist();
+    if (on_change)
+        on_change();
+}
+
+void TimelineController::update_status(const Status& updated) {
+    bool changed = false;
+    auto try_replace = [&](Status* s) {
+        if (s && s->id == updated.id) {
+            *s = updated;
+            changed = true;
+        }
+    };
+    for (auto& item : raw_) {
+        Status* s = item.mutable_status(); // the row's status (or a notification's post)
+        try_replace(s);
+        if (s && s->reblog)
+            try_replace(s->reblog.get()); // an edited original shown here as a boost
+    }
+    if (!changed)
+        return;
+    rebuild_visible();
+    persist();
+    if (on_change)
+        on_change();
 }
 
 void TimelineController::set_poll(const std::string& row_id, const Poll& poll) {

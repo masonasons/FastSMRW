@@ -68,6 +68,7 @@ private:
     void cmd_toggle_boost(const nlohmann::json& cmd);
     void cmd_toggle_favorite(const nlohmann::json& cmd);
     void cmd_toggle_pin_post(const nlohmann::json& cmd); // pin/unpin your own post to profile
+    void cmd_delete_post(const nlohmann::json& cmd);     // delete your own post
     void cmd_post(const nlohmann::json& cmd);
     void cmd_compose_context(const nlohmann::json& cmd);
     void cmd_open_status(const nlohmann::json& cmd);
@@ -151,7 +152,10 @@ private:
     void cmd_get_keymap(const nlohmann::json& cmd);   // {name?} -> resolved bindings
     void cmd_set_active_keymap(const nlohmann::json& cmd);
     void cmd_save_keymap(const nlohmann::json& cmd);  // {name, overrides, unbinds}
+    void cmd_import_keymap(const nlohmann::json& cmd); // {name, text} — from an old FastSM keymap
     void cmd_delete_keymap(const nlohmann::json& cmd);
+    // Atomically write a keymap file (temp + rename) so a partial write can't blank it.
+    void write_keymap_file(const std::string& name, const std::string& contents);
     void cmd_perform_action(const nlohmann::json& cmd); // {action}
     void cmd_get_layer_keymap();                        // layer bindings + activation combo
     void cmd_set_window_shown(const nlohmann::json& cmd); // persist window visibility

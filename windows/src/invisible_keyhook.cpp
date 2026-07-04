@@ -3,6 +3,9 @@
 #include <string>
 
 #include "app_messages.hpp"
+#include "fastsm/util/log.hpp"
+
+using fastsm::log::write;
 
 namespace fastsmui {
 namespace {
@@ -93,12 +96,14 @@ std::string KeyhookDriver::key_string(DWORD vk) const {
     return key + base;
 }
 
-std::string KeyhookDriver::lookup(DWORD vk) const {
-    const std::string key = key_string(vk);
-    if (key.empty())
-        return {};
+std::string KeyhookDriver::lookup_key(const std::string& key) const {
     auto it = bindings_.find(key);
     return it == bindings_.end() ? std::string{} : it->second;
+}
+
+std::string KeyhookDriver::lookup(DWORD vk) const {
+    const std::string key = key_string(vk);
+    return key.empty() ? std::string{} : lookup_key(key);
 }
 
 LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
@@ -118,6 +123,7 @@ LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
         if (!g_active->in_layer_) {
             if (g_active->key_string(kb->vkCode) == g_active->activation_key_) {
                 g_active->in_layer_ = true;
+                write("keyhook: layer opened via '" + g_active->activation_key_ + "'");
                 post(kLayerEnter);
                 return 1;
             }
@@ -144,6 +150,7 @@ LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
         if (it == g_active->layer_bindings_.end() && full != base)
             it = g_active->layer_bindings_.find(base);
         if (it != g_active->layer_bindings_.end()) {
+            write("keyhook: layer key '" + full + "' -> " + it->second);
             post(it->second.c_str());
             return 1;
         }
@@ -151,10 +158,14 @@ LRESULT CALLBACK KeyhookDriver::hook_proc(int code, WPARAM wp, LPARAM lp) {
     }
 
     // Hotkeys mode.
-    const std::string action = g_active->lookup(kb->vkCode);
+    const std::string key = g_active->key_string(kb->vkCode);
+    const std::string action = key.empty() ? std::string{} : g_active->lookup_key(key);
     if (!action.empty()) {
-        // Keep the hook proc fast and side-effect-free: never call SendInput here
-        // (doing so made Windows ignore the swallow and let Win+arrow Snap through).
+        // Only a matched combo is logged (not every keystroke) so the hook stays
+        // fast and this isn't a keylogger. Keep the proc side-effect-free otherwise:
+        // never call SendInput here (it made Windows ignore the swallow and let
+        // Win+arrow Snap through).
+        write("keyhook: '" + key + "' -> " + action + " (swallowed)");
         post(action.c_str());
         return 1; // swallow: don't let the shell / focused app see it
     }
@@ -165,6 +176,7 @@ void KeyhookDriver::set_hotkeys(const std::map<std::string, std::string>& key_to
     mode_ = Mode::Hotkeys;
     bindings_ = key_to_action;
     in_layer_ = false;
+    write("keyhook: hotkeys mode, " + std::to_string(bindings_.size()) + " binding(s)");
 }
 
 void KeyhookDriver::set_layer(const std::string& activation_key,
@@ -185,18 +197,26 @@ void KeyhookDriver::open_layer(const std::string& activation_key,
 }
 
 void KeyhookDriver::enable() {
-    if (hook_)
+    if (hook_) {
+        write("keyhook: enable() ignored (hook already installed)");
         return;
+    }
     g_active = this;
     hook_ = SetWindowsHookExW(WH_KEYBOARD_LL, &KeyhookDriver::hook_proc, GetModuleHandleW(nullptr), 0);
-    if (!hook_)
+    if (!hook_) {
         g_active = nullptr;
+        write("keyhook: SetWindowsHookEx FAILED, err=" + std::to_string(GetLastError()));
+        return;
+    }
+    write("keyhook: hook installed (mode=" +
+          std::string(mode_ == Mode::Layer ? "layer" : "hotkeys") + ")");
 }
 
 void KeyhookDriver::disable() {
     if (hook_) {
         UnhookWindowsHookEx(hook_);
         hook_ = nullptr;
+        write("keyhook: hook removed");
     }
     if (g_active == this)
         g_active = nullptr;

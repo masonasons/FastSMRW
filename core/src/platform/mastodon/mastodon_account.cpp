@@ -589,6 +589,13 @@ bool MastodonAccount::status_action(const std::string& status_id, const char* ve
     return request("POST", url, "", "", body, status);
 }
 
+bool MastodonAccount::delete_post(const Status& status) {
+    const std::string url = credentials_.instance_url + "/api/v1/statuses/" + status.id;
+    std::string body;
+    long http_status = 0;
+    return request("DELETE", url, "", "", body, http_status);
+}
+
 std::string MastodonAccount::remote_account_id(const std::string& base,
                                                const std::string& username) {
     net::HttpRequest req;
@@ -1084,19 +1091,30 @@ std::optional<StreamItem> MastodonAccount::parse_stream_event(const std::string&
                                                               const TimelineSource& route) const {
     try {
         if (event == "update") {
-            // A status update feeds the timeline this stream is for (home, local,
+            // A new status feeds the timeline this stream is for (home, local,
             // federated, a hashtag, a list...).
-            return StreamItem{TimelineItem{mastodon::map_status(json::parse(data))}, route};
+            return StreamItem{StreamItem::Op::Add,
+                              TimelineItem{mastodon::map_status(json::parse(data))}, route, {}};
+        }
+        if (event == "status.update") {
+            // An edited post: replace the existing row in place wherever it appears.
+            return StreamItem{StreamItem::Op::Update,
+                              TimelineItem{mastodon::map_status(json::parse(data))}, route, {}};
+        }
+        if (event == "delete") {
+            // The payload is just the deleted status id; drop it from every tab.
+            return StreamItem{StreamItem::Op::Delete, TimelineItem{}, route, data};
         }
         if (event == "notification") {
             // Notifications only arrive on the user stream and always feed Notifications.
-            return StreamItem{TimelineItem{mastodon::map_notification(json::parse(data))},
-                              TimelineSource::notifications()};
+            return StreamItem{StreamItem::Op::Add,
+                              TimelineItem{mastodon::map_notification(json::parse(data))},
+                              TimelineSource::notifications(), {}};
         }
     } catch (...) {
         // Malformed payload — ignore this event.
     }
-    return std::nullopt; // delete / filters_changed / keep-alives are ignored
+    return std::nullopt; // filters_changed / keep-alives are ignored
 }
 
 } // namespace fastsm

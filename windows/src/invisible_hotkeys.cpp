@@ -3,6 +3,10 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "fastsm/util/log.hpp"
+
+using fastsm::log::write;
+
 namespace fastsmui {
 namespace {
 
@@ -75,19 +79,32 @@ bool parse_hotkey(const std::string& key, UINT& mods_out, UINT& vk_out) {
 
 void HotkeyDriver::set_bindings(const std::map<std::string, std::string>& key_to_action) {
     clear();
-    if (!hwnd_)
+    if (!hwnd_) {
+        write("hotkeys: set_bindings with no window yet");
         return;
+    }
     int id = kBaseId;
+    int ok = 0, failed = 0, unparsed = 0;
     for (const auto& [key, action] : key_to_action) {
         UINT mods = 0, vk = 0;
-        if (!parse_hotkey(key, mods, vk))
+        if (!parse_hotkey(key, mods, vk)) {
+            ++unparsed;
+            write("hotkeys: could not parse '" + key + "' (" + action + ")");
             continue;
-        // MOD_NOREPEAT (Win7+) stops held keys from firing repeatedly. A combo
-        // already owned by another process or the Windows shell (e.g. Win+arrow
-        // Snap shortcuts) is refused here; the keyhook mode captures those.
-        if (RegisterHotKey(hwnd_, id, mods, vk))
+        }
+        // A combo already owned by another process or the Windows shell (e.g.
+        // Win+arrow Snap shortcuts) is refused here; the keyhook mode captures those.
+        if (RegisterHotKey(hwnd_, id, mods, vk)) {
             id_to_action_[id++] = action;
+            ++ok;
+        } else {
+            ++failed;
+            write("hotkeys: RegisterHotKey failed for '" + key + "' (" + action +
+                  "), err=" + std::to_string(GetLastError()));
+        }
     }
+    write("hotkeys: registered " + std::to_string(ok) + ", failed " + std::to_string(failed) +
+          ", unparsed " + std::to_string(unparsed));
 }
 
 void HotkeyDriver::clear() {

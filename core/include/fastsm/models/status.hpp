@@ -68,6 +68,14 @@ struct Status {
         return reblog ? reblog->any_filter_hides() : false;
     }
 
+    // True if ANY server-side filter matched (hide OR warn). A warn-filtered post
+    // is still shown, but shouldn't play a new-post chime.
+    bool any_filter_matched() const {
+        if (!filtered.empty())
+            return true;
+        return reblog ? reblog->any_filter_matched() : false;
+    }
+
     // The status to actually display: the boosted one if this is a boost.
     const Status& display_status() const { return reblog ? *reblog : *this; }
     Status& display_status() { return reblog ? *reblog : *this; }

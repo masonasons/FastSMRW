@@ -354,6 +354,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_toggle_favorite(cmd);
     else if (c == "toggle_pin_post")
         cmd_toggle_pin_post(cmd);
+    else if (c == "delete_post")
+        cmd_delete_post(cmd);
     else if (c == "post")
         cmd_post(cmd);
     else if (c == "compose_context")
@@ -418,6 +420,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_set_active_keymap(cmd);
     else if (c == "save_keymap")
         cmd_save_keymap(cmd);
+    else if (c == "import_keymap")
+        cmd_import_keymap(cmd);
     else if (c == "delete_keymap")
         cmd_delete_keymap(cmd);
     else if (c == "perform_action")
@@ -924,6 +928,8 @@ void CoreSession::spawn_source(const TimelineSource& src) {
     }
     timelines_.push_back(make_controller(accounts_.selected(), src));
     current_ = static_cast<int>(timelines_.size()) - 1;
+    // Chime that a new timeline opened (matches FastSM's "open" sound).
+    sound_.play_named("open", soundpack_for(accounts_.selected()));
     TimelineController* p = timelines_.back().get();
     p->set_origin_key(origin);
     // Restore this timeline's remembered position (works for spawned kinds too).
@@ -1610,6 +1616,44 @@ void CoreSession::cmd_toggle_pin_post(const json& cmd) {
     }
 }
 
+void CoreSession::cmd_delete_post(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc || !tc->account())
+        return;
+    SocialAccount* account = tc->account();
+    const std::string row_id = cmd.value("id", std::string{});
+    const TimelineItem* item = find_item(tc, row_id);
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s) {
+        sound_.play(sound::Earcon::Error);
+        return;
+    }
+    // Only your OWN posts can be deleted.
+    if (s->account.id != account->me().id) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("You can only delete your own posts.");
+        return;
+    }
+    const Status target = *s;
+    const std::string post_id = s->id;
+    worker_.post([this, account, target, post_id] {
+        const bool ok = account->delete_post(target);
+        loop_.post([this, ok, post_id] {
+            if (!ok) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Delete failed");
+                return;
+            }
+            for (auto& tc2 : timelines_) // drop it from every open tab it appears in
+                tc2->remove_status(post_id);
+            sound_.play(sound::Earcon::Delete);
+            emit_announce("Post deleted");
+        });
+    });
+}
+
 void CoreSession::cmd_post(const json& cmd) {
     TimelineController* tc = current();
     if (!tc)
@@ -1747,7 +1791,8 @@ void CoreSession::cmd_post_info(const json& cmd) {
                {"id", cmd.value("id", std::string{})},
                {"text", present::post_info(*s, util::now_unix())},
                {"features", features_json(tc->account()->features())},
-               {"has_url", !s->url.empty()}};
+               {"has_url", !s->url.empty()},
+               {"is_mine", s->account.id == tc->account()->me().id}};
     // A poll the viewer can still vote in (not yet voted, not closed): let the UI
     // offer the voting controls. Otherwise the results are already in the text.
     if (s->poll && !s->poll->voted && !s->poll->expired) {
@@ -2039,6 +2084,22 @@ void CoreSession::cmd_set_active_keymap(const json& cmd) {
     emit_keymap(settings_.invisible_keymap);
 }
 
+void CoreSession::write_keymap_file(const std::string& name, const std::string& contents) {
+    std::error_code ec;
+    std::filesystem::create_directories(keymaps_dir(), ec);
+    const auto path = keymaps_dir() / (name + ".keymap");
+    const auto tmp = keymaps_dir() / (name + ".keymap.tmp");
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+        out << contents;
+    }
+    std::filesystem::rename(tmp, path, ec); // atomic-ish replace; original stays intact on failure
+    if (ec)
+        std::filesystem::remove(tmp, ec);
+}
+
 void CoreSession::cmd_save_keymap(const json& cmd) {
     const std::string name = cmd.value("name", std::string{});
     if (name.empty() || name == "default")
@@ -2050,12 +2111,29 @@ void CoreSession::cmd_save_keymap(const json& cmd) {
     std::set<std::string> unbinds;
     for (const auto& u : cmd.value("unbinds", json::array()))
         unbinds.insert(u.get<std::string>());
-    std::error_code ec;
-    std::filesystem::create_directories(keymaps_dir(), ec);
-    std::ofstream out(keymaps_dir() / (name + ".keymap"), std::ios::binary | std::ios::trunc);
-    if (out)
-        out << input::serialize_keymap(overrides, unbinds);
+    write_keymap_file(name, input::serialize_keymap(overrides, unbinds));
     emit_keymap(name);
+}
+
+void CoreSession::cmd_import_keymap(const json& cmd) {
+    const std::string name = cmd.value("name", std::string{});
+    const std::string text = cmd.value("text", std::string{});
+    if (name.empty() || name == "default")
+        return;
+    int dropped = 0;
+    std::set<std::string> unbinds;
+    std::map<std::string, std::string> overrides =
+        input::import_fastsm_keymap(text, &dropped, &unbinds);
+    write_keymap_file(name, input::serialize_keymap(overrides, unbinds));
+    settings_.invisible_keymap = name; // make the freshly-imported keymap active
+    save_config();
+    emit_settings(); // keep the UI's active-keymap name fresh before the keymap event
+    emit_keymap(name);
+    std::string msg = "Imported " + std::to_string(overrides.size()) + " shortcut" +
+                      (overrides.size() == 1 ? "" : "s") + " into " + name;
+    if (dropped > 0)
+        msg += "; skipped " + std::to_string(dropped) + " with no FastSMRW equivalent";
+    emit_announce(msg);
 }
 
 void CoreSession::cmd_delete_keymap(const json& cmd) {
@@ -2289,6 +2367,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_favorite({{"id", row}});
     if (a == "PinPost")
         return cmd_toggle_pin_post({{"id", row}});
+    if (a == "DeletePost")
+        return cmd_delete_post({{"id", row}});
     if (a == "FollowHashtag")
         return cmd_follow_hashtag_prompt({{"id", row}});
     if (a == "ManageHashtags")
@@ -2355,7 +2435,7 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     if (a == "AccountSettings")
         return cmd_get_account_settings(); // emits account_settings -> UI opens the dialog
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
-    if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" || a == "StopAudio" ||
+    if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" ||
         a == "StopMedia" || a == "Find" || a == "FindNext" || a == "FindPrev" ||
         a == "EnterLayer" || a == "NewTimeline") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
@@ -2494,11 +2574,18 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
             emit_timeline(i);
     };
     tc->on_error = [this](std::string e) { emit_announce(e); };
-    tc->on_received_new = [this, p](int n) {
-        if (n > 0)
-            if (auto name = p->source().new_items_sound_name())
-                // A background account's chime sounds in that account's own pack.
-                sound_.play_named(*name, soundpack_for(p->account()));
+    tc->on_received_new = [this, p](int n, bool has_direct) {
+        if (n <= 0)
+            return;
+        const std::string pack = soundpack_for(p->account()); // sound in that account's pack
+        // A direct message / direct mention gets the "messages" chime instead of
+        // the usual mentions/notification sound (matches FastSM).
+        if (has_direct && p->source().is_notification_timeline()) {
+            sound_.play_named("messages", pack);
+            return;
+        }
+        if (auto name = p->source().new_items_sound_name())
+            sound_.play_named(*name, pack);
     };
     return tc;
 }
@@ -2864,6 +2951,20 @@ void CoreSession::update_streaming() {
                 auto* dest = timelines_for_account(key);
                 if (!dest)
                     return;
+                // An edited post: replace it in place wherever it appears.
+                if (item.op == StreamItem::Op::Update) {
+                    if (const Status* s = item.item.status())
+                        for (auto& tc : *dest)
+                            tc->update_status(*s);
+                    return;
+                }
+                // A deleted post: drop it from every tab.
+                if (item.op == StreamItem::Op::Delete) {
+                    if (!item.removed_id.empty())
+                        for (auto& tc : *dest)
+                            tc->remove_status(item.removed_id);
+                    return;
+                }
                 const std::string target = item.target.cache_key();
                 // A streamed mention notification also feeds an open Mentions
                 // timeline -- which stores the post itself, not the notification row.
@@ -3031,6 +3132,8 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
     if (const Status* s = item.actionable_status()) {
         r["favorited"] = s->favourited;
         r["boosted"] = s->boosted;
+        if (SocialAccount* me = accounts_.selected())
+            r["is_mine"] = s->account.id == me->me().id; // your own post -> deletable
     }
     // A follow-request notification: surface the requester so Enter can accept/reject.
     if (const Notification* n = item.notification();
