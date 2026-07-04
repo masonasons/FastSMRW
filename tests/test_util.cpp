@@ -31,6 +31,13 @@ void test_html_stripping() {
     CHECK_EQ(strip_html("line<br>break"), std::string("line break"));
     // Unknown entity passes through unchanged.
     CHECK_EQ(strip_html("a &bogus; b"), std::string("a &bogus; b"));
+
+    // keep_breaks: block boundaries and <br> become real newlines (paragraphs
+    // separated by a blank line), while runs of spaces still collapse.
+    CHECK_EQ(strip_html("<p>a</p><p>b</p>", true), std::string("a\n\nb"));
+    CHECK_EQ(strip_html("line<br>break", true), std::string("line\nbreak"));
+    CHECK_EQ(strip_html("  <div>  spaced  </div>  ", true), std::string("spaced"));
+    CHECK_EQ(strip_html("one   two", true), std::string("one two"));
 }
 
 void test_entity_decoding() {

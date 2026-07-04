@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.1.7
+-----
+
+- Fixed: the post view now keeps a post's paragraph and line breaks instead of running everything onto one line.
+
 0.1.6
 -----
 

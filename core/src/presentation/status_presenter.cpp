@@ -7,6 +7,7 @@
 
 #include "fastsm/util/demojify.hpp"
 #include "fastsm/util/html_stripper.hpp"
+#include "fastsm/util/quote_text.hpp"
 #include "fastsm/util/relative_date.hpp"
 
 namespace fastsm::present {
@@ -536,13 +537,24 @@ static std::string poll_text(const Poll& p, std::int64_t now) {
     return out;
 }
 
+// The post body for the full post view, preserving the author's line breaks.
+// Mastodon serves HTML, so re-strip it keeping paragraph/<br> breaks; Bluesky
+// text (no HTML) already carries real newlines. (The timeline row and spoken
+// strings use the flattened single-line s.text instead.)
+static std::string detail_body(const Status& s) {
+    std::string body = s.content.empty() ? s.text : util::strip_html(s.content, true);
+    if (s.quote) // the quote is shown on its own, so drop its trailing URL
+        body = util::strip_quote_url(body, s.quote->url);
+    return body;
+}
+
 std::string post_info(const Status& s, std::int64_t now) {
     std::string out;
     out += s.account.best_name() + " (@" + s.account.acct + ")\n";
     out += present_time(s.created_at, now, true) + "\n";
     if (s.has_content_warning())
         out += "Content warning: " + *s.spoiler_text + "\n";
-    out += "\n" + s.text + "\n";
+    out += "\n" + detail_body(s) + "\n";
     if (s.poll)
         out += poll_text(*s.poll, now);
     if (!s.media_attachments.empty()) {

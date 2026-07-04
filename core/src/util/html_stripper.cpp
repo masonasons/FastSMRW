@@ -74,6 +74,35 @@ std::string collapse_whitespace(std::string_view s) {
     return out;
 }
 
+// Collapse runs of spaces/tabs to a single space, but keep newlines as line
+// breaks (a run of two or more becomes a paragraph blank line). Leading and
+// trailing whitespace/newlines are trimmed. Used when keep_breaks is set.
+std::string collapse_keeping_breaks(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    int pending_newlines = 0; // newlines seen since the last printed char
+    bool pending_space = false;
+    for (char c : s) {
+        if (c == '\n' || c == '\r') {
+            if (!out.empty())
+                ++pending_newlines;
+            pending_space = false; // a newline supersedes a plain space
+        } else if (c == ' ' || c == '\t' || c == '\f' || c == '\v') {
+            if (!out.empty() && pending_newlines == 0)
+                pending_space = true;
+        } else {
+            if (pending_newlines > 0)
+                out.append(pending_newlines >= 2 ? "\n\n" : "\n");
+            else if (pending_space)
+                out.push_back(' ');
+            pending_newlines = 0;
+            pending_space = false;
+            out.push_back(c);
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 std::string decode_entities(std::string_view s) {
@@ -137,7 +166,7 @@ std::string decode_entities(std::string_view s) {
     return out;
 }
 
-std::string strip_html(std::string_view html) {
+std::string strip_html(std::string_view html, bool keep_breaks) {
     std::string out;
     out.reserve(html.size());
     size_t i = 0;
@@ -162,10 +191,11 @@ std::string strip_html(std::string_view html) {
         for (size_t k = name_start; k < p; ++k)
             name.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(html[k]))));
         if (is_break_tag(name))
-            out.push_back(' ');
+            out.push_back(keep_breaks ? '\n' : ' ');
         i = end + 1;
     }
-    return collapse_whitespace(decode_entities(out));
+    const std::string decoded = decode_entities(out);
+    return keep_breaks ? collapse_keeping_breaks(decoded) : collapse_whitespace(decoded);
 }
 
 } // namespace fastsm::util
