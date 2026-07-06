@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.1
+-----
+
+- Fixed: when Enter is set to send a post, Shift+Enter now inserts a line break instead of sending.
+
 0.2.0
 -----
 

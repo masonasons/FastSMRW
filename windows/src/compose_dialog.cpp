@@ -301,13 +301,17 @@ LRESULT CALLBACK EditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWOR
     Ctx* ctx = reinterpret_cast<Ctx*>(ref);
     if (msg == WM_KEYDOWN && wp == VK_RETURN) {
         const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        const bool send = ctx->req->enter_to_send ? !ctrl : ctrl;
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        // When Enter sends, either Ctrl+Enter or Shift+Enter inserts a newline;
+        // when Enter inserts a newline, Ctrl+Enter sends.
+        const bool newline_combo = ctrl || shift;
+        const bool send = ctx->req->enter_to_send ? !newline_combo : ctrl;
         if (send) {
             PostMessageW(GetParent(h), WM_COMMAND, IDOK, 0);
             ctx->eat_char = true;
             return 0;
         }
-        if (ctx->req->enter_to_send && ctrl) {
+        if (ctx->req->enter_to_send && newline_combo) {
             SendMessageW(h, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L"\r\n"));
             ctx->eat_char = true;
             return 0;
