@@ -2181,10 +2181,17 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
 }
 
 void MainWindow::ev_media_open(const json& e) {
+    const std::string kind = e.value("kind", std::string{});
     const std::wstring url = to_wide(e.value("url", std::string{}));
     const std::wstring title = to_wide(e.value("title", std::string{}));
     if (url.empty())
         return;
+    // Only audio streams in the in-app player; images/video/gifv open in the
+    // system app (unchanged from when the core emitted open_url for them).
+    if (!kind.empty() && kind != "audio") {
+        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
+        return;
+    }
     if (settings_.value("media_background", false)) { // no window; stop with Ctrl+S
         play_media_background(url, title);
         return;

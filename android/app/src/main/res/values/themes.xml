@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Minimal framework theme; Compose supplies the real styling via
+         MaterialTheme. No dependency on the Material XML components library. -->
+    <style name="Theme.FastSMRW" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

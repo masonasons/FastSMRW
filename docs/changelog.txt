@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.0
+-----
+
+- FastSMRW is now available on Android for Mastodon and Bluesky, sharing the same engine as the Windows app.
+
 0.1.7
 -----
 

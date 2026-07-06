@@ -408,6 +408,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_clear_all_timelines();
     else if (c == "add_account")
         cmd_add_account(cmd);
+    else if (c == "begin_mastodon_login")
+        cmd_begin_mastodon_login(cmd);
+    else if (c == "finish_mastodon_login")
+        cmd_finish_mastodon_login(cmd);
     else if (c == "remove_account")
         cmd_remove_account(cmd);
     else if (c == "play_earcon")
@@ -546,6 +550,58 @@ void CoreSession::cmd_add_account(const json& cmd) {
             });
         });
     }
+}
+
+// The redirect URI Android registers and catches via a fastsm://oauth deep link.
+static constexpr const char* kMastodonRedirect = "fastsm://oauth";
+
+void CoreSession::cmd_begin_mastodon_login(const json& cmd) {
+    const std::string instance = cmd.value("instance", std::string{});
+    emit_announce("Authorizing in your browser…");
+    worker_.post([this, instance] {
+        MastodonAuth auth(http_.get());
+        MastodonBeginResult begun = auth.begin_login(instance, kMastodonRedirect);
+        loop_.post([this, begun = std::move(begun)]() mutable {
+            if (begun.ok) {
+                pending_mastodon_ = begun.credentials;
+                emit({{"event", "open_url"}, {"url", begun.authorize_url}});
+            } else {
+                emit({{"event", "auth_result"}, {"ok", false}, {"error", begun.error}});
+            }
+        });
+    });
+}
+
+void CoreSession::cmd_finish_mastodon_login(const json& cmd) {
+    const std::string code = cmd.value("code", std::string{});
+    const MastodonCredentials creds = pending_mastodon_; // captured on the loop thread
+    if (creds.client_id.empty()) {
+        emit({{"event", "auth_result"}, {"ok", false}, {"error", "No pending login"}});
+        return;
+    }
+    emit_announce("Finishing login…");
+    worker_.post([this, creds, code] {
+        MastodonAuth auth(http_.get());
+        MastodonLoginResult r = auth.finish_login(creds, code, kMastodonRedirect);
+        loop_.post([this, r = std::move(r)]() mutable {
+            if (r.ok) {
+                store::StoredCredential cred;
+                cred.mastodon = r.credentials;
+                auto account = std::make_unique<MastodonAccount>(r.credentials, r.me, http_.get());
+                const std::string key = account->account_key();
+                SocialAccount* acct_ptr = account.get();
+                accounts_.add(std::move(account), cred);
+                worker_.post([acct_ptr] { acct_ptr->load_configuration(); });
+                switch_account(key);
+                save_config();
+                emit_accounts();
+                emit_timelines();
+                emit_all_timelines();
+                pending_mastodon_ = {};
+            }
+            emit({{"event", "auth_result"}, {"ok", r.ok}, {"error", r.error}});
+        });
+    });
 }
 
 void CoreSession::cmd_remove_account(const json& cmd) {
@@ -1873,11 +1929,10 @@ void CoreSession::play_one_media(const std::string& url, const std::string& kind
         emit_announce("No media to play");
         return;
     }
-    // Audio streams in-app (seek/volume); video/gif/image go to the system player.
-    if (kind == "audio")
-        emit({{"event", "media_open"}, {"url", url}, {"title", title}});
-    else
-        emit({{"event", "open_url"}, {"url", url}});
+    // One media_open event carries the kind; each front end decides how to render
+    // (the Win32 app streams audio in-app and opens other kinds externally; a
+    // native mobile app shows an in-app image/video viewer).
+    emit({{"event", "media_open"}, {"url", url}, {"kind", kind}, {"title", title}});
 }
 
 void CoreSession::cmd_play_media(const json& cmd) {
@@ -3132,6 +3187,8 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
     if (const Status* s = item.actionable_status()) {
         r["favorited"] = s->favourited;
         r["boosted"] = s->boosted;
+        if (!s->media_attachments.empty())
+            r["has_media"] = true; // gates the "View media" action
         if (SocialAccount* me = accounts_.selected())
             r["is_mine"] = s->account.id == me->me().id; // your own post -> deletable
     }

@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 #include "fastsm/net/http_client.hpp"
+#include "fastsm/platform/mastodon/mastodon_credentials.hpp"
 #include "fastsm/runtime/worker_queue.hpp"
 #include "fastsm/sound/sound_manager.hpp"
 #include "fastsm/store/account_store.hpp"
@@ -131,6 +132,10 @@ private:
     void cmd_clear_timeline();
     void cmd_clear_all_timelines();
     void cmd_add_account(const nlohmann::json& cmd);
+    // Mastodon OAuth for front ends with their own redirect handling (Android):
+    // begin registers the app + emits an open_url; finish exchanges the code.
+    void cmd_begin_mastodon_login(const nlohmann::json& cmd);
+    void cmd_finish_mastodon_login(const nlohmann::json& cmd);
     void cmd_remove_account(const nlohmann::json& cmd);
     void cmd_play_earcon(const nlohmann::json& cmd);
 
@@ -256,6 +261,10 @@ private:
     // Closed timelines kept alive (with in-flight async) until shutdown.
     std::vector<std::unique_ptr<TimelineController>> retired_;
     int current_ = 0;
+
+    // Between begin_mastodon_login (app registered) and finish_mastodon_login
+    // (code exchanged): the app credentials awaiting the redirect's code.
+    MastodonCredentials pending_mastodon_;
 
     std::vector<MovementUnit> movement_units_ = MovementUnit::catalog();
     int movement_unit_ = 0; // currently selected unit (Ctrl+Left/Right cycles)

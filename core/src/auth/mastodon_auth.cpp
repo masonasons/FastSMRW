@@ -1,24 +1,37 @@
 #include "fastsm/auth/mastodon_auth.hpp"
 
+// The OAuth flow is split into two portable steps — begin_login (register the
+// app + build the authorize URL for a given redirect URI) and finish_login
+// (exchange the code + verify) — so any front end can drive its own redirect
+// handling. The desktop login() below wraps them around a 127.0.0.1 loopback
+// listener that catches the browser redirect; that listener is Windows-only.
+// Android drives a Custom Tab + fastsm://oauth deep link and calls the two
+// helpers directly.
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#endif
 
 #include <nlohmann/json.hpp>
 
 #include <random>
 #include <string>
+#include <vector>
 
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
 #include "fastsm/util/url.hpp"
 
+#ifdef _WIN32
 #pragma comment(lib, "ws2_32.lib")
+#endif
 
 using nlohmann::json;
 
 namespace fastsm {
+
 namespace {
 
 constexpr const char* kScopes = "read write follow";
@@ -33,6 +46,11 @@ std::string random_state() {
         s.push_back(hex[dist(rd)]);
     return s;
 }
+
+} // namespace
+
+#ifdef _WIN32
+namespace {
 
 // A one-shot loopback HTTP listener: binds 127.0.0.1 on an OS-chosen port,
 // hands back the port, then blocks until the browser hits the redirect and
@@ -117,6 +135,7 @@ private:
 };
 
 } // namespace
+#endif // _WIN32 (loopback listener)
 
 MastodonAuth::MastodonAuth(net::IHttpClient* http) : http_(http) {}
 
@@ -138,79 +157,78 @@ std::string MastodonAuth::normalize_instance(std::string input) {
     return input.empty() ? std::string{} : "https://" + input;
 }
 
-MastodonLoginResult
-MastodonAuth::login(const std::string& instance_input,
-                    const std::function<void(const std::string&)>& open_browser) {
-    MastodonLoginResult result;
+// Portable step 1: register the app for `redirect_uri` and build the authorize
+// URL. The caller sends the user to authorize_url, then hands the returned code
+// (with credentials) to finish_login().
+MastodonBeginResult MastodonAuth::begin_login(const std::string& instance_input,
+                                              const std::string& redirect_uri) {
+    MastodonBeginResult result;
     const std::string instance = normalize_instance(instance_input);
     if (instance.empty()) {
         result.error = "Empty instance";
         return result;
     }
 
-    LoopbackListener listener;
-    if (!listener.start()) {
-        result.error = "Could not start local listener";
+    std::vector<std::pair<std::string, std::string>> params = {
+        {"client_name", kClientName},
+        {"redirect_uris", redirect_uri},
+        {"scopes", kScopes},
+        {"website", "https://github.com/masonasons/FastSM"}};
+    net::HttpRequest req;
+    req.method = "POST";
+    req.url = instance + "/api/v1/apps";
+    req.headers.push_back({"Content-Type", "application/x-www-form-urlencoded"});
+    req.body = util::form_encode(params);
+    const net::HttpResponse res = http_->send(req);
+    if (!res.ok()) {
+        result.error = "App registration failed (" + std::to_string(res.status) + ")";
         return result;
     }
-    const std::string redirect = listener.redirect_uri();
-
-    // 1) Register the app (client_name=FastSMRW). redirect_uris must match.
-    {
-        std::vector<std::pair<std::string, std::string>> params = {
-            {"client_name", kClientName},
-            {"redirect_uris", redirect},
-            {"scopes", kScopes},
-            {"website", "https://github.com/masonasons/FastSM"}};
-        net::HttpRequest req;
-        req.method = "POST";
-        req.url = instance + "/api/v1/apps";
-        req.headers.push_back({"Content-Type", "application/x-www-form-urlencoded"});
-        req.body = util::form_encode(params);
-        const net::HttpResponse res = http_->send(req);
-        if (!res.ok()) {
-            result.error = "App registration failed (" + std::to_string(res.status) + ")";
-            return result;
-        }
-        try {
-            const json j = json::parse(res.body);
-            result.credentials.instance_url = instance;
-            result.credentials.client_id = j.value("client_id", "");
-            result.credentials.client_secret = j.value("client_secret", "");
-        } catch (...) {
-            result.error = "Bad app registration response";
-            return result;
-        }
-        if (result.credentials.client_id.empty()) {
-            result.error = "No client_id returned";
-            return result;
-        }
+    try {
+        const json j = json::parse(res.body);
+        result.credentials.instance_url = instance;
+        result.credentials.client_id = j.value("client_id", "");
+        result.credentials.client_secret = j.value("client_secret", "");
+    } catch (...) {
+        result.error = "Bad app registration response";
+        return result;
     }
-
-    // 2) Open the authorize URL in the browser.
-    const std::string state = random_state();
-    const std::string authorize_url =
-        instance + "/oauth/authorize?response_type=code&client_id=" +
-        util::percent_encode(result.credentials.client_id) +
-        "&redirect_uri=" + util::percent_encode(redirect) +
-        "&scope=" + util::percent_encode(kScopes) + "&state=" + state;
-    open_browser(authorize_url);
-
-    // 3) Wait for the redirect and capture the code.
-    const std::string code = listener.wait_for_code();
-    if (code.empty()) {
-        result.error = "No authorization code received";
+    if (result.credentials.client_id.empty()) {
+        result.error = "No client_id returned";
         return result;
     }
 
-    // 4) Exchange the code for an access token.
+    result.state = random_state();
+    result.authorize_url = instance + "/oauth/authorize?response_type=code&client_id=" +
+                           util::percent_encode(result.credentials.client_id) +
+                           "&redirect_uri=" + util::percent_encode(redirect_uri) +
+                           "&scope=" + util::percent_encode(kScopes) + "&state=" + result.state;
+    result.ok = true;
+    return result;
+}
+
+// Portable step 2: exchange `code` for an access token, then verify credentials
+// to fetch the authenticated user. `redirect_uri` must match the one used in
+// begin_login().
+MastodonLoginResult MastodonAuth::finish_login(const MastodonCredentials& creds,
+                                               const std::string& code,
+                                               const std::string& redirect_uri) {
+    MastodonLoginResult result;
+    result.credentials = creds;
+    const std::string& instance = creds.instance_url;
+    if (instance.empty() || code.empty()) {
+        result.error = "Missing instance or authorization code";
+        return result;
+    }
+
+    // Exchange the code for an access token.
     {
         std::vector<std::pair<std::string, std::string>> params = {
             {"grant_type", "authorization_code"},
             {"code", code},
-            {"client_id", result.credentials.client_id},
-            {"client_secret", result.credentials.client_secret},
-            {"redirect_uri", redirect},
+            {"client_id", creds.client_id},
+            {"client_secret", creds.client_secret},
+            {"redirect_uri", redirect_uri},
             {"scope", kScopes}};
         net::HttpRequest req;
         req.method = "POST";
@@ -234,7 +252,7 @@ MastodonAuth::login(const std::string& instance_input,
         }
     }
 
-    // 5) Verify credentials -> me.
+    // Verify credentials -> me.
     {
         net::HttpRequest req;
         req.method = "GET";
@@ -256,5 +274,49 @@ MastodonAuth::login(const std::string& instance_input,
     result.ok = true;
     return result;
 }
+
+#ifdef _WIN32
+// Desktop interactive login: begin_login against a loopback redirect, open the
+// browser, wait for the redirect, then finish_login. Blocking — worker thread.
+MastodonLoginResult
+MastodonAuth::login(const std::string& instance_input,
+                    const std::function<void(const std::string&)>& open_browser) {
+    LoopbackListener listener;
+    if (!listener.start()) {
+        MastodonLoginResult result;
+        result.error = "Could not start local listener";
+        return result;
+    }
+    const std::string redirect = listener.redirect_uri();
+
+    MastodonBeginResult begun = begin_login(instance_input, redirect);
+    if (!begun.ok) {
+        MastodonLoginResult result;
+        result.error = begun.error;
+        return result;
+    }
+
+    open_browser(begun.authorize_url);
+
+    const std::string code = listener.wait_for_code();
+    if (code.empty()) {
+        MastodonLoginResult result;
+        result.credentials = begun.credentials;
+        result.error = "No authorization code received";
+        return result;
+    }
+
+    return finish_login(begun.credentials, code, redirect);
+}
+#else  // non-Windows: no loopback listener. Front ends drive begin_login/
+       // finish_login around their own redirect handling.
+MastodonLoginResult MastodonAuth::login(const std::string& instance_input,
+                                        const std::function<void(const std::string&)>&) {
+    MastodonLoginResult result;
+    (void)instance_input;
+    result.error = "Use begin_login/finish_login on this platform";
+    return result;
+}
+#endif // _WIN32
 
 } // namespace fastsm
