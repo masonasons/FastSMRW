@@ -73,6 +73,20 @@ std::string apk_asset_url(const json& release) {
     return named_asset_url(release, "FastSMRW.apk");
 }
 
+// The first asset ending in .dmg (macOS disk image), or "".
+std::string dmg_asset_url(const json& release) {
+    if (auto it = release.find("assets"); it != release.end() && it->is_array())
+        for (const auto& a : *it) {
+            std::string name = a.value("name", std::string());
+            std::string lower;
+            for (char c : name)
+                lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (lower.size() >= 4 && lower.compare(lower.size() - 4, 4, ".dmg") == 0)
+                return a.value("browser_download_url", std::string());
+        }
+    return {};
+}
+
 // The installer asset's download URL (a name containing "setup"/"installer" and
 // ending in .exe), or "".
 std::string installer_asset_url(const json& release) {
@@ -140,8 +154,13 @@ UpdateInfo check_latest(net::IHttpClient& http, const std::string& current_commi
     info.download_url = zip_asset_url(rel);
     info.installer_url = installer_asset_url(rel);
     info.apk_url = apk_asset_url(rel);
+    info.dmg_url = dmg_asset_url(rel);
     info.version = remote.substr(0, 7);
-    if (remote.empty() || info.download_url.empty()) {
+    // A usable build needs at least one downloadable asset for some platform
+    // (zip/exe on Windows, apk on Android, dmg on macOS) — not the zip specifically.
+    const bool has_asset =
+        !info.download_url.empty() || !info.apk_url.empty() || !info.dmg_url.empty();
+    if (remote.empty() || !has_asset) {
         info.error = "No usable 'latest' build was published.";
         return info;
     }
@@ -191,7 +210,12 @@ UpdateInfo check_stable(net::IHttpClient& http, const std::string& current_versi
     info.download_url = zip_asset_url(*best);
     info.installer_url = installer_asset_url(*best);
     info.apk_url = apk_asset_url(*best);
-    info.available = compare_versions(best_version, current_version) > 0 && !info.download_url.empty();
+    info.dmg_url = dmg_asset_url(*best);
+    // Available if newer AND some platform has a downloadable asset (a macOS-only
+    // or Android-only release still counts, even without the Windows zip).
+    const bool has_asset =
+        !info.download_url.empty() || !info.apk_url.empty() || !info.dmg_url.empty();
+    info.available = compare_versions(best_version, current_version) > 0 && has_asset;
     return info;
 }
 

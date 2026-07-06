@@ -1,0 +1,89 @@
+# XcodeGen spec — source of truth for macos/FastSMRW.xcodeproj.
+# Regenerate with:  cd macos && xcodegen generate
+#
+# Two targets: fastsm_core (the portable C++/Obj-C++ core as a static lib) and
+# FastSMRW (the AppKit app, Swift, linking the core through its C ABI).
+name: FastSMRW
+options:
+  bundleIdPrefix: me.masonasons
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: "c++20"
+    GCC_C_LANGUAGE_STANDARD: c11
+    GCC_ENABLE_CPP_EXCEPTIONS: YES
+    GCC_ENABLE_CPP_RTTI: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: NO
+
+targets:
+  fastsm_core:
+    type: library.static
+    platform: macOS
+    sources:
+      # The whole portable core, minus the Windows-only WinHTTP transport. This
+      # is capi/fastsm_core.cpp + net/darwin_http_client.mm + everything the
+      # Android CMakeLists compiles.
+      - path: ../core/src
+        excludes:
+          - net/winhttp_client.cpp
+      - path: ../deps/stb_vorbis/stb_vorbis.c
+    settings:
+      base:
+        HEADER_SEARCH_PATHS:
+          - ../core/include
+          - ../deps
+          - ../deps/stb_vorbis
+        # stb_vorbis.c is noisy; don't let its warnings clutter the build.
+        GCC_WARN_UNUSED_FUNCTION: NO
+        GCC_WARN_UNUSED_VARIABLE: NO
+
+  FastSMRW:
+    type: application
+    platform: macOS
+    sources:
+      - path: src
+      - path: ../assets/soundpacks
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: fastsm_core
+      - sdk: AppKit.framework
+      - sdk: Foundation.framework
+      - sdk: CoreAudio.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AudioUnit.framework
+      - sdk: AVKit.framework
+      - sdk: AVFoundation.framework
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: src/FastSMRW-Bridging-Header.h
+        # The app has no C++ sources, so Xcode won't auto-link the C++ runtime
+        # the static core needs. Pull it in explicitly.
+        OTHER_LDFLAGS: ["-lc++"]
+        HEADER_SEARCH_PATHS:
+          - ../core/include
+        CODE_SIGN_ENTITLEMENTS: FastSMRW.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        PRODUCT_NAME: FastSMRW
+        MARKETING_VERSION: "0.2.5"
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+    info:
+      path: src/Info.plist
+      properties:
+        CFBundleName: FastSMRW
+        CFBundleDisplayName: FastSMRW
+        LSMinimumSystemVersion: "13.0"
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.social-networking
+        CFBundleURLTypes:
+          - CFBundleURLName: me.masonasons.FastSMRW.oauth
+            CFBundleURLSchemes:
+              - fastsm

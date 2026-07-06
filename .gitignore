@@ -32,3 +32,8 @@ CMakeUserPresets.json
 
 # C ABI build artifacts (DLL build: build.bat dll)
 build/release/fastsm_core.dll
+
+# macOS app: the Xcode project is generated from macos/project.yml by XcodeGen
+/macos/FastSMRW.xcodeproj/
+*.xcuserstate
+xcuserdata/

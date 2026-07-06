@@ -21,6 +21,7 @@
 #include "fastsm/update/update_checker.hpp"
 #include "fastsm/util/base64.hpp"
 #include "fastsm/util/date_parsing.hpp"
+#include "fastsm/util/languages.hpp"
 #include "fastsm/util/log.hpp"
 
 #include "fastsm/store/settings_json.hpp"
@@ -459,6 +460,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_download_update(cmd);
     else if (c == "get_client_filter")
         cmd_get_client_filter();
+    else if (c == "get_speech_catalog")
+        cmd_get_speech_catalog();
     else if (c == "set_client_filter")
         cmd_set_client_filter(cmd);
     else if (c == "clear_client_filter")
@@ -1950,6 +1953,14 @@ void CoreSession::cmd_compose_context(const json& cmd) {
     ctx["enter_to_send"] = settings_.enter_to_send;
     ctx["features"] = features_json(account->features());
     ctx["platform"] = account->platform() == Platform::Mastodon ? "mastodon" : "bluesky";
+    // The language list (code + display name) so the UI can offer a picker; it's
+    // static reference data that lives in the core, like all other strings.
+    {
+        json langs = json::array();
+        for (const auto& [code, name] : util::languages())
+            langs.push_back({{"code", code}, {"name", name}});
+        ctx["languages"] = std::move(langs);
+    }
 
     const Status* target = nullptr;
     const User* booster = nullptr;
@@ -2525,6 +2536,7 @@ void CoreSession::cmd_check_for_update(const json& cmd) {
                   {"download_url", info.download_url},
                   {"installer_url", info.installer_url},
                   {"apk_url", info.apk_url},
+                  {"dmg_url", info.dmg_url},
                   {"error", info.error}});
         });
     });
@@ -2945,6 +2957,37 @@ void CoreSession::emit_client_filter() {
 }
 
 void CoreSession::cmd_get_client_filter() { emit_client_filter(); }
+
+// The speech-field catalog: every field's stable key + human label, per
+// category, so a bus front end (e.g. the Mac app) can label the reorderable
+// "Speech Details" lists. Order + enabled state come from the settings event's
+// speech arrays (which are normalized to include every field).
+void CoreSession::cmd_get_speech_catalog() {
+    using namespace fastsm::present;
+    auto status_fields = {StatusSpeechField::BoostedBy, StatusSpeechField::Author,
+                          StatusSpeechField::Handle, StatusSpeechField::ContentWarning,
+                          StatusSpeechField::Text, StatusSpeechField::Quote,
+                          StatusSpeechField::Media, StatusSpeechField::Poll,
+                          StatusSpeechField::Time, StatusSpeechField::Stats,
+                          StatusSpeechField::Favorited, StatusSpeechField::Boosted,
+                          StatusSpeechField::Visibility, StatusSpeechField::Source};
+    auto user_fields = {UserSpeechField::Author, UserSpeechField::Handle, UserSpeechField::Bot,
+                        UserSpeechField::Locked, UserSpeechField::Bio, UserSpeechField::Followers,
+                        UserSpeechField::Following, UserSpeechField::Posts};
+    auto notif_fields = {NotificationSpeechField::Actor, NotificationSpeechField::Action,
+                         NotificationSpeechField::Handle, NotificationSpeechField::Text,
+                         NotificationSpeechField::Time};
+    auto build = [](auto fields) {
+        json arr = json::array();
+        for (auto f : fields)
+            arr.push_back({{"key", field_key(f)}, {"label", field_display_name(f)}});
+        return arr;
+    };
+    emit({{"event", "speech_catalog"},
+          {"status", build(status_fields)},
+          {"user", build(user_fields)},
+          {"notification", build(notif_fields)}});
+}
 
 void CoreSession::cmd_set_client_filter(const json& cmd) {
     TimelineController* tc = current();

@@ -22,6 +22,7 @@ struct UpdateInfo {
     std::string download_url;  // FastSMRW.zip (portable) asset URL, when available
     std::string installer_url; // FastSMRWInstaller.exe asset URL, when available
     std::string apk_url;       // FastSMRW.apk (Android) asset URL, when available
+    std::string dmg_url;       // FastSMRW.dmg (macOS) asset URL, when available
     std::string error;         // non-empty on failure (network / parse / no release)
 };
 

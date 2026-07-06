@@ -11,6 +11,8 @@
 
 #ifdef _WIN32
 #include "fastsm/net/winhttp_client.hpp"
+#elif defined(__APPLE__)
+#include "fastsm/net/darwin_http_client.hpp"
 #endif
 
 // The opaque handle: the event sink (+ a lock) and the C++ session. `session` is
@@ -45,6 +47,8 @@ fastsm_core* fastsm_core_create(const char* config_json) {
     std::unique_ptr<fastsm::net::IHttpClient> http;
 #ifdef _WIN32
     http = std::make_unique<fastsm::net::WinHttpClient>(user_agent);
+#elif defined(__APPLE__)
+    http = std::make_unique<fastsm::net::DarwinHttpClient>(user_agent);
 #endif
     if (!http)
         return nullptr; // no transport available on this platform yet

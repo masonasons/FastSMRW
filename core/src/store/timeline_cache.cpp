@@ -66,6 +66,11 @@ void TimelineCache::save(const std::string& key, const std::vector<TimelineItem>
         remove(key);
         return;
     }
+    // Ensure the cache directory exists. Front ends that build the core through
+    // the C ABI (macOS, Android) pass config_dir/cache directly and never create
+    // it — without this the ofstream below silently fails and nothing is cached.
+    std::error_code mkec;
+    std::filesystem::create_directories(dir_, mkec);
     const size_t cap = static_cast<size_t>(max_entries_);
     const bool over_cap = items.size() > cap; // backstop cap (caller usually pre-caps)
     const bool truncated = truncated_in || over_cap;
