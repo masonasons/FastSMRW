@@ -113,6 +113,9 @@ private:
     // referenced (in_reply_to) parent; a second press within a moment jumps to it.
     void cmd_speak_user(const nlohmann::json& cmd);
     void cmd_speak_reply(const nlohmann::json& cmd);
+    // Typeahead for @-mention autocomplete: search accounts by partial handle and
+    // emit a "user_suggestions" event (echoing the query so stale replies drop).
+    void cmd_autocomplete_users(const nlohmann::json& cmd);
     void speak_user_info(const User& u);          // fetch full profile, speak via template
     void spawn_post_users(const std::vector<User>& users, const std::string& status_id,
                           const std::string& title);

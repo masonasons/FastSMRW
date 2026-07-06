@@ -2,6 +2,8 @@
 
 #include <cwctype>
 #include <fstream>
+#include <functional>
+#include <optional>
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -745,6 +747,18 @@ void MainWindow::dispatch_cmd(const json& cmd) {
 }
 
 void MainWindow::on_view_keydown(int vk) {
+    // Shift+letter: first-letter navigation to the next post whose spoken text
+    // starts with that letter. Plain letters stay post actions (below), so this
+    // only claims the Shift chord (no Ctrl/Alt).
+    if (vk >= 'A' && vk <= 'Z') {
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        const bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+        if (shift && !ctrl && !alt) {
+            first_letter_nav(static_cast<wchar_t>(vk));
+            return;
+        }
+    }
     switch (vk) {
     case VK_UP:
     case VK_DOWN: {
@@ -1396,6 +1410,16 @@ std::wstring lowered(std::wstring s) {
     return s;
 }
 
+// The first alphanumeric character of a row's spoken label, lowercased (0 if
+// none). Leading punctuation/whitespace (e.g. a "@" before a handle) is skipped
+// so first-letter nav matches the first thing a listener actually hears.
+wchar_t first_letter_of(const std::wstring& s) {
+    for (wchar_t c : s)
+        if (std::iswalnum(c))
+            return static_cast<wchar_t>(std::towlower(c));
+    return 0;
+}
+
 // "Type a handle…" prompt: a single edit box that returns the typed handle
 // (leading '@' and surrounding spaces trimmed), or nullopt if cancelled/empty.
 struct HandleCtx {
@@ -1428,7 +1452,118 @@ INT_PTR CALLBACK handle_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return FALSE;
 }
+
+// @-mention autocomplete picker. Live-searches accounts as the user types; the
+// core's replies fill the list via MainWindow::ev_user_suggestions. Enter/Insert
+// (or a double-click) returns the highlighted handle to drop into the post.
+struct MentionCtx {
+    std::function<void(const nlohmann::json&)> dispatch;
+    HWND* active = nullptr;           // &MainWindow::mention_dlg_, tracked while open
+    std::wstring query;               // seed: the partial already typed in the composer
+    std::vector<std::string> handles; // acct per list row (parallel to the listbox)
+    std::string result;               // chosen handle, empty if cancelled
+    bool ok = false;
+    bool initializing = false;        // suppress the seed's EN_CHANGE
+};
+
+void mention_search(HWND dlg, MentionCtx* ctx) {
+    wchar_t buf[256] = {0};
+    GetDlgItemTextW(dlg, IDC_MENTION_QUERY, buf, 256);
+    ctx->dispatch({{"cmd", "autocomplete_users"}, {"query", to_utf8(std::wstring(buf))}});
+}
+
+INT_PTR CALLBACK mention_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_INITDIALOG) {
+        SetWindowLongPtrW(dlg, DWLP_USER, static_cast<LONG_PTR>(lp));
+        auto* ctx = reinterpret_cast<MentionCtx*>(lp);
+        if (ctx->active)
+            *ctx->active = dlg;
+        ctx->initializing = true;
+        SetDlgItemTextW(dlg, IDC_MENTION_QUERY, ctx->query.c_str());
+        SendDlgItemMessageW(dlg, IDC_MENTION_QUERY, EM_SETSEL, 0, -1);
+        ctx->initializing = false;
+        // Land on the results list (matches are already coming for the seeded
+        // handle) so a screen reader arrows straight through them; with nothing
+        // seeded there's nothing to land on, so start in the search box instead.
+        SetFocus(GetDlgItem(dlg, ctx->query.empty() ? IDC_MENTION_QUERY : IDC_MENTION_LIST));
+        mention_search(dlg, ctx); // seed the initial matches
+        return FALSE;             // focus set explicitly
+    }
+    if (msg == WM_COMMAND) {
+        auto* ctx = reinterpret_cast<MentionCtx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+        const int id = LOWORD(wp);
+        if (id == IDC_MENTION_QUERY && HIWORD(wp) == EN_CHANGE) {
+            if (ctx && !ctx->initializing)
+                mention_search(dlg, ctx);
+            return TRUE;
+        }
+        if (id == IDC_MENTION_LIST && HIWORD(wp) == LBN_DBLCLK) {
+            SendMessageW(dlg, WM_COMMAND, IDOK, 0); // double-click inserts
+            return TRUE;
+        }
+        if (id == IDOK) {
+            if (ctx) {
+                int sel = static_cast<int>(
+                    SendDlgItemMessageW(dlg, IDC_MENTION_LIST, LB_GETCURSEL, 0, 0));
+                if (sel < 0 && !ctx->handles.empty())
+                    sel = 0; // no explicit pick -> take the top match
+                if (sel >= 0 && sel < static_cast<int>(ctx->handles.size())) {
+                    ctx->result = ctx->handles[static_cast<size_t>(sel)];
+                    ctx->ok = true;
+                }
+            }
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        if (id == IDCANCEL) {
+            EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
 } // namespace
+
+void MainWindow::ev_user_suggestions(const json& e) {
+    if (!mention_dlg_)
+        return;
+    auto* ctx = reinterpret_cast<MentionCtx*>(GetWindowLongPtrW(mention_dlg_, DWLP_USER));
+    if (!ctx)
+        return;
+    // Drop a stale reply: apply only if it still matches what's typed right now.
+    wchar_t buf[256] = {0};
+    GetDlgItemTextW(mention_dlg_, IDC_MENTION_QUERY, buf, 256);
+    if (to_utf8(std::wstring(buf)) != e.value("query", std::string{}))
+        return;
+    HWND lb = GetDlgItem(mention_dlg_, IDC_MENTION_LIST);
+    SendMessageW(lb, LB_RESETCONTENT, 0, 0);
+    ctx->handles.clear();
+    for (const auto& u : e.value("users", json::array())) {
+        const std::string handle = u.value("acct", std::string{});
+        if (handle.empty())
+            continue;
+        std::string label = u.value("label", std::string{});
+        if (label.empty())
+            label = "@" + handle;
+        SendMessageW(lb, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(to_wide(label).c_str()));
+        ctx->handles.push_back(handle);
+    }
+    if (!ctx->handles.empty())
+        SendMessageW(lb, LB_SETCURSEL, 0, 0); // highlight the top match
+}
+
+std::optional<std::string> MainWindow::pick_mention(HWND owner, const std::string& partial) {
+    MentionCtx ctx;
+    ctx.dispatch = [this](const json& c) { dispatch_cmd(c); };
+    ctx.active = &mention_dlg_;
+    ctx.query = to_wide(partial);
+    const INT_PTR r = DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_MENTION), owner, &mention_proc,
+                                      reinterpret_cast<LPARAM>(&ctx));
+    mention_dlg_ = nullptr;
+    if (r == IDOK && ctx.ok && !ctx.result.empty())
+        return ctx.result;
+    return std::nullopt;
+}
 
 std::string MainWindow::prompt_handle() {
     HandleCtx ctx;
@@ -1488,6 +1623,28 @@ void MainWindow::find_from(int start_row, int dir) {
         }
     }
     announce("Not found");
+}
+
+void MainWindow::first_letter_nav(wchar_t letter) {
+    Timeline* tc = current();
+    if (!tc || tc->rows.empty())
+        return;
+    const wchar_t want = static_cast<wchar_t>(std::towlower(letter));
+    const int n = static_cast<int>(tc->rows.size());
+    const int start = selected_row() + 1; // begin after the current row
+    for (int off = 0; off < n; ++off) { // scan forward, wrapping around once
+        const int i = ((start + off) % n + n) % n;
+        if (first_letter_of(tc->rows[static_cast<size_t>(i)].text) == want) {
+            const UINT flags = LVIS_SELECTED | LVIS_FOCUSED;
+            ListView_SetItemState(timeline_view_, i, flags, flags);
+            ListView_EnsureVisible(timeline_view_, i, FALSE);
+            SetFocus(timeline_view_);
+            return;
+        }
+    }
+    // No post starts with that letter: a brief boundary earcon, no chatter.
+    if (settings_.value("boundary_sound", true))
+        dispatch_cmd({{"cmd", "play_earcon"}, {"name", "boundary"}});
 }
 
 void MainWindow::about() {
@@ -1718,6 +1875,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_user_profile(e);
     else if (ev == "user_picker")
         ev_user_picker(e);
+    else if (ev == "user_suggestions")
+        ev_user_suggestions(e);
     else if (ev == "url_picker")
         ev_url_picker(e);
     else if (ev == "select_row")
@@ -2309,7 +2468,9 @@ void MainWindow::ev_compose_context(const json& e) {
     }
 
     auto guard = enter_modal();
-    auto result = show_compose_dialog(hwnd_, inst_, req);
+    auto result = show_compose_dialog(
+        hwnd_, inst_, req,
+        [this](HWND owner, const std::string& partial) { return pick_mention(owner, partial); });
     restore_selection(keep_id);
     leave_modal(guard);
     if (!result)

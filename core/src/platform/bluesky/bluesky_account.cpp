@@ -336,6 +336,33 @@ std::optional<User> BlueskyAccount::lookup_user(const std::string& handle) {
     }
 }
 
+std::vector<User> BlueskyAccount::search_accounts(const std::string& query, int limit) {
+    // searchActorsTypeahead is the fast prefix search the Bluesky app uses for
+    // its own @-mention autocomplete.
+    std::vector<User> out;
+    std::string q = query;
+    if (!q.empty() && q.front() == '@')
+        q.erase(q.begin());
+    if (q.empty())
+        return out;
+    if (limit <= 0)
+        limit = 8;
+    const std::string url = session_.pds_url +
+                            "/xrpc/app.bsky.actor.searchActorsTypeahead?q=" +
+                            util::percent_encode(q) + "&limit=" + std::to_string(limit);
+    const net::HttpResponse res = send_authed("GET", url, "");
+    if (!res.ok())
+        return out;
+    try {
+        const json j = json::parse(res.body);
+        if (auto a = j.find("actors"); a != j.end() && a->is_array())
+            for (const auto& actor : *a)
+                out.push_back(bluesky::map_author(actor));
+    } catch (...) {
+    }
+    return out;
+}
+
 std::optional<Relationship> BlueskyAccount::relationship(const std::string& id) {
     auto body = get_profile_body(id);
     if (!body)

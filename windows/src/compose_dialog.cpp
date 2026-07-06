@@ -3,6 +3,7 @@
 #include <commctrl.h>
 #include <commdlg.h>
 
+#include <cwctype>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -33,7 +34,15 @@ struct Ctx {
     bool ok = false;
     bool eat_char = false; // swallow the WM_CHAR after we handled a Return
     std::vector<ComposeAttachment> attachments; // staged media (edited via the sub-dialog)
+    MentionPicker pick_mention;                 // Alt+A @-mention autocomplete (may be empty)
 };
+
+// True for characters that can appear in a handle being typed (letters, digits,
+// and the punctuation Mastodon/Bluesky allow), so Alt+A can find the word under
+// the caret. '@' is included so it's swept into the replaced range.
+bool is_handle_char(wchar_t c) {
+    return std::iswalnum(c) || c == L'_' || c == L'.' || c == L'-' || c == L'@';
+}
 
 // Guess a MIME type from a file's extension (lowercased). Unknown -> octet-stream.
 std::string guess_mime(const std::wstring& filename) {
@@ -299,6 +308,35 @@ std::int64_t systemtime_to_unix(const SYSTEMTIME& local) {
 // Subclass the multiline edit to honor the enter-to-send preference.
 LRESULT CALLBACK EditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR ref) {
     Ctx* ctx = reinterpret_cast<Ctx*>(ref);
+    // Alt+A: @-mention autocomplete. Search from the handle word under the caret
+    // and replace it with the chosen @handle. (Ctrl+Alt is AltGr — leave it be.)
+    if (msg == WM_SYSKEYDOWN && wp == 'A' && ctx && ctx->pick_mention &&
+        !(GetKeyState(VK_CONTROL) & 0x8000)) {
+        DWORD sel_start = 0, sel_end = 0;
+        SendMessageW(h, EM_GETSEL, reinterpret_cast<WPARAM>(&sel_start),
+                     reinterpret_cast<LPARAM>(&sel_end));
+        const int len = GetWindowTextLengthW(h);
+        std::wstring text(static_cast<size_t>(len) + 1, L'\0');
+        GetWindowTextW(h, text.data(), len + 1);
+        text.resize(static_cast<size_t>(len));
+        int caret = static_cast<int>(sel_end);
+        if (caret > len)
+            caret = len;
+        int start = caret;
+        while (start > 0 && is_handle_char(text[static_cast<size_t>(start - 1)]))
+            --start;
+        std::wstring word = text.substr(static_cast<size_t>(start), static_cast<size_t>(caret - start));
+        if (!word.empty() && word.front() == L'@')
+            word.erase(word.begin()); // the query is the handle without '@'
+        auto chosen = ctx->pick_mention(GetParent(h), to_utf8(word));
+        if (chosen && !chosen->empty()) {
+            std::wstring ins = L"@" + to_wide(*chosen) + L" ";
+            SendMessageW(h, EM_SETSEL, start, caret); // replace the partial handle
+            SendMessageW(h, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(ins.c_str()));
+        }
+        SetFocus(h);
+        return 0; // swallow Alt+A (no menu-mnemonic beep)
+    }
     if (msg == WM_KEYDOWN && wp == VK_RETURN) {
         const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -561,9 +599,11 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 std::optional<ComposeResult> show_compose_dialog(HWND parent, HINSTANCE inst,
-                                                 const ComposeRequest& req) {
+                                                 const ComposeRequest& req,
+                                                 MentionPicker pick_mention) {
     Ctx ctx;
     ctx.req = &req;
+    ctx.pick_mention = std::move(pick_mention);
     const INT_PTR r = DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_COMPOSE), parent, Proc,
                                       reinterpret_cast<LPARAM>(&ctx));
     if (r == IDOK && ctx.ok)

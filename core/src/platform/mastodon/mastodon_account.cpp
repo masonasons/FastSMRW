@@ -766,6 +766,35 @@ std::optional<User> MastodonAccount::lookup_user(const std::string& handle) {
     return std::nullopt;
 }
 
+std::vector<User> MastodonAccount::search_accounts(const std::string& query, int limit) {
+    // Typeahead: /accounts/search with resolve=false stays fast (no remote
+    // WebFinger round-trips) and returns accounts this server already knows.
+    std::vector<User> out;
+    std::string q = query;
+    if (!q.empty() && q.front() == '@')
+        q.erase(q.begin());
+    if (q.empty())
+        return out;
+    if (limit <= 0)
+        limit = 8;
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/search?q=" +
+                            util::percent_encode(q) + "&limit=" + std::to_string(limit) +
+                            "&resolve=false";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return out;
+    try {
+        json arr = json::parse(body);
+        if (arr.is_array())
+            for (const auto& a : arr)
+                if (a.is_object() && a.contains("id"))
+                    out.push_back(mastodon::map_user(a));
+    } catch (...) {
+    }
+    return out;
+}
+
 std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {
     const std::string url = credentials_.instance_url + "/api/v1/accounts/relationships?id[]=" + id;
     std::string body;

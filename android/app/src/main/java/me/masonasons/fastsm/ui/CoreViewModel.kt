@@ -86,6 +86,12 @@ data class AppUpdateUi(val version: String, val notes: String, val apkUrl: Strin
 /** One candidate user in a disambiguation picker. */
 data class UserPick(val id: String, val acct: String)
 
+/** One @-mention autocomplete candidate: [acct] is inserted, [label] is shown. */
+data class MentionSuggestion(val acct: String, val label: String)
+
+/** A batch of @-mention suggestions echoing the [query] they answered. */
+data class MentionSuggestions(val query: String, val users: List<MentionSuggestion>)
+
 /**
  * The core asks which user to act on when a post references more than one
  * (author + mentions). [purpose] is "timeline" or "profile".
@@ -190,6 +196,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while a user-disambiguation picker should be shown. */
     private val _userPicker = MutableStateFlow<UserPickerRequest?>(null)
     val userPicker: StateFlow<UserPickerRequest?> = _userPicker.asStateFlow()
+
+    /** Latest @-mention autocomplete results (from user_suggestions), or null. */
+    private val _mentionSuggestions = MutableStateFlow<MentionSuggestions?>(null)
+    val mentionSuggestions: StateFlow<MentionSuggestions?> = _mentionSuggestions.asStateFlow()
 
     /** Non-null while a profile screen is open (from a user_profile event). */
     private val _profile = MutableStateFlow<ProfileUi?>(null)
@@ -352,6 +362,21 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 _userPicker.value = UserPickerRequest(e.optString("purpose"), e.optString("id"), users)
             }
 
+            "user_suggestions" -> {
+                val arr = e.optJSONArray("users")
+                val users = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val u = arr.getJSONObject(i)
+                        val acct = u.optString("acct")
+                        if (acct.isNotEmpty()) {
+                            val label = u.optString("label").ifEmpty { "@$acct" }
+                            add(MentionSuggestion(acct, label))
+                        }
+                    }
+                }
+                _mentionSuggestions.value = MentionSuggestions(e.optString("query"), users)
+            }
+
             "user_profile" -> _profile.value = ProfileUi(
                 text = e.optString("text"),
                 accountId = e.optString("account_id"),
@@ -484,6 +509,12 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Open a post author's profile (may raise a user_picker). */
     fun openUserProfile(rowId: String) =
         core.dispatch("open_user_profile") { put("id", rowId) }
+
+    /** Search accounts for @-mention autocomplete; results arrive on mentionSuggestions. */
+    fun autocompleteUsers(query: String) = core.dispatch("autocomplete_users") { put("query", query) }
+
+    /** Clear the current @-mention suggestions (e.g. when the picker closes). */
+    fun clearMentionSuggestions() { _mentionSuggestions.value = null }
 
     /** Speak the post's user info (one user), or open a timeline of its users. */
     fun speakUser(rowId: String) = core.dispatch("speak_user") { put("id", rowId) }

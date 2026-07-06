@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.2.5
+-----
+
+- New: in the posts list, press Shift plus a letter to jump to the next post that starts with that letter (Windows keyboard feature).
+- New: @-mention autocomplete when writing a post - on Windows press Alt+A, on Android tap "Mention someone", then pick a matching user to drop in their handle.
+
 0.2.4
 -----
 

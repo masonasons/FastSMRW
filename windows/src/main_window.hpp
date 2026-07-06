@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -131,6 +132,7 @@ private:
     void do_find_next(); // F3 / invisible action: next match of the last query
     void do_find_prev(); // Shift+F3 / invisible action: previous match of the last query
     void find_from(int start_row, int dir); // search rows from start_row (dir +1/-1), wrapping
+    void first_letter_nav(wchar_t letter);  // Shift+letter: next post whose spoken text starts with it
     void about();
 
     // Events.
@@ -144,6 +146,10 @@ private:
     void ev_post_info(const nlohmann::json& e);
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
+    void ev_user_suggestions(const nlohmann::json& e); // fill the open @-mention picker
+    // Modal @-mention autocomplete: type a partial handle, live-search accounts,
+    // insert the chosen @handle. Owned by the composer dialog; nullopt if cancelled.
+    std::optional<std::string> pick_mention(HWND owner, const std::string& partial);
     std::string prompt_handle(); // modal "Type a handle…" box; "" if cancelled/empty
     void ev_url_picker(const nlohmann::json& e); // choose among links found in a post
     void ev_keymap(const nlohmann::json& e);
@@ -198,6 +204,7 @@ private:
     ServerFiltersDialog* server_filters_mgr_ = nullptr;     // non-null while its modal is open
     ListsManagerDialog* lists_mgr_ = nullptr;               // non-null while its modal is open
     FollowedHashtagsDialog* followed_tags_mgr_ = nullptr;   // non-null while its modal is open
+    HWND mention_dlg_ = nullptr;                            // @-mention picker, while open (nested modal)
     std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
     std::string layer_help_message_;                        // spoken on "/" in the layer
     std::map<std::string, std::string> layer_bindings_;     // cached bare-key layer map

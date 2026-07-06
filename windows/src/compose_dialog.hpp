@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -48,9 +49,16 @@ struct ComposeResult {
     std::vector<ComposeAttachment> attachments; // media to upload with the post
 };
 
+// Alt+A @-mention autocomplete hook: given the owner window and the partial
+// handle under the caret, returns the chosen handle (without '@') to insert, or
+// nullopt if the user cancelled. Supplied by the host so the picker can reach the
+// core; when unset, Alt+A does nothing.
+using MentionPicker = std::function<std::optional<std::string>(HWND owner, const std::string& partial)>;
+
 // Modal compose dialog (new/reply/quote/edit). Returns the editable fields if
 // the user posts; the caller fills in reply_to_id/quoted_status_id/edit_id.
 std::optional<ComposeResult> show_compose_dialog(HWND parent, HINSTANCE inst,
-                                                 const ComposeRequest& req);
+                                                 const ComposeRequest& req,
+                                                 MentionPicker pick_mention = {});
 
 } // namespace fastsmui

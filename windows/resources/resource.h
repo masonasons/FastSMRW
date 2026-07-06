@@ -252,6 +252,11 @@
 #define IDC_EH_LABEL          551
 #define IDC_EH_EDIT           552
 
+// @-mention autocomplete picker (Alt+A in the composer).
+#define IDD_MENTION           560
+#define IDC_MENTION_QUERY     561
+#define IDC_MENTION_LIST      562
+
 // Per-account settings dialog (soundpack for the focused account).
 #define IDD_ACCOUNT_SETTINGS  555
 #define IDC_AS_SOUND_LABEL    556

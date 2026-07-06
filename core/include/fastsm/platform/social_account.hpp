@@ -196,6 +196,13 @@ public:
     // speaking a reply's parent that isn't loaded in any open timeline. Runs on
     // the worker thread. nullopt if unsupported or not found.
     virtual std::optional<Status> fetch_status(const std::string&) { return std::nullopt; }
+    // Typeahead search for accounts whose handle/display name matches a partial
+    // query, for @-mention autocomplete in the composer. Returns up to `limit`
+    // users (best-match first), empty if none/unsupported. Runs synchronously on
+    // the worker thread.
+    virtual std::vector<User> search_accounts(const std::string& /*query*/, int /*limit*/) {
+        return {};
+    }
     // The viewer's relationship to an account, or nullopt if unsupported/failed.
     virtual std::optional<Relationship> relationship(const std::string&) { return std::nullopt; }
     virtual bool follow(const std::string&) { return false; }

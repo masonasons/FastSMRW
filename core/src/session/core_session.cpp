@@ -403,6 +403,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_speak_user(cmd);
     else if (c == "speak_reply")
         cmd_speak_reply(cmd);
+    else if (c == "autocomplete_users")
+        cmd_autocomplete_users(cmd);
     else if (c == "set_relationship")
         cmd_set_relationship(cmd);
     else if (c == "open_followers")
@@ -1601,6 +1603,34 @@ void CoreSession::speak_user_info(const User& u) {
                 full = *p;
         std::string text = present::accessibility_label(full);
         loop_.post([this, text = std::move(text)] { emit_announce(text); });
+    });
+}
+
+void CoreSession::cmd_autocomplete_users(const json& cmd) {
+    const std::string query = cmd.value("query", std::string{});
+    SocialAccount* acct = accounts_.selected();
+    // Echo the query back so the UI can drop a stale reply (the user kept typing
+    // while this one was in flight). Empty query / no account -> no suggestions.
+    if (!acct || query.empty()) {
+        emit({{"event", "user_suggestions"}, {"query", query}, {"users", json::array()}});
+        return;
+    }
+    worker_.post([this, acct, query] {
+        std::vector<User> users = acct->search_accounts(query, 8);
+        loop_.post([this, query, users = std::move(users)]() mutable {
+            json arr = json::array();
+            for (const auto& u : users) {
+                const std::string handle = u.acct.empty() ? u.username : u.acct;
+                std::string label = handle.empty() ? u.display_name : ("@" + handle);
+                if (!u.display_name.empty() && u.display_name != handle)
+                    label = u.display_name + " (@" + handle + ")";
+                arr.push_back({{"id", u.id},
+                               {"acct", handle},
+                               {"display", u.display_name},
+                               {"label", label}});
+            }
+            emit({{"event", "user_suggestions"}, {"query", query}, {"users", std::move(arr)}});
+        });
     });
 }
 
