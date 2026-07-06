@@ -25,15 +25,16 @@ tweaks, test-only changes) does **not** get a changelog entry.
   heading in the changelog.
 - Group related entries; avoid jargon (no "WinHTTP", "DTO", "DLGPROC", etc.).
 
-## Design goal: match the Mac app
-
-Behavior and UX should mirror the Apple port at `C:\git\FastSMApple` (Swift
-`FastSMCore` + AppKit). **Read the relevant Mac source before implementing UX or
-behavior** rather than guessing — keyboard model, presenter strings, position
-handling, compose, sounds, etc. The original Python app is at `C:\stuff\FastSM`.
+## Design goals
 
 Priorities: accessibility first (screen readers, keyboard-only, earcons),
 minimal CPU/RAM, fast cache-first startup.
+
+FastSMRW now has feature parity with the older FastSM ports, so they're no longer
+the spec — the Windows app is the reference for behavior and UX, and the other
+front ends match it (see the feature-parity rule below). The original Python app
+(`C:\stuff\FastSM`) and the Mac port (`C:\git\FastSMApple`) remain useful prior
+art to consult when a detail is unclear, but you don't need to mirror them.
 
 ## Feature parity: every feature ships in every front end — REQUIRED
 
