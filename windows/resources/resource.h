@@ -126,6 +126,7 @@
 #define IDC_SET_ENTER_USER  395
 #define IDC_SET_SECOND_POST 396
 #define IDC_SET_MEDIA_BG    397
+#define IDC_SET_REPLY_MENTIONS_END 398
 
 // Keyboard Manager dialog + its binding-capture sub-dialog.
 #define IDD_KEYMAP_MANAGER  400

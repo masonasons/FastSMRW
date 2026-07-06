@@ -192,6 +192,10 @@ public:
     // synchronously on the worker thread. Lets the user look up someone by handle
     // even when they aren't in any open timeline.
     virtual std::optional<User> lookup_user(const std::string&) { return std::nullopt; }
+    // Fetch a single status by id (Mastodon: status id; Bluesky: post uri), for
+    // speaking a reply's parent that isn't loaded in any open timeline. Runs on
+    // the worker thread. nullopt if unsupported or not found.
+    virtual std::optional<Status> fetch_status(const std::string&) { return std::nullopt; }
     // The viewer's relationship to an account, or nullopt if unsupported/failed.
     virtual std::optional<Relationship> relationship(const std::string&) { return std::nullopt; }
     virtual bool follow(const std::string&) { return false; }

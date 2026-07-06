@@ -42,6 +42,7 @@ data class RowUi(
     val boosted: Boolean,
     val isMine: Boolean,
     val hasMedia: Boolean,
+    val isReply: Boolean,
 )
 
 /** A media attachment to view (media_open, or an item in a media_picker). */
@@ -325,6 +326,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                 boosted = r.optBoolean("boosted"),
                                 isMine = r.optBoolean("is_mine"),
                                 hasMedia = r.optBoolean("has_media"),
+                                isReply = r.optBoolean("is_reply"),
                             )
                         )
                     }
@@ -394,6 +396,16 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
             "announce" -> _announcements.tryEmit(e.optString("message"))
             "open_url" -> _openUrls.tryEmit(e.optString("url"))
+
+            // Core asks us to move to a row (e.g. jump to a reply's parent): update
+            // the current tab's selected id so the list scrolls there.
+            "select_row" -> {
+                val id = e.optString("id")
+                if (id.isNotBlank()) {
+                    val idx = _currentTab.value
+                    _selectedIdByTab.update { it + (idx to id) }
+                }
+            }
 
             "update_status" -> {
                 val available = e.optBoolean("available")
@@ -472,6 +484,15 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Open a post author's profile (may raise a user_picker). */
     fun openUserProfile(rowId: String) =
         core.dispatch("open_user_profile") { put("id", rowId) }
+
+    /** Speak the post's user info (one user), or open a timeline of its users. */
+    fun speakUser(rowId: String) = core.dispatch("speak_user") { put("id", rowId) }
+
+    /** Speak the post this reply is replying to. */
+    fun speakReply(rowId: String) = core.dispatch("speak_reply") { put("id", rowId); put("jump", false) }
+
+    /** Jump to the post this reply is replying to (select it, or open the thread). */
+    fun jumpToReply(rowId: String) = core.dispatch("speak_reply") { put("id", rowId); put("jump", true) }
 
     /** Open a specific picked user's profile. */
     fun openUserProfilePicked(rowId: String, accountId: String) {

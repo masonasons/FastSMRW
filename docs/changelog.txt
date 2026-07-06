@@ -1,6 +1,14 @@
 FastSMRW changelog
 ==================
 
+0.2.4
+-----
+
+- New: Speak User (Ctrl+; in the window, or the row menu) reads the focused post's user; if the post mentions several people it opens a timeline of them all.
+- New: Speak Referenced Reply (Ctrl+Shift+; or the row menu) reads the post a reply is replying to; press it again (or use Jump) to go to that post.
+- New: an optional Behavior setting keeps the person you're replying to mentioned up front and moves the other mentions to the end of your reply.
+- These also work hands-free from the invisible interface (Win+Alt+; and Win+Alt+Shift+;, or semicolon and Shift+semicolon in the layer).
+
 0.2.3
 -----
 

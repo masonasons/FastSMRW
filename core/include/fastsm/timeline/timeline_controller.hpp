@@ -57,6 +57,12 @@ public:
     void set_pinned(bool pinned) { pinned_ = pinned; }
     bool pinned() const { return pinned_; }
 
+    // Populate a static (non-fetched) timeline with a fixed set of user rows —
+    // e.g. the users referenced in one post. Safe to call again to replace them
+    // (e.g. after enriching sparse mentions with full profiles); the selected id
+    // is preserved if it still exists.
+    void seed_users(std::vector<User> users);
+
     void load_cached();
     void refresh();
     void load_older();

@@ -287,7 +287,19 @@ void TimelineController::persist() {
     });
 }
 
+void TimelineController::seed_users(std::vector<User> users) {
+    raw_.clear();
+    raw_.reserve(users.size());
+    for (auto& u : users)
+        raw_.push_back(TimelineItem{std::move(u)});
+    rebuild_visible();
+    if (on_change)
+        on_change();
+}
+
 void TimelineController::load_cached() {
+    if (source_.is_static()) // seeded in memory; nothing on disk to load
+        return;
     // Synchronous on purpose: a fast local read that populates raw_ *before*
     // refresh() snapshots its known-id set, so the immediately-following refresh
     // does a warm gap-fill (fetch only the delta and stop at the first known
@@ -328,6 +340,8 @@ void TimelineController::load_cached() {
 }
 
 void TimelineController::refresh() {
+    if (source_.is_static()) // seeded rows never refresh from the network
+        return;
     if (loading_)
         return;
     loading_ = true;

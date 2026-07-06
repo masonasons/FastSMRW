@@ -45,6 +45,9 @@ fun StatusRow(
     onQuote: (String) -> Unit,
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onSpeakUser: (String) -> Unit,
+    onSpeakReply: (String) -> Unit,
+    onJumpToReply: (String) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -58,6 +61,11 @@ fun StatusRow(
         add(MenuAction("View conversation") { onOpenThread(row.id) })
         add(MenuAction("View author's posts") { onOpenAuthor(row.id) })
         add(MenuAction("View author's profile") { onOpenProfile(row.id) })
+        add(MenuAction("Speak user info") { onSpeakUser(row.id) })
+        if (row.isReply) {
+            add(MenuAction("Speak referenced reply") { onSpeakReply(row.id) })
+            add(MenuAction("Jump to referenced reply") { onJumpToReply(row.id) })
+        }
         if (row.isMine) {
             add(MenuAction("Edit") { onEdit(row.id) })
             add(MenuAction("Delete") { confirmDelete = true })

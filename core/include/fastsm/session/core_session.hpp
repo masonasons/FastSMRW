@@ -108,6 +108,18 @@ private:
     void cmd_open_thread(const nlohmann::json& cmd);
     void cmd_open_user_timeline(const nlohmann::json& cmd);
     void cmd_open_user_profile(const nlohmann::json& cmd);
+    // Ctrl+; : one user in the focused post -> speak their info (user template);
+    // many -> open a timeline of the post's users. Ctrl+Shift+; : speak the post's
+    // referenced (in_reply_to) parent; a second press within a moment jumps to it.
+    void cmd_speak_user(const nlohmann::json& cmd);
+    void cmd_speak_reply(const nlohmann::json& cmd);
+    void speak_user_info(const User& u);          // fetch full profile, speak via template
+    void spawn_post_users(const std::vector<User>& users, const std::string& status_id,
+                          const std::string& title);
+    // Select (jump to) a row by id if it's in the current timeline; returns true.
+    bool jump_to_row(const std::string& row_id);
+    // The first loaded copy of a status (by id) across all open timelines, or null.
+    const Status* find_status_anywhere(const std::string& status_id) const;
     // Every user referenced by a post (author, mentions, and one level of
     // quoted/boosted author + mentions), deduped — for the u / Ctrl+U picker.
     std::vector<User> users_in_post(const TimelineItem& item) const;
@@ -268,6 +280,11 @@ private:
 
     std::vector<MovementUnit> movement_units_ = MovementUnit::catalog();
     int movement_unit_ = 0; // currently selected unit (Ctrl+Left/Right cycles)
+
+    // Double-press tracking for Speak-reply (Ctrl+Shift+;): the row spoken last and
+    // when (steady-clock ms). A second press on the same row within the window jumps.
+    std::string last_speak_reply_row_;
+    std::int64_t last_speak_reply_ms_ = 0;
 
     std::atomic<int> auto_refresh_seconds_{0};
     std::atomic<bool> auto_refresh_running_{true};

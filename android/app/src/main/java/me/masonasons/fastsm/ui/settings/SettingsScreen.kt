@@ -126,6 +126,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         panel == "speech" -> "Speech"
         panel == "advanced" -> "Advanced"
         panel == "confirmation" -> "Confirmation"
+        panel == "behavior" -> "Behavior"
         panel == "updates" -> "Updates"
         else -> "Settings"
     }
@@ -158,6 +159,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
                 panel == "speech" -> SpeechPanel(s, viewModel) { speechList = it }
                 panel == "advanced" -> AdvancedPanel(s, viewModel)
                 panel == "confirmation" -> ConfirmationPanel(s, viewModel)
+                panel == "behavior" -> BehaviorPanel(s, viewModel)
                 panel == "updates" -> UpdatesPanel(s, viewModel)
                 else -> RootList { panel = it }
             }
@@ -173,6 +175,7 @@ private fun RootList(onOpen: (String) -> Unit) {
         "speech" to "Speech",
         "advanced" to "Advanced",
         "confirmation" to "Confirmation",
+        "behavior" to "Behavior",
         "updates" to "Updates",
     ).forEach { (key, label) ->
         Text(
@@ -267,6 +270,14 @@ private fun AdvancedPanel(s: JSONObject, vm: CoreViewModel) {
         "Posts loaded per refresh is about 40 × this number. Raise it to load more at once " +
             "(slower). Applies to refresh and scrollback.",
     ) { vm.updateSetting { put("fetch_pages", it) } }
+}
+
+@Composable
+private fun BehaviorPanel(s: JSONObject, vm: CoreViewModel) {
+    SwitchRow("Put extra reply mentions at the end", s.optBoolean("reply_mentions_at_end")) {
+        vm.updateSetting { put("reply_mentions_at_end", it) }
+    }
+    HelpText("In a reply, mention the person you're replying to up front and move the other mentioned users to the end of the post.")
 }
 
 @Composable

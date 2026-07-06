@@ -728,6 +728,7 @@ INT_PTR CALLBACK BehaviorProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         }
         SendMessageW(sec, CB_SETCURSEL, ssel, 0);
         checked(dlg, IDC_SET_MEDIA_BG, ctx->settings.media_background);
+        checked(dlg, IDC_SET_REPLY_MENTIONS_END, ctx->settings.reply_mentions_at_end);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -746,6 +747,7 @@ INT_PTR CALLBACK BehaviorProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             if (se >= 0 && se < static_cast<int>(std::size(kSecondPostActions)))
                 ctx->settings.secondary_post_action = kSecondPostActions[se];
             ctx->settings.media_background = is_checked(dlg, IDC_SET_MEDIA_BG);
+            ctx->settings.reply_mentions_at_end = is_checked(dlg, IDC_SET_REPLY_MENTIONS_END);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

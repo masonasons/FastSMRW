@@ -42,6 +42,7 @@ public:
 
     std::optional<User> fetch_profile(const std::string& id) override;
     std::optional<User> lookup_user(const std::string& handle) override;
+    std::optional<Status> fetch_status(const std::string& id) override;
     std::optional<Relationship> relationship(const std::string& id) override;
     bool follow(const std::string& id) override;
     bool unfollow(const std::string& id) override;

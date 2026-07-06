@@ -52,6 +52,8 @@ enum {
     ID_VIEW_THREAD,
     ID_USER_TIMELINE,
     ID_USER_PROFILE,
+    ID_SPEAK_USER,
+    ID_SPEAK_REPLY,
     ID_FOLLOW_TOGGLE,
     ID_OPEN_BROWSER,
     ID_OPEN_LINKS,
@@ -219,6 +221,8 @@ HMENU build_menu() {
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_USER_TIMELINE, L"Open &User Timeline");
     AppendMenuW(status, MF_STRING, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
+    AppendMenuW(status, MF_STRING, ID_SPEAK_USER, L"&Speak User\tCtrl+;");
+    AppendMenuW(status, MF_STRING, ID_SPEAK_REPLY, L"Speak &Referenced Reply\tCtrl+Shift+;");
     AppendMenuW(status, MF_STRING, ID_FOLLOW_TOGGLE, L"Fo&llow / Unfollow\tCtrl+L");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_OPEN_LINKS, L"Open &Links\tCtrl+O");
@@ -316,6 +320,8 @@ bool MainWindow::create() {
         {FVIRTKEY | FSHIFT, VK_F3, ID_FIND_PREV},    // Shift+F3: find previous
         {FVIRTKEY | FSHIFT, VK_F1, ID_CHECK_UPDATES}, // Shift+F1: check for updates
         {FVIRTKEY | FCONTROL, 'U', ID_USER_PROFILE}, // Ctrl+U: open user profile
+        {FVIRTKEY | FCONTROL, VK_OEM_1, ID_SPEAK_USER},          // Ctrl+;: speak the post's user(s)
+        {FVIRTKEY | FCONTROL | FSHIFT, VK_OEM_1, ID_SPEAK_REPLY}, // Ctrl+Shift+;: speak referenced reply
         {FVIRTKEY | FCONTROL, 'L', ID_FOLLOW_TOGGLE}, // Ctrl+L: follow/unfollow the author
         {FVIRTKEY | FCONTROL, 'O', ID_OPEN_LINKS},   // Ctrl+O: open links in the post
         {FVIRTKEY | FCONTROL, VK_UP, ID_MOVE_UP},     // jump up by movement unit
@@ -1601,6 +1607,18 @@ void MainWindow::handle_command(int id) {
         const std::string id = selected_id();
         if (!id.empty())
             dispatch_cmd({{"cmd", "open_user_profile"}, {"id", id}, {"pick", true}});
+        break;
+    }
+    case ID_SPEAK_USER: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "speak_user"}, {"id", id}});
+        break;
+    }
+    case ID_SPEAK_REPLY: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "speak_reply"}, {"id", id}});
         break;
     }
     case ID_FOLLOW_TOGGLE: {

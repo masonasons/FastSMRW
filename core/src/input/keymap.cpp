@@ -160,6 +160,8 @@ KeyBindings layer_keymap() {
         {"l", "FollowToggle"},        // L follows/unfollows the post author
         {"shift+h", "ToggleWindow"}, // Shift+H shows/hides the window
         {"o", "Url"},                {"w", "CloseTimeline"}, // W closes the current timeline
+        {";", "SpeakUser"},          // speak the post's user(s)
+        {"shift+;", "SpeakReply"},   // speak the post this reply is replying to
     };
 }
 
@@ -191,6 +193,8 @@ std::string layer_help_text() {
            "H: Follow a hashtag\n"
            "O: Open links\n"
            "W: Close timeline\n"
+           "Semicolon: Speak the post's user, or open a list of its users\n"
+           "Shift+Semicolon: Speak the post this reply is replying to\n"
            "Shift+H: Show or hide window\n"
            "Slash: Show these keys\n"
            "Escape: Leave the layer";
@@ -306,6 +310,10 @@ const std::vector<ActionDef>& action_catalog() {
         // --- user actions ---
         {"UserTimeline", "Open user timeline", "alt+win+u"},
         {"UserProfile", "Open user profile", "alt+win+shift+u"},
+        // Speak the post's user(s); many users open a timeline of them. The win8.1
+        // keymap rebinds these to plain Ctrl+; / Ctrl+Shift+; (Win+Alt is unreliable there).
+        {"SpeakUser", "Speak user info", "alt+win+;"},
+        {"SpeakReply", "Speak referenced reply", "alt+win+shift+;"},
         {"FollowToggle", "Follow / Unfollow", "alt+win+l"},
         {"MuteToggle", "Mute / Unmute user", "alt+win+shift+l"},
         {"BlockToggle", "Block / Unblock user", "control+shift+win+b"},

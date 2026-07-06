@@ -37,6 +37,10 @@ struct AppSettings {
     // The secondary interact (Shift+Enter / "SecondaryAction") on a post.
     std::string secondary_post_action = "play_media"; // play_media | post_info | thread | reply | links
     bool media_background = false; // play audio without opening the player window
+    // When replying, keep the person you're replying to mentioned up front and
+    // append every other participant's @ at the end of the post instead. Off by
+    // default (all mentions are prepended).
+    bool reply_mentions_at_end = false;
     int auto_refresh_seconds = 60; // 0 = off; otherwise poll interval
     bool streaming_enabled = true; // real-time streaming (Mastodon)
     // Invisible interface (Windows): control the client from any window.

@@ -77,6 +77,7 @@ AppSettings settings_from_json(const json& root) {
     settings.secondary_post_action =
         root.value("secondary_post_action", std::string("play_media"));
     settings.media_background = root.value("media_background", false);
+    settings.reply_mentions_at_end = root.value("reply_mentions_at_end", false);
     settings.invisible_mode = root.value("invisible_mode", std::string("off"));
     settings.invisible_keymap = root.value("invisible_keymap", std::string("default"));
     settings.invisible_layer_key =
@@ -139,6 +140,7 @@ json settings_to_json(const AppSettings& settings) {
     root["enter_user_action"] = settings.enter_user_action;
     root["secondary_post_action"] = settings.secondary_post_action;
     root["media_background"] = settings.media_background;
+    root["reply_mentions_at_end"] = settings.reply_mentions_at_end;
     root["invisible_mode"] = settings.invisible_mode;
     root["invisible_keymap"] = settings.invisible_keymap;
     root["invisible_layer_key"] = settings.invisible_layer_key;

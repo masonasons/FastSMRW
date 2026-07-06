@@ -178,6 +178,9 @@ fun HomeScreen(
                 onQuote = viewModel::composeQuote,
                 onEdit = viewModel::composeEdit,
                 onDelete = viewModel::deletePost,
+                onSpeakUser = viewModel::speakUser,
+                onSpeakReply = viewModel::speakReply,
+                onJumpToReply = viewModel::jumpToReply,
             )
         }
     }
@@ -256,6 +259,9 @@ private fun StatusList(
     onQuote: (String) -> Unit,
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onSpeakUser: (String) -> Unit,
+    onSpeakReply: (String) -> Unit,
+    onJumpToReply: (String) -> Unit,
 ) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -313,6 +319,9 @@ private fun StatusList(
                 onQuote = onQuote,
                 onEdit = onEdit,
                 onDelete = onDelete,
+                onSpeakUser = onSpeakUser,
+                onSpeakReply = onSpeakReply,
+                onJumpToReply = onJumpToReply,
             )
         }
     }

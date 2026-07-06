@@ -94,19 +94,32 @@ ServerFilter server_filter_from_json(const json& j) {
     return f;
 }
 
-PostDraft draft_from_json(const json& d) {
+PostDraft draft_from_json(const json& d, bool mentions_at_end = false) {
     PostDraft draft;
     draft.text = d.value("text", std::string{});
-    // Selected reply recipients (Mastodon): prepend "@a @b " to the text. The UI
-    // sends only the handles the user left checked in the recipient list.
+    // Selected reply recipients (Mastodon): the UI sends only the handles the user
+    // left checked, in participant order (the person being replied to first).
     if (auto m = d.find("mentions"); m != d.end() && m->is_array()) {
         std::vector<std::string> accts;
         for (const auto& a : *m)
             if (a.is_string())
                 accts.push_back(a.get<std::string>());
-        const std::string prefix = present::mention_prefix(accts);
-        if (!prefix.empty())
-            draft.text = prefix + draft.text;
+        if (mentions_at_end && accts.size() > 1) {
+            // Keep the person you're replying to (first) up front; append the rest
+            // to the end of the post so the visible text starts with your reply.
+            std::vector<std::string> rest(accts.begin() + 1, accts.end());
+            draft.text = present::mention_prefix({accts.front()}) + draft.text;
+            const std::string tail = present::mention_prefix(rest);
+            if (!tail.empty()) {
+                if (!draft.text.empty() && draft.text.back() != ' ' && draft.text.back() != '\n')
+                    draft.text += " ";
+                draft.text += tail;
+            }
+        } else {
+            const std::string prefix = present::mention_prefix(accts);
+            if (!prefix.empty())
+                draft.text = prefix + draft.text;
+        }
     }
     if (d.contains("reply_to_id"))
         draft.reply_to_id = d.value("reply_to_id", std::string{});
@@ -386,6 +399,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_user_timeline(cmd);
     else if (c == "open_user_profile")
         cmd_open_user_profile(cmd);
+    else if (c == "speak_user")
+        cmd_speak_user(cmd);
+    else if (c == "speak_reply")
+        cmd_speak_reply(cmd);
     else if (c == "set_relationship")
         cmd_set_relationship(cmd);
     else if (c == "open_followers")
@@ -1551,6 +1568,162 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
     emit_user_picker("profile", row_id, users);
 }
 
+// Ctrl+; : speak the focused post's user(s) using the user speech template. A lone
+// user is spoken; several open a navigable timeline of the post's users.
+void CoreSession::cmd_speak_user(const json& cmd) {
+    TimelineController* tc = current();
+    const std::string row = cmd.value("id", std::string{});
+    const TimelineItem* item = tc ? find_item(tc, row) : nullptr;
+    if (!item)
+        return;
+    const std::vector<User> users = users_in_post(*item);
+    if (users.empty())
+        return;
+    if (users.size() == 1) {
+        speak_user_info(users.front());
+        return;
+    }
+    std::string title = "Users in post";
+    if (const Status* s = item->actionable_status(); s && !s->account.acct.empty())
+        title = "Users in @" + s->account.acct + "'s post";
+    spawn_post_users(users, row, title);
+}
+
+void CoreSession::speak_user_info(const User& u) {
+    SocialAccount* acct = accounts_.selected();
+    const User user = u;
+    // Enrich a sparse mention (no bio/counts) off-thread, then speak the row label
+    // composed from the user speech template (Speech -> Configure Users).
+    worker_.post([this, acct, user] {
+        User full = user;
+        if (acct && !user.id.empty())
+            if (auto p = acct->fetch_profile(user.id))
+                full = *p;
+        std::string text = present::accessibility_label(full);
+        loop_.post([this, text = std::move(text)] { emit_announce(text); });
+    });
+}
+
+void CoreSession::spawn_post_users(const std::vector<User>& users, const std::string& status_id,
+                                   const std::string& title) {
+    const TimelineSource src = TimelineSource::post_users(status_id, title);
+    for (size_t i = 0; i < timelines_.size(); ++i)
+        if (timelines_[i]->source().cache_key() == src.cache_key()) {
+            current_ = static_cast<int>(i); // already open -> focus it
+            emit_timelines();
+            return;
+        }
+    std::string origin;
+    if (current_ >= 0 && current_ < static_cast<int>(timelines_.size()))
+        origin = timelines_[static_cast<size_t>(current_)]->source().cache_key();
+    timelines_.push_back(make_controller(accounts_.selected(), src));
+    current_ = static_cast<int>(timelines_.size()) - 1;
+    sound_.play_named("open", soundpack_for(accounts_.selected()));
+    TimelineController* p = timelines_.back().get();
+    p->set_origin_key(origin);
+    emit_timelines();
+    p->seed_users(users); // show the (possibly sparse) rows immediately
+    // Enrich sparse mentions with full profiles (bio/counts) off-thread, then
+    // re-seed — unless the tab was closed meanwhile.
+    SocialAccount* acct = accounts_.selected();
+    worker_.post([this, p, acct, users] {
+        std::vector<User> full = users;
+        if (acct)
+            for (auto& u : full)
+                if (!u.id.empty())
+                    if (auto pr = acct->fetch_profile(u.id))
+                        u = *pr;
+        loop_.post([this, p, full = std::move(full)]() mutable {
+            if (index_of(p) >= 0)
+                p->seed_users(std::move(full));
+        });
+    });
+}
+
+bool CoreSession::jump_to_row(const std::string& row_id) {
+    TimelineController* tc = current();
+    if (!tc)
+        return false;
+    const int idx = tc->visible_index_of(row_id);
+    if (idx < 0)
+        return false;
+    tc->note_selection(row_id);
+    emit({{"event", "select_row"}, {"id", row_id}});
+    invisible_speak_index(idx);
+    return true;
+}
+
+const Status* CoreSession::find_status_anywhere(const std::string& status_id) const {
+    if (status_id.empty())
+        return nullptr;
+    for (const auto& tc : timelines_)
+        for (const auto& item : tc->items())
+            if (const Status* s = item.actionable_status())
+                if (s->id == status_id)
+                    return s;
+    return nullptr;
+}
+
+// Ctrl+Shift+; : speak the post this reply is replying to. A second press on the
+// same row within the double-press window jumps to that parent instead.
+void CoreSession::cmd_speak_reply(const json& cmd) {
+    TimelineController* tc = current();
+    const std::string row = cmd.value("id", std::string{});
+    const TimelineItem* item = tc ? find_item(tc, row) : nullptr;
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s || !s->in_reply_to_id || s->in_reply_to_id->empty()) {
+        emit_announce("Not a reply.");
+        return;
+    }
+    const std::string parent_id = *s->in_reply_to_id;
+
+    // A front end can ask outright to jump (Android exposes speak / jump as two
+    // TalkBack actions). Otherwise it's a jump only on a quick second press of the
+    // same row (Windows / the invisible interface: press once to hear, twice to go).
+    bool jump;
+    if (cmd.contains("jump")) {
+        jump = cmd.value("jump", false);
+    } else {
+        constexpr std::int64_t kDoublePressMs = 600;
+        const std::int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now().time_since_epoch())
+                                        .count();
+        jump = row == last_speak_reply_row_ && (now_ms - last_speak_reply_ms_) <= kDoublePressMs;
+        last_speak_reply_row_ = row;
+        last_speak_reply_ms_ = now_ms;
+    }
+
+    if (jump) {
+        // Jump to the parent if it's in the current timeline; else open the thread,
+        // which contains it.
+        if (jump_to_row("s:" + parent_id))
+            return;
+        cmd_open_thread({{"id", row}});
+        return;
+    }
+
+    // Single press: speak the parent — a loaded copy if we have one, else fetch it.
+    if (const Status* loaded = find_status_anywhere(parent_id)) {
+        emit_announce(present::accessibility_label(TimelineItem{*loaded}, util::now_unix()));
+        return;
+    }
+    SocialAccount* acct = accounts_.selected();
+    worker_.post([this, acct, parent_id] {
+        std::optional<Status> fetched;
+        if (acct)
+            fetched = acct->fetch_status(parent_id);
+        loop_.post([this, fetched = std::move(fetched)] {
+            if (fetched)
+                emit_announce(
+                    present::accessibility_label(TimelineItem{*fetched}, util::now_unix()));
+            else
+                emit_announce("Could not find the post this is replying to.");
+        });
+    });
+}
+
 void CoreSession::cmd_toggle_pin() {
     TimelineController* tc = current();
     if (!tc)
@@ -1714,7 +1887,8 @@ void CoreSession::cmd_post(const json& cmd) {
     TimelineController* tc = current();
     if (!tc)
         return;
-    PostDraft draft = draft_from_json(cmd.value("draft", json::object()));
+    PostDraft draft =
+        draft_from_json(cmd.value("draft", json::object()), settings_.reply_mentions_at_end);
     const std::string edit_id = cmd.value("edit_id", std::string{});
     // A reply gets its own chime (send_reply); new posts/quotes use send_post.
     const bool is_reply = draft.reply_to_id.has_value() && !draft.reply_to_id->empty();
@@ -2486,6 +2660,10 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_open_user_timeline({{"id", row}, {"pick", true}});
     if (a == "UserProfile")
         return cmd_open_user_profile({{"id", row}, {"pick", true}});
+    if (a == "SpeakUser")
+        return cmd_speak_user({{"id", row}});
+    if (a == "SpeakReply")
+        return cmd_speak_reply({{"id", row}});
     if (a == "FollowToggle")
         return cmd_follow_toggle({{"id", row}, {"pick", true}});
     if (a == "CloseTimeline")
@@ -2928,6 +3106,8 @@ void CoreSession::save_open_timelines() const {
                    const std::vector<std::unique_ptr<TimelineController>>& v) {
         json arr = json::array();
         for (const auto& tc : v) {
+            if (tc->source().is_static()) // synthetic (e.g. post-users): can't be restored
+                continue;
             json j = source_to_json(tc->source());
             if (tc->pinned())
                 j["pinned"] = true;
@@ -3192,6 +3372,8 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
         r["boosted"] = s->boosted;
         if (!s->media_attachments.empty())
             r["has_media"] = true; // gates the "View media" action
+        if (s->in_reply_to_id && !s->in_reply_to_id->empty())
+            r["is_reply"] = true; // gates the "Speak referenced reply" actions
         if (SocialAccount* me = accounts_.selected())
             r["is_mine"] = s->account.id == me->me().id; // your own post -> deletable
     }

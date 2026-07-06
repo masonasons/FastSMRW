@@ -712,6 +712,25 @@ std::optional<User> MastodonAccount::fetch_profile(const std::string& id) {
     }
 }
 
+std::optional<Status> MastodonAccount::fetch_status(const std::string& id) {
+    // GET /api/v1/statuses/:id — used to speak a reply's parent that isn't loaded.
+    if (id.empty())
+        return std::nullopt;
+    const std::string url = credentials_.instance_url + "/api/v1/statuses/" + id;
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return std::nullopt;
+    try {
+        json j = json::parse(body);
+        if (!j.is_object())
+            return std::nullopt;
+        return mastodon::map_status(j);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<User> MastodonAccount::lookup_user(const std::string& handle) {
     // Resolve a typed handle to a full account. /accounts/lookup takes the acct
     // form (user@domain, or just user for a local account); a leading '@' is

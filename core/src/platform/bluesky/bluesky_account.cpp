@@ -299,6 +299,25 @@ std::optional<User> BlueskyAccount::fetch_profile(const std::string& id) {
     }
 }
 
+std::optional<Status> BlueskyAccount::fetch_status(const std::string& uri) {
+    // getPosts returns post views by at-uri; the in_reply_to_id we carry for a
+    // Bluesky reply IS the parent's uri, so one lookup speaks the referenced post.
+    if (uri.empty())
+        return std::nullopt;
+    const std::string url =
+        session_.pds_url + "/xrpc/app.bsky.feed.getPosts?uris=" + util::percent_encode(uri);
+    const net::HttpResponse res = send_authed("GET", url, "");
+    if (!res.ok())
+        return std::nullopt;
+    try {
+        const json j = json::parse(res.body);
+        if (auto pa = j.find("posts"); pa != j.end() && pa->is_array() && !pa->empty())
+            return bluesky::map_post((*pa)[0]);
+    } catch (...) {
+    }
+    return std::nullopt;
+}
+
 std::optional<User> BlueskyAccount::lookup_user(const std::string& handle) {
     // getProfile's `actor` accepts a handle as well as a DID, so a typed handle
     // resolves directly. A leading '@' is tolerated and stripped.
