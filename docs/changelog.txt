@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.2
+-----
+
+- Android: the app now checks GitHub for a newer version on launch (and on demand from Settings, Updates) and offers to download it.
+
 0.2.1
 -----
 

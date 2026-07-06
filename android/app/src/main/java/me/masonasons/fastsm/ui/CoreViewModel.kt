@@ -76,6 +76,12 @@ data class AuthResult(val ok: Boolean, val error: String)
 /** A reply recipient the user can toggle (Mastodon). */
 data class ComposeParticipant(val acct: String, val displayName: String, val checked: Boolean)
 
+/**
+ * A newer release the update check found (update_status with available=true and a
+ * usable APK asset). [apkUrl] is the FastSMRW.apk download to open in the browser.
+ */
+data class AppUpdateUi(val version: String, val notes: String, val apkUrl: String)
+
 /** One candidate user in a disambiguation picker. */
 data class UserPick(val id: String, val acct: String)
 
@@ -219,6 +225,14 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     )
     val postResults: SharedFlow<Boolean> = _postResults.asSharedFlow()
 
+    /** Non-null when a newer version is available (from update_status). */
+    private val _appUpdate = MutableStateFlow<AppUpdateUi?>(null)
+    val appUpdate: StateFlow<AppUpdateUi?> = _appUpdate.asStateFlow()
+
+    // Guards the once-per-launch startup update check (fired when settings first
+    // arrive, so we can honour the check_updates_on_startup preference).
+    private var startupUpdateChecked = false
+
     init {
         core.setEventListener { json -> onEvent(json) }
         core.dispatch("start") // load persisted accounts + timelines
@@ -227,10 +241,20 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     private fun onEvent(e: JSONObject) {
         when (e.optString("event")) {
             "settings" -> {
-                _settings.value = e.optJSONObject("settings")
+                val settings = e.optJSONObject("settings")
+                _settings.value = settings
                 val sp = e.optJSONArray("soundpacks")
                 _soundpacks.value = buildList {
                     if (sp != null) for (i in 0 until sp.length()) add(sp.optString(i))
+                }
+                // Quietly check GitHub once on launch if the preference is on. "stable"
+                // forces a version-tag comparison (Android embeds no build commit for
+                // the "latest" branch).
+                if (!startupUpdateChecked) {
+                    startupUpdateChecked = true
+                    if (settings?.optBoolean("check_updates_on_startup", true) != false) {
+                        core.dispatch("check_for_update") { put("silent", true); put("branch", "stable") }
+                    }
                 }
             }
 
@@ -370,6 +394,29 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
             "announce" -> _announcements.tryEmit(e.optString("message"))
             "open_url" -> _openUrls.tryEmit(e.optString("url"))
+
+            "update_status" -> {
+                val available = e.optBoolean("available")
+                val apkUrl = e.optString("apk_url")
+                val silent = e.optBoolean("silent")
+                if (available && apkUrl.isNotBlank()) {
+                    _appUpdate.value = AppUpdateUi(
+                        version = e.optString("version"),
+                        notes = e.optString("notes"),
+                        apkUrl = apkUrl,
+                    )
+                } else if (!silent) {
+                    // A manual check with nothing to install: tell the user why.
+                    val error = e.optString("error")
+                    _announcements.tryEmit(
+                        when {
+                            error.isNotBlank() -> "Couldn't check for updates: $error"
+                            available -> "An update is available, but no Android build was found."
+                            else -> "FastSMRW is up to date."
+                        }
+                    )
+                }
+            }
         }
     }
 
@@ -512,6 +559,24 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissMediaPicker() {
         _mediaPicker.value = null
+    }
+
+    // --- Updates ----------------------------------------------------------
+
+    /** Manually check GitHub for a newer release (announces the outcome). */
+    fun checkForUpdate() =
+        core.dispatch("check_for_update") { put("silent", false); put("branch", "stable") }
+
+    /** Open the APK download for the pending update in the browser, then dismiss. */
+    fun openUpdate() {
+        val url = _appUpdate.value?.apkUrl ?: return
+        _openUrls.tryEmit(url)
+        _appUpdate.value = null
+    }
+
+    /** Dismiss the update prompt for now (re-offered on the next launch/check). */
+    fun dismissUpdate() {
+        _appUpdate.value = null
     }
 
     // --- Settings ---------------------------------------------------------

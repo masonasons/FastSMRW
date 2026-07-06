@@ -2302,7 +2302,9 @@ void CoreSession::cmd_set_window_shown(const json& cmd) {
 
 void CoreSession::cmd_check_for_update(const json& cmd) {
     const bool silent = cmd.value("silent", false);
-    const std::string branch = settings_.update_branch;
+    // A front end can force a branch (Android always checks version-tagged "stable"
+    // releases, since it has no embedded build commit to compare against "latest").
+    const std::string branch = cmd.value("branch", settings_.update_branch);
     net::IHttpClient* http = http_.get();
     const std::string cur_ver = fastsm::version();
     const std::string cur_commit = fastsm::build_commit();
@@ -2318,6 +2320,7 @@ void CoreSession::cmd_check_for_update(const json& cmd) {
                   {"notes", info.notes},
                   {"download_url", info.download_url},
                   {"installer_url", info.installer_url},
+                  {"apk_url", info.apk_url},
                   {"error", info.error}});
         });
     });

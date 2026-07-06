@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.masonasons.fastsm.core.FastSmCore
 import me.masonasons.fastsm.ui.CoreViewModel
 import org.json.JSONObject
 import kotlin.math.roundToInt
@@ -125,6 +126,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         panel == "speech" -> "Speech"
         panel == "advanced" -> "Advanced"
         panel == "confirmation" -> "Confirmation"
+        panel == "updates" -> "Updates"
         else -> "Settings"
     }
 
@@ -156,6 +158,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
                 panel == "speech" -> SpeechPanel(s, viewModel) { speechList = it }
                 panel == "advanced" -> AdvancedPanel(s, viewModel)
                 panel == "confirmation" -> ConfirmationPanel(s, viewModel)
+                panel == "updates" -> UpdatesPanel(s, viewModel)
                 else -> RootList { panel = it }
             }
         }
@@ -170,6 +173,7 @@ private fun RootList(onOpen: (String) -> Unit) {
         "speech" to "Speech",
         "advanced" to "Advanced",
         "confirmation" to "Confirmation",
+        "updates" to "Updates",
     ).forEach { (key, label) ->
         Text(
             label,
@@ -263,6 +267,16 @@ private fun AdvancedPanel(s: JSONObject, vm: CoreViewModel) {
         "Posts loaded per refresh is about 40 × this number. Raise it to load more at once " +
             "(slower). Applies to refresh and scrollback.",
     ) { vm.updateSetting { put("fetch_pages", it) } }
+}
+
+@Composable
+private fun UpdatesPanel(s: JSONObject, vm: CoreViewModel) {
+    SwitchRow("Check for updates when FastSMRW starts", s.optBoolean("check_updates_on_startup", true)) {
+        vm.updateSetting { put("check_updates_on_startup", it) }
+    }
+    HorizontalDivider()
+    ActionRow("Check for updates now") { vm.checkForUpdate() }
+    HelpText("You're running FastSMRW ${FastSmCore.version}. Updates download from GitHub; tap the downloaded APK to install.")
 }
 
 @Composable

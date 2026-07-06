@@ -35,6 +35,28 @@ handling, compose, sounds, etc. The original Python app is at `C:\stuff\FastSM`.
 Priorities: accessibility first (screen readers, keyboard-only, earcons),
 minimal CPU/RAM, fast cache-first startup.
 
+## Feature parity: every feature ships in every front end — REQUIRED
+
+Anything implemented for FastSM must work in **all** front ends — Windows,
+Android, and any future app (iOS, etc.). A feature is not "done" until it's
+usable in every existing front end, not just the one you started in. Because the
+logic lives in the shared core, adding a feature is: core command/event(s) once,
+then wire the UI in **each** app. When you add a feature to one app, add it to
+the others in the same change (or say clearly what's still missing and why).
+
+The apps should also **match each other** in behavior and UX as closely as each
+platform sensibly allows — same settings, same options, same organization (e.g.
+Android settings panels mirror the Windows settings pages). Don't reinvent a
+feature's shape per platform.
+
+If full parity isn't a good idea for a specific feature — it's genuinely
+platform-specific, technically impossible on a platform, or would be a worse
+experience there — **stop and talk to me about it** rather than silently
+shipping it in one app only. (Example: the update flow — the *check* is shared,
+but the desktop downloads an installer while Android opens an APK; the "latest"
+commit-based channel can't work on Android, so it's omitted there. Those are
+deliberate, discussed exceptions, not drift.)
+
 ## Architecture rules
 
 - **The core is driven through a C ABI command/event boundary, not C++ classes.**

@@ -6,15 +6,24 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.compose.ComposeScreen
@@ -65,6 +74,7 @@ private fun App(vm: CoreViewModel) {
     val composeContext by vm.composeContext.collectAsStateWithLifecycle()
     val profile by vm.profile.collectAsStateWithLifecycle()
     val media by vm.media.collectAsStateWithLifecycle()
+    val appUpdate by vm.appUpdate.collectAsStateWithLifecycle()
     // Show the add-account screen when there are no accounts, or when the user
     // explicitly asks to add one from the account picker.
     var addingAccount by remember { mutableStateOf(false) }
@@ -126,6 +136,25 @@ private fun App(vm: CoreViewModel) {
             onOpenSettings = { showSettings = true },
             onOpenAddTimeline = { showAddTimeline = true },
             onOpenAccountSettings = { showAccountSettings = true },
+        )
+    }
+
+    // A newer release was found: offer to open its APK download. Shown over
+    // whatever screen is active (an AlertDialog is its own window).
+    appUpdate?.let { update ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissUpdate() },
+            title = { Text("Update available") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("FastSMRW ${update.version} is available. Download it to update?")
+                    if (update.notes.isNotBlank()) {
+                        Text(update.notes, modifier = Modifier.padding(top = 12.dp))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.openUpdate() }) { Text("Download") } },
+            dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("Later") } },
         )
     }
 }

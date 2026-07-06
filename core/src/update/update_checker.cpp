@@ -54,13 +54,23 @@ json get_json(net::IHttpClient& http, const std::string& url, std::string& error
     }
 }
 
-// The FastSMRW.zip asset's download URL within a release object, or "".
-std::string zip_asset_url(const json& release) {
+// A release asset's download URL by exact name, or "".
+std::string named_asset_url(const json& release, const std::string& name) {
     if (auto it = release.find("assets"); it != release.end() && it->is_array())
         for (const auto& a : *it)
-            if (a.value("name", std::string()) == "FastSMRW.zip")
+            if (a.value("name", std::string()) == name)
                 return a.value("browser_download_url", std::string());
     return {};
+}
+
+// The FastSMRW.zip asset's download URL within a release object, or "".
+std::string zip_asset_url(const json& release) {
+    return named_asset_url(release, "FastSMRW.zip");
+}
+
+// The FastSMRW.apk (Android) asset's download URL within a release object, or "".
+std::string apk_asset_url(const json& release) {
+    return named_asset_url(release, "FastSMRW.apk");
 }
 
 // The installer asset's download URL (a name containing "setup"/"installer" and
@@ -129,6 +139,7 @@ UpdateInfo check_latest(net::IHttpClient& http, const std::string& current_commi
     info.notes = rel.value("body", std::string());
     info.download_url = zip_asset_url(rel);
     info.installer_url = installer_asset_url(rel);
+    info.apk_url = apk_asset_url(rel);
     info.version = remote.substr(0, 7);
     if (remote.empty() || info.download_url.empty()) {
         info.error = "No usable 'latest' build was published.";
@@ -179,6 +190,7 @@ UpdateInfo check_stable(net::IHttpClient& http, const std::string& current_versi
     info.notes = best->value("body", std::string());
     info.download_url = zip_asset_url(*best);
     info.installer_url = installer_asset_url(*best);
+    info.apk_url = apk_asset_url(*best);
     info.available = compare_versions(best_version, current_version) > 0 && !info.download_url.empty();
     return info;
 }
