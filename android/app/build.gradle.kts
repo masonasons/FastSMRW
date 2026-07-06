@@ -17,8 +17,8 @@ android {
         applicationId = "me.masonasons.fastsmrw"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.2"
+        versionCode = 4
+        versionName = "0.2.3"
 
         // Build the shared core (fastsm_core + JNI bridge) for these ABIs:
         // arm64 for real devices, x86_64 for the emulator. armeabi-v7a can be

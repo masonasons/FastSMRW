@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.3
+-----
+
+- Fixed: a new post you wrote no longer shows up in the Mentions timeline (or another open tab) when you composed it from there; your own new posts appear in Home.
+
 0.2.2
 -----
 

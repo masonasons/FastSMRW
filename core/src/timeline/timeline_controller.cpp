@@ -664,7 +664,13 @@ void TimelineController::post(const PostDraft& draft, std::function<void(bool)> 
         std::optional<Status> created = account_->post(draft);
         main_->post([this, created = std::move(created), done, is_reply]() mutable {
             const bool ok = created.has_value();
-            if (ok && !is_reply) {
+            // Only Home optimistically shows your new post: it's the one feed a
+            // brand-new top-level post always belongs in, whatever its visibility.
+            // Inserting into "the current tab" (as we used to) wrongly dropped it
+            // into Mentions/Notifications, a hashtag, a search, a thread, etc. when
+            // you happened to compose from there. Elsewhere it still arrives via
+            // streaming / the next refresh.
+            if (ok && !is_reply && source_.kind == TimelineSource::Kind::Home) {
                 // Only add the optimistic copy if streaming hasn't already delivered
                 // this exact post (dedupe by id) - otherwise your own post appears
                 // twice, which is very visible with reverse timelines.
