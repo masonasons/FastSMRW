@@ -10,6 +10,7 @@
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
 #include "fastsm/util/date_parsing.hpp"
+#include "fastsm/util/log.hpp"
 #include "fastsm/util/url.hpp"
 
 using nlohmann::json;
@@ -459,8 +460,11 @@ std::optional<std::string> MastodonAccount::upload_media(const MediaUpload& a) {
     const std::string ct = "multipart/form-data; boundary=" + boundary;
     std::string body;
     long status = 0;
-    if (!request("POST", credentials_.instance_url + "/api/v2/media", b, ct, body, status))
+    if (!request("POST", credentials_.instance_url + "/api/v2/media", b, ct, body, status)) {
+        log::write("upload_media: POST /api/v2/media failed, status=" + std::to_string(status) +
+                   " file=" + a.filename);
         return std::nullopt;
+    }
     std::string id;
     try {
         id = json::parse(body).value("id", std::string{});
@@ -469,16 +473,26 @@ std::optional<std::string> MastodonAccount::upload_media(const MediaUpload& a) {
     }
     if (id.empty())
         return std::nullopt;
-    // 202 = still processing (e.g. video/large image); poll until it's ready (200),
-    // capped so a stuck upload can't block the post forever.
+    // 202 = accepted but still processing (video / large image). Mastodon rejects a
+    // status that attaches media that hasn't finished processing, so wait until the
+    // server reports it ready (GET returns 200; 206 while still processing). Cap the
+    // wait so a stuck upload can't block forever; if it never finishes, treat the
+    // upload as failed rather than attaching an id the status POST would reject.
     if (status == 202) {
         const std::string purl = credentials_.instance_url + "/api/v1/media/" + id;
-        for (int i = 0; i < 30; ++i) {
+        bool ready = false;
+        for (int i = 0; i < 120; ++i) { // up to ~2 min for slow video transcodes
             std::this_thread::sleep_for(std::chrono::seconds(1));
             std::string pb;
             long ps = 0;
-            if (request("GET", purl, "", "", pb, ps) && ps == 200)
+            if (request("GET", purl, "", "", pb, ps) && ps == 200) {
+                ready = true;
                 break;
+            }
+        }
+        if (!ready) {
+            log::write("upload_media: media " + id + " still processing after wait; giving up");
+            return std::nullopt;
         }
     }
     return id;
@@ -487,10 +501,15 @@ std::optional<std::string> MastodonAccount::upload_media(const MediaUpload& a) {
 std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
     std::vector<std::pair<std::string, std::string>> params;
     params.push_back({"status", draft.text});
-    // Upload any attachments first; attach the ones that succeed.
-    for (const auto& a : draft.attachments)
-        if (auto id = upload_media(a))
-            params.push_back({"media_ids[]", *id});
+    // Upload any attachments first. If one fails (network error, or the server
+    // never finished processing it), abort the whole post rather than silently
+    // sending it without the media the user attached.
+    for (const auto& a : draft.attachments) {
+        auto id = upload_media(a);
+        if (!id)
+            return std::nullopt;
+        params.push_back({"media_ids[]", *id});
+    }
     if (draft.reply_to_id) {
         // Replying to a remote post: resolve its URL to a local id first, so the
         // reply threads correctly on the user's own instance.

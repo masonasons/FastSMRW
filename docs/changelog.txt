@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.2.6
+-----
+
+- Fixed: attaching media to a post is more reliable - videos and large files now finish uploading before the post is sent.
+- Fixed: if a media attachment can't be uploaded, the post is held back with an error instead of quietly going out without it.
+
 0.2.5
 -----
 

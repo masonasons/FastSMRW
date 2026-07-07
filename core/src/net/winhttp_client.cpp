@@ -112,7 +112,11 @@ HttpResponse WinHttpClient::send(const HttpRequest& req) {
         res.error = "WinHttpOpen failed";
         return res;
     }
-    WinHttpSetTimeouts(session, 15000, 15000, 30000, 30000);
+    // Generous send/receive timeouts: a large media upload (multi-MB image or a
+    // video) can take well over 30s to send on a slow uplink, and the server may
+    // take a while to respond after receiving it. These are ceilings, not fixed
+    // waits, so normal API calls are unaffected.
+    WinHttpSetTimeouts(session, 15000, 15000, 90000, 60000);
 
     // Enable TLS 1.2/1.3. Windows 7's WinHTTP defaults to TLS 1.0 and won't
     // negotiate with modern servers, so the handshake fails and the request
