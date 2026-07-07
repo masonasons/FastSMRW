@@ -246,8 +246,31 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         state.closeTimeline()
         postsViewController.focusTable()
     }
-    @objc func clearTimeline(_ sender: Any?) { state.clearTimeline() }
-    @objc func clearAllTimelines(_ sender: Any?) { state.clearAllTimelines() }
+    @objc func clearTimeline(_ sender: Any?) {
+        confirmClear("Clear this timeline?",
+                     detail: "This removes the loaded posts and its cache.") {
+            [weak self] in self?.state.clearTimeline()
+        }
+    }
+    @objc func clearAllTimelines(_ sender: Any?) {
+        confirmClear("Clear all timelines?",
+                     detail: "This removes the loaded posts and caches for every open timeline.") {
+            [weak self] in self?.state.clearAllTimelines()
+        }
+    }
+
+    /// Run `action`, first asking to confirm unless the user disabled the prompt.
+    private func confirmClear(_ message: String, detail: String, _ action: @escaping () -> Void) {
+        guard state.confirmClearTimeline, let window else { action(); return }
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = detail
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { r in
+            if r == .alertFirstButtonReturn { action() }
+        }
+    }
     @objc func refreshAll(_ sender: Any?) { state.refreshAll() }
     @objc func goBack(_ sender: Any?) { state.goBack() }
     @objc func filterTimeline(_ sender: Any?) { state.getClientFilter() }

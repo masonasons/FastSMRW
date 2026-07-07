@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.7
+-----
+
+- New: on the Mac, Backspace closes a timeline, Command+Backspace deletes a post, Command+Shift+Backspace clears a timeline, and Command+Shift+Option+Backspace clears them all.
+
 0.2.6
 -----
 

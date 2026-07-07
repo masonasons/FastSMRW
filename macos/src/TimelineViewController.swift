@@ -70,7 +70,9 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         tableView.onShiftReturn = { [weak self] in self?.playMediaForSelection(nil) }
         tableView.onCommandReturn = { [weak self] in self?.openLinksForSelection(nil) }
         tableView.onSpace = { [weak self] in self?.viewThread(nil) }
-        tableView.onDelete = { [weak self] in self?.deleteSelection(nil) }
+        // Backspace closes the current timeline; ⌘Backspace deletes the post.
+        tableView.onDelete = { [weak self] in self?.closeCurrentTimeline(nil) }
+        tableView.onCommandDelete = { [weak self] in self?.deleteSelection(nil) }
         // Single-key post actions (the table would otherwise type-select on them).
         // These mirror the Status menu's letter shortcuts; consuming the key here
         // is safe because menu key-equivalents run before keyDown, never both.
@@ -224,6 +226,14 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
     @objc func speakReplyForSelection(_ sender: Any?) {
         guard let id = selectedRowId else { return }
         state.speakReply(id: id)
+    }
+    @objc func closeCurrentTimeline(_ sender: Any?) {
+        guard state.timelines.indices.contains(state.currentIndex),
+              state.timelines[state.currentIndex].dismissable else {
+            state.playEarcon("boundary")
+            return
+        }
+        state.closeTimeline()
     }
     @objc func deleteSelection(_ sender: Any?) {
         guard let id = selectedRowId else { return }

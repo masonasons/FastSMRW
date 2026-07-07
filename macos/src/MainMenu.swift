@@ -115,12 +115,14 @@ enum MainMenu {
                                           action: #selector(MainWindowController.goBack(_:)),
                                           keyEquivalent: "z")
         goBack.keyEquivalentModifierMask = [.command]
-        timelineMenu.addItem(withTitle: "Clear Timeline",
+        let clearTimeline = timelineMenu.addItem(withTitle: "Clear Timeline",
                              action: #selector(MainWindowController.clearTimeline(_:)),
-                             keyEquivalent: "")
-        timelineMenu.addItem(withTitle: "Clear All Timelines",
+                             keyEquivalent: "\u{8}")
+        clearTimeline.keyEquivalentModifierMask = [.command, .shift]
+        let clearAll = timelineMenu.addItem(withTitle: "Clear All Timelines",
                              action: #selector(MainWindowController.clearAllTimelines(_:)),
-                             keyEquivalent: "")
+                             keyEquivalent: "\u{8}")
+        clearAll.keyEquivalentModifierMask = [.command, .shift, .option]
         let filter = timelineMenu.addItem(withTitle: "Filter Timeline…",
                                           action: #selector(MainWindowController.filterTimeline(_:)),
                                           keyEquivalent: "l")

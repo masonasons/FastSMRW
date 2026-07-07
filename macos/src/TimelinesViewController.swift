@@ -44,6 +44,7 @@ final class TimelinesViewController: NSViewController, NSTableViewDataSource, NS
         tableView.setAccessibilityLabel("Timelines")
         tableView.onTab = { [weak self] in self?.onMoveToPosts?() }
         tableView.onBoundary = { [weak self] in self?.state.playEarcon("boundary") }
+        tableView.onDelete = { [weak self] in self?.closeSelectedTimeline() }
         tableView.menuProvider = { [weak self] row in self?.contextMenu(row: row) }
 
         let scrollView = NSScrollView()
@@ -122,6 +123,19 @@ final class TimelinesViewController: NSViewController, NSTableViewDataSource, NS
     }
     @objc private func closeRow(_ sender: NSMenuItem) {
         state.selectTimeline(index: sender.tag)
+        state.closeTimeline()
+        focusTable()
+    }
+
+    /// Backspace on the sidebar closes the selected timeline (if it can be
+    /// closed); otherwise an earcon signals the boundary.
+    private func closeSelectedTimeline() {
+        let row = tableView.selectedRow
+        guard timelines.indices.contains(row), timelines[row].dismissable else {
+            state.playEarcon("boundary")
+            return
+        }
+        state.selectTimeline(index: row)
         state.closeTimeline()
         focusTable()
     }

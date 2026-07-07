@@ -190,6 +190,7 @@ final class AppState {
     func loadGap(id: String) { client.send("load_gap", ["id": id]) }
     var autoLoadOlder: Bool { settingsRaw["auto_load_older"] as? Bool ?? true }
     var confirmDeletePost: Bool { settingsRaw["confirm_delete_post"] as? Bool ?? true }
+    var confirmClearTimeline: Bool { settingsRaw["confirm_clear_timeline"] as? Bool ?? true }
 
     // Timelines: open a new one, close/clear the current one.
     func getSpawnable() { client.send("get_spawnable") }

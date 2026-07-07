@@ -69,9 +69,10 @@ final class NavigableTableView: NSTableView {
         case Key.space:
             if let onSpace { onSpace(); return }
         case Key.delete:
-            if event.modifierFlags.contains(.command) {
+            let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            if mods == .command {
                 if let onCommandDelete { onCommandDelete(); return }
-            } else if let onDelete {
+            } else if mods.isEmpty, let onDelete {
                 onDelete(); return
             }
         case Key.leftArrow:
