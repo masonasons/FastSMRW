@@ -2715,7 +2715,7 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     // UI-only actions the app carries out (window/dialogs/find/stop speech).
     if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" ||
         a == "StopMedia" || a == "Find" || a == "FindNext" || a == "FindPrev" ||
-        a == "EnterLayer" || a == "NewTimeline") {
+        a == "EnterLayer" || a == "NewTimeline" || a == "Exit") {
         emit({{"event", "invisible_ui_action"}, {"action", a}});
         return;
     }

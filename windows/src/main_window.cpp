@@ -2354,6 +2354,8 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
         show_user_actions(); // the Enter default on a user, from the invisible interface
     } else if (a == "StopMedia") {
         stop_media();
+    } else if (a == "Exit") {
+        DestroyWindow(hwnd_); // real quit (same as the Quit menu item), not just hide
     }
 }
 

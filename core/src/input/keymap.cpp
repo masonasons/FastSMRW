@@ -330,6 +330,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"ToggleWindow", "Show / hide window", "control+win+w"},
         {"EnterLayer", "Open the layer", ""}, // unbound: call up the layer from hotkey/keyhook mode
         {"Options", "Settings", "alt+win+o"},
+        {"Exit", "Exit FastSMRW", "alt+shift+win+q"}, // Win8.1 keymap rebinds to control+shift+win+q
         {"AccountSettings", "Account settings", ""}, // unbound by default (in-app Ctrl+Shift+,)
         {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
         {"StopMedia", "Stop media playback", "control+alt+win+s"},

@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.8
+-----
+
+- New: you can now exit FastSMRW from anywhere using a global hotkey - Win+Alt+Shift+Q by default, or Ctrl+Win+Shift+Q on the Windows 8.1 keymap.
+
 0.2.7
 -----
 

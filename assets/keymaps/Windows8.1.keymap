@@ -23,3 +23,4 @@ control+shift+win+l=MuteToggle
 control+win+'=CloseTimeline
 control+win+delete=DeletePost
 control+win+o=Options
+control+shift+win+q=Exit
