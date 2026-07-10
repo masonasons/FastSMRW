@@ -125,6 +125,7 @@ private:
     void do_secondary_post_action();             // Shift+Enter on a post (configurable)
     void play_media_background(const std::wstring& url, const std::wstring& title);
     void stop_media(); // stop windowless background audio
+    void surface_window(); // show + foreground + sync state (second-launch hand-off)
     void do_new_timeline();
     void do_add_account();
     void do_settings();

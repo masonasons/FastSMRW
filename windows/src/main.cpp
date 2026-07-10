@@ -15,6 +15,7 @@
 #include "fastsm/capi/fastsm_core.h"
 #include "fastsm/store/paths.hpp"
 
+#include "app_messages.hpp"
 #include "main_window.hpp"
 #include "utf.hpp"
 #include "win_speech.hpp"
@@ -51,6 +52,23 @@ bool should_show_at_startup() {
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
+    // Single instance per user session. A named mutex is the file-free way to do
+    // this: the OS frees it automatically when the process ends (even on a crash),
+    // so there's no lock file left behind to block the next launch. The "Local\"
+    // namespace scopes it to this login session. If one already exists, surface the
+    // running instance's window (matching by its window class) and exit.
+    HANDLE instance_mutex = CreateMutexW(nullptr, FALSE, L"Local\\FastSMRW-SingleInstance");
+    if (instance_mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (HWND existing = FindWindowW(L"FastSMRWMain", nullptr)) { // matches kClassName
+            DWORD pid = 0;
+            GetWindowThreadProcessId(existing, &pid);
+            if (pid)
+                AllowSetForegroundWindow(pid); // let the running instance take focus
+            PostMessageW(existing, wm_show_instance(), 0, 0);
+        }
+        return 0;
+    }
+
     INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES |
                                               ICC_DATE_CLASSES | ICC_TAB_CLASSES |
                                               ICC_UPDOWN_CLASS};
@@ -100,5 +118,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     }
 
     fastsm_core_destroy(core); // stops the core threads
+    if (instance_mutex)
+        CloseHandle(instance_mutex); // (the OS would release it on exit anyway)
     return static_cast<int>(msg.wParam);
 }

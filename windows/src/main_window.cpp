@@ -399,6 +399,10 @@ LRESULT CALLBACK MainWindow::TimelinesListProcStatic(HWND hwnd, UINT msg, WPARAM
 }
 
 LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == wm_show_instance()) { // a second launch asked us to surface ourselves
+        surface_window();
+        return 0;
+    }
     switch (msg) {
     case WM_CREATE:
         create_children();
@@ -2357,6 +2361,15 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
     } else if (a == "Exit") {
         DestroyWindow(hwnd_); // real quit (same as the Quit menu item), not just hide
     }
+}
+
+void MainWindow::surface_window() {
+    // Bring the window to the foreground, restoring or un-hiding it as needed, and
+    // keep the core's remembered shown state in sync (same as the ToggleWindow
+    // "show"). Used when a second launch hands off to this running instance.
+    ShowWindow(hwnd_, IsIconic(hwnd_) ? SW_RESTORE : SW_SHOW);
+    SetForegroundWindow(hwnd_);
+    dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", true}});
 }
 
 void MainWindow::ev_media_open(const json& e) {

@@ -11,3 +11,13 @@ constexpr UINT WM_APP_EVENT = WM_APP + 1;
 // action id) posted from the low-level keyboard hook; the window takes ownership
 // and deletes it after dispatching perform_action.
 constexpr UINT WM_APP_INV_ACTION = WM_APP + 2;
+
+// Single-instance activation. A second launch posts this message to the already-
+// running instance's window so it surfaces itself. RegisterWindowMessageW returns
+// the same system-wide-unique value in every process for the same string, so the
+// two processes agree on it without sharing a constant (it can't be a compile-time
+// case label, so the WndProc matches it with an if before its switch).
+inline UINT wm_show_instance() {
+    static const UINT msg = RegisterWindowMessageW(L"FastSMRW_ShowInstance");
+    return msg;
+}

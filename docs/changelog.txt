@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.2.9
+-----
+
+- New: FastSMRW now runs as a single instance - launching it again brings the window you already have to the front instead of opening a second copy.
+
 0.2.8
 -----
 
