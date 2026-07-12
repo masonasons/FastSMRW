@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.3.0
+-----
+
+- Fixed: pressing U or Ctrl+U on a "followed you" or follow-request notification now opens that person's timeline or profile (Speak User works there too); before, nothing happened.
+- Fixed: sounds keep working after the computer wakes from sleep or hibernation.
+
 0.2.9
 -----
 

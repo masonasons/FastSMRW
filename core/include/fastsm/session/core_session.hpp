@@ -153,6 +153,7 @@ private:
     void cmd_finish_mastodon_login(const nlohmann::json& cmd);
     void cmd_remove_account(const nlohmann::json& cmd);
     void cmd_play_earcon(const nlohmann::json& cmd);
+    void cmd_reset_audio();
 
     // --- filters (per-timeline client-side + Mastodon server-side) ---
     void cmd_get_client_filter();               // emit the current timeline's client filter

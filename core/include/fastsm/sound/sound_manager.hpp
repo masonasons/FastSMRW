@@ -51,6 +51,12 @@ public:
     void set_enabled(bool enabled) { enabled_ = enabled; }
     void set_volume(float volume) { volume_ = volume; } // 0.0 .. 1.0
 
+    // Tear down and rebuild the audio engine. Call after the machine resumes from
+    // sleep/hibernation, when the backing output device may have been invalidated
+    // (symptom: earcons go silent). Decoded PCM is kept; only the engine and any
+    // live voices are recreated. Safe to call even if the engine never came up.
+    void reinitialize();
+
     // ["Default", <user packs sorted>].
     std::vector<std::string> list_soundpacks() const;
 

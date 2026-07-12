@@ -436,6 +436,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_remove_account(cmd);
     else if (c == "play_earcon")
         cmd_play_earcon(cmd);
+    else if (c == "reset_audio")
+        cmd_reset_audio();
     else if (c == "get_action_catalog")
         cmd_get_action_catalog();
     else if (c == "get_keymap")
@@ -1210,6 +1212,12 @@ std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
         users.push_back(*row_user);
         return users;
     }
+    // A notification's actor (the follower/requester/faver/booster). Follow and
+    // follow-request notifications carry no post, so this is the only user on the
+    // row — without it, "Open user timeline/profile" and "Speak user" do nothing.
+    // Seeded first so it's the primary choice; the status pass below dedups by id.
+    if (const Notification* n = item.notification(); n && !n->account.id.empty())
+        users.push_back(n->account);
     const Status* outer = item.status();
     if (!outer)
         return users;
@@ -2242,6 +2250,14 @@ void CoreSession::cmd_play_earcon(const json& cmd) {
         sound_.play(sound::Earcon::Error);
     else
         sound_.play_named(name);
+}
+
+void CoreSession::cmd_reset_audio() {
+    // The front end saw the OS resume from sleep/hibernation; rebuild the audio
+    // device so earcons keep sounding. Runs on the core loop, like every other
+    // sound_ call, so there's no cross-thread access to the engine.
+    log::write("reset_audio: reinitializing the sound engine after resume");
+    sound_.reinitialize();
 }
 
 // --- invisible interface ---

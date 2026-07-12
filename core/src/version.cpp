@@ -3,7 +3,7 @@
 namespace fastsm {
 
 const char* version() {
-    return "0.2.9";
+    return "0.3.0";
 }
 
 const char* build_commit() {

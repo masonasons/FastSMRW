@@ -536,6 +536,16 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
 
+    case WM_POWERBROADCAST:
+        // Resuming from sleep/hibernation can invalidate the audio device and
+        // silence earcons; have the core rebuild it. PBT_APMRESUMEAUTOMATIC always
+        // fires on resume, PBT_APMRESUMESUSPEND only on a user-triggered one —
+        // handle both, the reinit is idempotent. (Top-level windows receive these
+        // without registering.)
+        if (wp == PBT_APMRESUMEAUTOMATIC || wp == PBT_APMRESUMESUSPEND)
+            dispatch_cmd({{"cmd", "reset_audio"}});
+        return TRUE;
+
     case WM_DESTROY:
         // Remove the global input hooks while we're still alive and pumping, so a
         // modifier held during close (e.g. Alt+F4) isn't left stuck by the hook

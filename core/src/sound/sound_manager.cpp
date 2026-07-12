@@ -105,6 +105,20 @@ SoundManager::~SoundManager() {
     delete impl_;
 }
 
+void SoundManager::reinitialize() {
+    // Stop live voices and drop the old engine (which may be bound to a device the
+    // OS invalidated across a sleep/hibernation cycle), then bring a fresh one up.
+    // The decoded-PCM cache is engine-independent, so it survives untouched.
+    impl_->stop_all();
+    if (impl_->ok) {
+        ma_engine_uninit(&impl_->engine);
+        impl_->ok = false;
+    }
+    impl_->engine = ma_engine{};
+    if (ma_engine_init(nullptr, &impl_->engine) == MA_SUCCESS)
+        impl_->ok = true;
+}
+
 void SoundManager::set_soundpack(const std::string& name) {
     if (name == active_pack_)
         return;
