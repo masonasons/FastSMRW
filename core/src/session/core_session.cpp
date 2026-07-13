@@ -817,11 +817,26 @@ void CoreSession::cmd_note_selection(const json& cmd) {
         return;
     const std::string id = cmd.value("id", std::string{});
     tc->note_selection(id);
-    // Remember the reading position for this timeline across restarts.
-    if (!id.empty() && positions_[tc->cache_key()] != id) {
+    remember_position(tc, id);
+}
+
+// Persist a timeline's reading position across restarts. This is the single
+// writer of positions_ -- called both from the GUI ListView's selection echo
+// (cmd_note_selection) and from every core-driven cursor move (emit_select_row),
+// so keyboard / invisible-interface / Go-Back navigation is remembered too, not
+// just mouse/arrow selection in the visible window.
+void CoreSession::remember_position(const TimelineController* tc, const std::string& id) {
+    if (tc && !id.empty() && positions_[tc->cache_key()] != id) {
         positions_[tc->cache_key()] = id;
         save_positions();
     }
+}
+
+// Tell the UI to select a row after a core-driven navigation, remembering it as
+// the reading position on the way out.
+void CoreSession::emit_select_row(const TimelineController* tc, const std::string& id) {
+    remember_position(tc, id);
+    emit({{"event", "select_row"}, {"id", id}});
 }
 
 void CoreSession::cmd_get_spawnable() {
@@ -1799,7 +1814,7 @@ bool CoreSession::jump_to_row(const std::string& row_id) {
     if (idx < 0)
         return false;
     tc->note_selection(row_id);
-    emit({{"event", "select_row"}, {"id", row_id}});
+    emit_select_row(tc, row_id);
     invisible_speak_index(idx);
     return true;
 }
@@ -2336,7 +2351,7 @@ void CoreSession::cmd_move(const json& cmd) {
     }
     const std::string id = tc->items()[static_cast<size_t>(dest)].id();
     tc->note_selection(id); // records the jump for Go Back
-    emit({{"event", "select_row"}, {"id", id}});
+    emit_select_row(tc, id);
 }
 
 void CoreSession::cmd_cycle_movement(const json& cmd) {
@@ -2356,7 +2371,7 @@ void CoreSession::cmd_go_back() {
         return;
     const std::string id = tc->undo_navigation();
     if (!id.empty())
-        emit({{"event", "select_row"}, {"id", id}});
+        emit_select_row(tc, id);
     else
         sound_.play(sound::Earcon::Boundary);
 }
@@ -2597,7 +2612,7 @@ void CoreSession::invisible_step(int delta) {
     }
     const std::string id = items[static_cast<size_t>(dest)].id();
     tc->note_selection(id);
-    emit({{"event", "select_row"}, {"id", id}}); // visible list follows if the window is shown
+    emit_select_row(tc, id); // visible list follows if the window is shown
     invisible_speak_index(dest);
 }
 
@@ -2613,7 +2628,7 @@ void CoreSession::invisible_goto_edge(bool top) {
     const int dest = top ? 0 : static_cast<int>(items.size()) - 1;
     const std::string id = items[static_cast<size_t>(dest)].id();
     tc->note_selection(id);
-    emit({{"event", "select_row"}, {"id", id}});
+    emit_select_row(tc, id);
     invisible_speak_index(dest);
     invisible_autoload(tc, dest); // jumping to an edge may sit on a gap / scrollback boundary
 }

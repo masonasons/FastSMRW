@@ -67,6 +67,10 @@ private:
     void cmd_load_older();
     void cmd_load_gap(const nlohmann::json& cmd);
     void cmd_note_selection(const nlohmann::json& cmd);
+    // Persist a timeline's reading position (single writer of positions_), and the
+    // core-navigation select_row emit that also remembers the position on the way out.
+    void remember_position(const TimelineController* tc, const std::string& id);
+    void emit_select_row(const TimelineController* tc, const std::string& id);
     void cmd_toggle_boost(const nlohmann::json& cmd);
     void cmd_toggle_favorite(const nlohmann::json& cmd);
     void cmd_toggle_pin_post(const nlohmann::json& cmd); // pin/unpin your own post to profile

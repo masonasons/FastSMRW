@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.3.2
+-----
+
+- Fixed: your place in a timeline is now remembered no matter how you got there - moving with the invisible interface, movement units, or Go Back is saved just like arrow-key/mouse selection, so you no longer snap back to an old spot after restarting.
+
 0.3.1
 -----
 
