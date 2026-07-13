@@ -84,11 +84,12 @@ private fun queryMeta(context: Context, uri: Uri): Pair<String, String> {
     return name to mime
 }
 
+// Labels track Mastodon's current official names.
 private fun visibilityLabel(v: Int): String = when (v) {
     0 -> "Public"
-    1 -> "Unlisted"
-    2 -> "Followers only"
-    3 -> "Mentioned people only"
+    1 -> "Quiet public"
+    2 -> "Followers"
+    3 -> "Specific people"
     else -> "Public"
 }
 

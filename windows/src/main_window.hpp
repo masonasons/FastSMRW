@@ -23,6 +23,7 @@ namespace fastsmui {
 class ServerFiltersDialog; // manager modal; non-null while open (like keymap_mgr_)
 class ListsManagerDialog;  // Lists manager modal; non-null while open
 class FollowedHashtagsDialog; // Followed Hashtags manager modal; non-null while open
+class AliasesManagerDialog; // User Aliases manager modal; non-null while open
 class MediaPlayback;       // windowless background audio playback (media_player_window.hpp)
 
 // The main application window: a left "Timelines" list and a right virtual
@@ -63,6 +64,7 @@ private:
         std::string kind;
         bool dismissable = false;
         bool pinned = false;    // user pinned this tab (locked from dismissal)
+        bool muted = false;     // user muted this tab's new-item earcon
         bool user_list = false; // rows are users: multi-select + batch actions
         bool reversed = false;  // oldest at top, newest at bottom (load older from the top)
         std::vector<Row> rows;
@@ -80,6 +82,7 @@ private:
     void layout();
     void populate_timelines_list();
     void update_pin_menu(); // reflect the current tab's pin state on the Pin menu item
+    void update_mute_menu(); // reflect the current tab's mute state on the Mute menu item
     void bind_current_to_view(bool force = false);
     void maybe_load_older(int row); // pull the next page when near the bottom (if auto is on)
     void do_load_older();           // manually pull the next page (Period / Timeline menu)
@@ -165,6 +168,8 @@ private:
     void ev_lists(const nlohmann::json& e);          // forward into the open Lists manager
     void ev_hashtag_prompt(const nlohmann::json& e);    // prompt to follow a hashtag
     void ev_followed_hashtags(const nlohmann::json& e); // open / refresh Followed Hashtags manager
+    void ev_alias_prompt(const nlohmann::json& e);      // prompt to add/edit a user alias
+    void ev_aliases_list(const nlohmann::json& e);      // open / refresh the User Aliases manager
     void ev_update_status(const nlohmann::json& e); // check result -> prompt / announce
     void ev_update_ready(const nlohmann::json& e);  // downloaded -> swap + restart
     // Apply the current invisible-interface mode (from settings_): (re)load the
@@ -205,6 +210,7 @@ private:
     ServerFiltersDialog* server_filters_mgr_ = nullptr;     // non-null while its modal is open
     ListsManagerDialog* lists_mgr_ = nullptr;               // non-null while its modal is open
     FollowedHashtagsDialog* followed_tags_mgr_ = nullptr;   // non-null while its modal is open
+    AliasesManagerDialog* aliases_mgr_ = nullptr;           // non-null while its modal is open
     HWND mention_dlg_ = nullptr;                            // @-mention picker, while open (nested modal)
     std::string layer_enter_message_ = "FastSM layer";     // spoken when the layer opens
     std::string layer_help_message_;                        // spoken on "/" in the layer

@@ -195,6 +195,10 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         guard let id = selectedRowId else { return }
         state.openUserProfile(id: id)
     }
+    @objc func addAlias(_ sender: Any?) {
+        guard let id = selectedRowId else { return }
+        state.beginAlias(id: id)
+    }
     @objc func openFollowers(_ sender: Any?) {
         guard let id = selectedRowId else { return }
         state.openFollowers(id: id)

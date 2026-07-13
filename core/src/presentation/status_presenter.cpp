@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "fastsm/presentation/alias_store.hpp"
 #include "fastsm/util/demojify.hpp"
 #include "fastsm/util/html_stripper.hpp"
 #include "fastsm/util/quote_text.hpp"
@@ -47,6 +48,15 @@ std::string present_text(const std::string& raw) {
 // A display name, cleaned for display/speech: emoji stripped per settings.
 std::string present_name(const std::string& name) {
     return apply_emoji(name, TextConfig::current().name_emoji);
+}
+
+// A user's display name, honoring a global user alias when one is set. An alias
+// replaces the real display name across all accounts and is shown verbatim (no
+// emoji strip); otherwise the real name is cleaned per settings.
+std::string display_name_for(const User& u) {
+    if (auto a = Aliases::lookup(u))
+        return *a;
+    return present_name(u.best_name());
 }
 
 // Time, honoring the absolute-vs-relative setting. `spoken` picks the wording
@@ -129,15 +139,17 @@ std::string stats(const Status& s) {
 }
 
 std::string visibility_name(Visibility v) {
+    // Names track Mastodon's current official labels: "Unlisted" -> "Quiet public",
+    // "Followers only" -> "Followers", "Direct" -> "Specific people".
     switch (v) {
     case Visibility::Public:
         return "Public";
     case Visibility::Unlisted:
-        return "Unlisted";
+        return "Quiet public";
     case Visibility::Private:
-        return "Followers only";
+        return "Followers";
     case Visibility::Direct:
-        return "Direct";
+        return "Specific people";
     }
     return {};
 }
@@ -149,7 +161,7 @@ std::string compact_line(const Status& s, std::int64_t now) {
     const std::string time = present_time(d.created_at, now, false);
     std::string prefix;
     if (s.is_boost())
-        prefix = present_name(s.account.best_name()) + " " + kBoostMark + " ";
+        prefix = display_name_for(s.account) + " " + kBoostMark + " ";
     const CwMode cw = TextConfig::current().cw;
     std::string body;
     if (d.has_content_warning() && cw != CwMode::Ignore) {
@@ -159,7 +171,7 @@ std::string compact_line(const Status& s, std::int64_t now) {
     } else {
         body = present_text(d.text);
     }
-    return prefix + present_name(d.account.best_name()) + " (" + time + "): " + body;
+    return prefix + display_name_for(d.account) + " (" + time + "): " + body;
 }
 
 std::optional<std::string> status_field_string(StatusSpeechField field, const Status& s,
@@ -167,9 +179,9 @@ std::optional<std::string> status_field_string(StatusSpeechField field, const St
     const Status& d = s.display_status();
     switch (field) {
     case StatusSpeechField::BoostedBy:
-        return s.is_boost() ? std::optional(s.account.best_name() + " boosted") : std::nullopt;
+        return s.is_boost() ? std::optional(display_name_for(s.account) + " boosted") : std::nullopt;
     case StatusSpeechField::Author:
-        return present_name(d.account.best_name());
+        return display_name_for(d.account);
     case StatusSpeechField::Handle:
         return d.account.acct.empty() ? std::nullopt : std::optional("@" + d.account.acct);
     case StatusSpeechField::ContentWarning:
@@ -183,7 +195,7 @@ std::optional<std::string> status_field_string(StatusSpeechField field, const St
             return std::nullopt;
         return d.text.empty() ? std::nullopt : std::optional(present_text(d.text));
     case StatusSpeechField::Quote:
-        return d.quote ? std::optional("Quoting " + present_name(d.quote->account.best_name()) +
+        return d.quote ? std::optional("Quoting " + display_name_for(d.quote->account) +
                                        ": " + present_text(d.quote->text))
                        : std::nullopt;
     case StatusSpeechField::Media:
@@ -242,7 +254,7 @@ namespace {
 std::optional<std::string> user_field_string(UserSpeechField f, const User& u) {
     switch (f) {
     case UserSpeechField::Author:
-        return u.best_name().empty() ? std::nullopt : std::optional(present_name(u.best_name()));
+        return u.best_name().empty() ? std::nullopt : std::optional(display_name_for(u));
     case UserSpeechField::Handle:
         return u.acct.empty() ? std::nullopt : std::optional("@" + u.acct);
     case UserSpeechField::Bot:
@@ -292,7 +304,7 @@ std::optional<std::string> notification_field_string(NotificationSpeechField f, 
     switch (f) {
     case NotificationSpeechField::Actor:
         return n.account.best_name().empty() ? std::nullopt
-                                             : std::optional(present_name(n.account.best_name()));
+                                             : std::optional(display_name_for(n.account));
     case NotificationSpeechField::Action:
         return std::optional<std::string>(notification_action_phrase(n.type));
     case NotificationSpeechField::Handle:
@@ -311,27 +323,27 @@ std::optional<std::string> notification_field_string(NotificationSpeechField f, 
 std::string accessibility_label(const User& u) {
     std::string label = compose_fields(SpeechConfig::current().user,
                                        [&](UserSpeechField f) { return user_field_string(f, u); });
-    return label.empty() ? u.best_name() : label; // never read a blank row
+    return label.empty() ? display_name_for(u) : label; // never read a blank row
 }
 
 std::string accessibility_label(const Notification& n, std::int64_t now) {
     std::string label = compose_fields(
         SpeechConfig::current().notification,
         [&](NotificationSpeechField f) { return notification_field_string(f, n, now); });
-    return label.empty() ? n.account.best_name() : label;
+    return label.empty() ? display_name_for(n.account) : label;
 }
 
 std::string compact_line(const TimelineItem& item, std::int64_t now) {
     if (const Status* s = std::get_if<Status>(&item.value))
         return compact_line(*s, now);
     if (const Notification* n = std::get_if<Notification>(&item.value)) {
-        std::string line = present_name(n->account.best_name());
+        std::string line = display_name_for(n->account);
         if (n->status)
             line += ": " + present_text(n->status->text);
         return line;
     }
     if (const User* u = std::get_if<User>(&item.value))
-        return present_name(u->best_name()) + " (@" + u->acct + ")";
+        return display_name_for(*u) + " (@" + u->acct + ")";
     return {};
 }
 
@@ -550,7 +562,7 @@ static std::string detail_body(const Status& s) {
 
 std::string post_info(const Status& s, std::int64_t now) {
     std::string out;
-    out += s.account.best_name() + " (@" + s.account.acct + ")\n";
+    out += display_name_for(s.account) + " (@" + s.account.acct + ")\n";
     out += present_time(s.created_at, now, true) + "\n";
     if (s.has_content_warning())
         out += "Content warning: " + *s.spoiler_text + "\n";
@@ -575,7 +587,7 @@ std::string post_info(const Status& s, std::int64_t now) {
 
 std::string user_profile(const User& u) {
     std::string out;
-    out += u.best_name() + "\n@" + u.acct + "\n";
+    out += display_name_for(u) + "\n@" + u.acct + "\n";
     std::vector<std::string> flags;
     if (u.bot)
         flags.push_back("Bot");

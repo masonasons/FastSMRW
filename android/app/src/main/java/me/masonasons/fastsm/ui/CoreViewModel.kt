@@ -28,6 +28,7 @@ data class TabUi(
     val kind: String,
     val dismissable: Boolean,
     val pinned: Boolean,
+    val muted: Boolean,
 )
 
 /**
@@ -97,6 +98,12 @@ data class MentionSuggestions(val query: String, val users: List<MentionSuggesti
  * (author + mentions). [purpose] is "timeline" or "profile".
  */
 data class UserPickerRequest(val purpose: String, val rowId: String, val users: List<UserPick>)
+
+/** Prompt to add/edit a user alias (a global, cross-account custom display name). */
+data class AliasPromptRequest(val key: String, val handle: String, val current: String)
+
+/** One saved alias (aliases_list event), for the aliases manager. */
+data class AliasEntry(val key: String, val handle: String, val alias: String)
 
 /** A user's profile card (user_profile event). [text] is the composed profile. */
 data class ProfileUi(
@@ -196,6 +203,14 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while a user-disambiguation picker should be shown. */
     private val _userPicker = MutableStateFlow<UserPickerRequest?>(null)
     val userPicker: StateFlow<UserPickerRequest?> = _userPicker.asStateFlow()
+
+    /** Non-null while the add/edit-alias prompt should be shown. */
+    private val _aliasPrompt = MutableStateFlow<AliasPromptRequest?>(null)
+    val aliasPrompt: StateFlow<AliasPromptRequest?> = _aliasPrompt.asStateFlow()
+
+    /** Non-null while the aliases manager should be shown (the current alias list). */
+    private val _aliasesList = MutableStateFlow<List<AliasEntry>?>(null)
+    val aliasesList: StateFlow<List<AliasEntry>?> = _aliasesList.asStateFlow()
 
     /** Latest @-mention autocomplete results (from user_suggestions), or null. */
     private val _mentionSuggestions = MutableStateFlow<MentionSuggestions?>(null)
@@ -311,6 +326,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                 kind = t.optString("kind"),
                                 dismissable = t.optBoolean("dismissable"),
                                 pinned = t.optBoolean("pinned"),
+                                muted = t.optBoolean("muted"),
                             )
                         )
                     }
@@ -360,6 +376,20 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 _userPicker.value = UserPickerRequest(e.optString("purpose"), e.optString("id"), users)
+            }
+
+            "alias_prompt" ->
+                _aliasPrompt.value =
+                    AliasPromptRequest(e.optString("key"), e.optString("handle"), e.optString("current"))
+
+            "aliases_list" -> {
+                val arr = e.optJSONArray("aliases")
+                _aliasesList.value = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val a = arr.getJSONObject(i)
+                        add(AliasEntry(a.optString("key"), a.optString("handle"), a.optString("alias")))
+                    }
+                }
             }
 
             "user_suggestions" -> {
@@ -544,6 +574,28 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
         _userPicker.value = null
     }
 
+    /** Add/edit the alias for a post's user (may raise a user_picker if several). */
+    fun beginAlias(rowId: String) =
+        core.dispatch("begin_alias") { put("id", rowId); put("pick", true) }
+
+    /** Add/edit the alias for a specific picked user. */
+    fun beginAliasPicked(rowId: String, accountId: String) {
+        _userPicker.value = null
+        core.dispatch("begin_alias") { put("id", rowId); put("account_id", accountId) }
+    }
+
+    fun setAlias(key: String, handle: String, alias: String) =
+        core.dispatch("set_alias") { put("key", key); put("handle", handle); put("alias", alias) }
+
+    fun clearAlias(key: String, handle: String) =
+        core.dispatch("clear_alias") { put("key", key); put("handle", handle) }
+
+    /** Ask the core for the full alias list (opens/refreshes the aliases manager). */
+    fun listAliases() = core.dispatch("list_aliases")
+
+    fun dismissAliasPrompt() { _aliasPrompt.value = null }
+    fun dismissAliasesList() { _aliasesList.value = null }
+
     /** Close a tab: select it (so it's current), then dismiss it. */
     fun closeTimeline(index: Int) {
         selectTimeline(index)
@@ -554,6 +606,12 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun pinTimeline(index: Int) {
         selectTimeline(index)
         core.dispatch("toggle_pin")
+    }
+
+    /** Mute/unmute a tab's new-item earcon. */
+    fun muteTimeline(index: Int) {
+        selectTimeline(index)
+        core.dispatch("toggle_mute")
     }
 
     /** Move a tab earlier ("up") or later ("down") in the tab order. */

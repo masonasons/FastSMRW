@@ -29,6 +29,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -126,6 +127,10 @@ fun HomeScreen(
                                 onClick = { menuOpen = false; onOpenAddTimeline() },
                             )
                             DropdownMenuItem(
+                                text = { Text("User aliases") },
+                                onClick = { menuOpen = false; viewModel.listAliases() },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Settings") },
                                 onClick = { menuOpen = false; onOpenSettings() },
                             )
@@ -146,6 +151,7 @@ fun HomeScreen(
                     onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
                     onClose = viewModel::closeTimeline,
                     onPin = viewModel::pinTimeline,
+                    onMute = viewModel::muteTimeline,
                     onMove = viewModel::moveTimeline,
                 )
             }
@@ -181,6 +187,7 @@ fun HomeScreen(
                 onSpeakUser = viewModel::speakUser,
                 onSpeakReply = viewModel::speakReply,
                 onJumpToReply = viewModel::jumpToReply,
+                onAddAlias = viewModel::beginAlias,
             )
         }
     }
@@ -194,10 +201,10 @@ fun HomeScreen(
                 Column {
                     req.users.forEach { u ->
                         TextButton(onClick = {
-                            if (req.purpose == "profile") {
-                                viewModel.openUserProfilePicked(req.rowId, u.id)
-                            } else {
-                                viewModel.openUserTimelinePicked(u.id, u.acct)
+                            when (req.purpose) {
+                                "profile" -> viewModel.openUserProfilePicked(req.rowId, u.id)
+                                "alias" -> viewModel.beginAliasPicked(req.rowId, u.id)
+                                else -> viewModel.openUserTimelinePicked(u.id, u.acct)
                             }
                         }) {
                             Text("@${u.acct}")
@@ -210,6 +217,71 @@ fun HomeScreen(
                 TextButton(onClick = viewModel::dismissUserPicker) { Text("Cancel") }
             },
         )
+    }
+
+    // Add/edit an alias for a single user (raised by "Add alias" or the picker).
+    val aliasPrompt by viewModel.aliasPrompt.collectAsStateWithLifecycle()
+    aliasPrompt?.let { req ->
+        AliasEditDialog(
+            handle = req.handle,
+            current = req.current,
+            onDismiss = viewModel::dismissAliasPrompt,
+            onConfirm = { value ->
+                if (value.isEmpty()) viewModel.clearAlias(req.key, req.handle)
+                else viewModel.setAlias(req.key, req.handle, value)
+                viewModel.dismissAliasPrompt()
+            },
+        )
+    }
+
+    // The aliases manager: list every alias with edit / remove.
+    val aliasesList by viewModel.aliasesList.collectAsStateWithLifecycle()
+    aliasesList?.let { list ->
+        var editing by remember { mutableStateOf<AliasEntry?>(null) }
+        AlertDialog(
+            onDismissRequest = viewModel::dismissAliasesList,
+            title = { Text("User Aliases") },
+            text = {
+                if (list.isEmpty()) {
+                    Text("No aliases yet. Use \"Add alias\" on a post to create one.")
+                } else {
+                    LazyColumn {
+                        items(list, key = { it.key }) { a ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(a.alias, style = MaterialTheme.typography.bodyLarge)
+                                    Text("@${a.handle}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = { editing = a }) { Text("Edit") }
+                                TextButton(onClick = {
+                                    viewModel.clearAlias(a.key, a.handle)
+                                    viewModel.listAliases() // refresh the manager
+                                }) { Text("Remove") }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissAliasesList) { Text("Close") }
+            },
+        )
+        editing?.let { a ->
+            AliasEditDialog(
+                handle = a.handle,
+                current = a.alias,
+                onDismiss = { editing = null },
+                onConfirm = { value ->
+                    if (value.isEmpty()) viewModel.clearAlias(a.key, a.handle)
+                    else viewModel.setAlias(a.key, a.handle, value)
+                    editing = null
+                    viewModel.listAliases() // refresh the manager
+                },
+            )
+        }
     }
 
     val mediaPicker by viewModel.mediaPicker.collectAsStateWithLifecycle()
@@ -232,6 +304,38 @@ fun HomeScreen(
             },
         )
     }
+}
+
+/** Prompt for a user's alias. An empty value clears the alias. */
+@Composable
+private fun AliasEditDialog(
+    handle: String,
+    current: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember(handle, current) { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Alias for @$handle") },
+        text = {
+            Column {
+                Text("Enter a custom display name, or leave blank to remove.")
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim()) }) { Text("OK") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 /**
@@ -262,6 +366,7 @@ private fun StatusList(
     onSpeakUser: (String) -> Unit,
     onSpeakReply: (String) -> Unit,
     onJumpToReply: (String) -> Unit,
+    onAddAlias: (String) -> Unit,
 ) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -322,6 +427,7 @@ private fun StatusList(
                 onSpeakUser = onSpeakUser,
                 onSpeakReply = onSpeakReply,
                 onJumpToReply = onJumpToReply,
+                onAddAlias = onAddAlias,
             )
         }
     }
@@ -339,6 +445,7 @@ private fun TimelineTabs(
     onSelect: (Int) -> Unit,
     onClose: (Int) -> Unit,
     onPin: (Int) -> Unit,
+    onMute: (Int) -> Unit,
     onMove: (Int, String) -> Unit,
 ) {
     val scrollState = rememberScrollState()
@@ -358,6 +465,7 @@ private fun TimelineTabs(
                 // menu (Pin/Move/Close), so the two paths can't drift.
                 val menuActions = buildList {
                     add(MenuAction(if (tab.pinned) "Unpin tab" else "Pin tab") { onPin(index) })
+                    add(MenuAction(if (tab.muted) "Unmute sounds" else "Mute sounds") { onMute(index) })
                     if (index > 0) add(MenuAction("Move left") { onMove(index, "up") })
                     if (index < n - 1) add(MenuAction("Move right") { onMove(index, "down") })
                     if (tab.dismissable) add(MenuAction("Close tab") { onClose(index) })
@@ -382,6 +490,7 @@ private fun TimelineTabs(
                             contentDescription = buildString {
                                 append(tab.title).append(" tab")
                                 if (tab.pinned) append(", pinned")
+                                if (tab.muted) append(", muted")
                                 if (selected) append(", selected")
                             }
                             customActions = actions

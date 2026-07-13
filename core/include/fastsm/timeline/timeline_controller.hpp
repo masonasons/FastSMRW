@@ -57,6 +57,12 @@ public:
     void set_pinned(bool pinned) { pinned_ = pinned; }
     bool pinned() const { return pinned_; }
 
+    // "Muted tab": the user has silenced this timeline's new-item earcon. Purely a
+    // per-controller flag (persisted with the open-timelines list); it only gates
+    // the chime — fetching/ordering are unaffected.
+    void set_muted(bool muted) { muted_ = muted; }
+    bool muted() const { return muted_; }
+
     // Populate a static (non-fetched) timeline with a fixed set of user rows —
     // e.g. the users referenced in one post. Safe to call again to replace them
     // (e.g. after enriching sparse mentions with full profiles); the selected id
@@ -136,6 +142,7 @@ private:
     std::vector<TimelineItem> visible_; // filtered view the UI reads
     bool reversed_ = false;             // global reverse-timelines preference
     bool pinned_ = false;               // user "pinned" this tab (locks dismissal)
+    bool muted_ = false;                // user muted this tab's new-item earcon
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     // Page-boundary cursors (row id -> cursor to fetch the page just below it),

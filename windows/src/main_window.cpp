@@ -11,6 +11,7 @@
 #include "../resources/resource.h"
 #include "add_account_dialog.hpp"
 #include "app_messages.hpp"
+#include "aliases_dialog.hpp"
 #include "client_filters_dialog.hpp"
 #include "account_settings_dialog.hpp"
 #include "fastsm/util/log.hpp"
@@ -57,10 +58,13 @@ enum {
     ID_SPEAK_USER,
     ID_SPEAK_REPLY,
     ID_FOLLOW_TOGGLE,
+    ID_ADD_ALIAS,
+    ID_MANAGE_ALIASES,
     ID_OPEN_BROWSER,
     ID_OPEN_LINKS,
     ID_NEW_TIMELINE,
     ID_TOGGLE_PIN,
+    ID_TOGGLE_MUTE,
     ID_CLOSE_TIMELINE,
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
@@ -209,6 +213,7 @@ HMENU build_menu() {
     AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
     AppendMenuW(me, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
     AppendMenuW(me, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
+    AppendMenuW(me, MF_STRING, ID_MANAGE_ALIASES, L"User A&liases…");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(me), L"&Me");
 
     HMENU status = CreatePopupMenu();
@@ -226,6 +231,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_SPEAK_USER, L"&Speak User\tCtrl+;");
     AppendMenuW(status, MF_STRING, ID_SPEAK_REPLY, L"Speak &Referenced Reply\tCtrl+Shift+;");
     AppendMenuW(status, MF_STRING, ID_FOLLOW_TOGGLE, L"Fo&llow / Unfollow\tCtrl+L");
+    AppendMenuW(status, MF_STRING, ID_ADD_ALIAS, L"Add / Edit &Alias…\tCtrl+Shift+N");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_OPEN_LINKS, L"Open &Links\tCtrl+O");
     AppendMenuW(status, MF_STRING, ID_OPEN_BROWSER, L"Open in Browser");
@@ -235,6 +241,7 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
     AppendMenuW(timeline, MF_STRING, ID_REFRESH, L"Re&fresh Timeline\tCtrl+R");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
+    AppendMenuW(timeline, MF_STRING, ID_TOGGLE_MUTE, L"&Mute Timeline Sounds\tCtrl+M");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tCtrl+W");
     AppendMenuW(timeline, MF_STRING, ID_LOAD_OLDER, L"Load &Older Posts\tPeriod");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
@@ -304,6 +311,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
         {FVIRTKEY | FCONTROL, 'P', ID_TOGGLE_PIN}, // Ctrl+P: pin/unpin the current tab
+        {FVIRTKEY | FCONTROL, 'M', ID_TOGGLE_MUTE}, // Ctrl+M: mute/unmute the current tab's sounds
         {FVIRTKEY | FCONTROL, 'S', ID_STOP_MEDIA}, // Ctrl+S: stop background audio
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL | FSHIFT, VK_OEM_COMMA, ID_ACCOUNT_SETTINGS}, // Ctrl+Shift+Comma
@@ -311,6 +319,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'W', ID_CLOSE_TIMELINE}, // Ctrl+W: close the current timeline
         {FVIRTKEY | FCONTROL, 'H', ID_HIDE_WINDOW},    // Ctrl+H: hide the window
         {FVIRTKEY | FCONTROL | FSHIFT, 'A', ID_ADD_ACCOUNT},
+        {FVIRTKEY | FCONTROL | FSHIFT, 'N', ID_ADD_ALIAS}, // Ctrl+Shift+N: add/edit user alias
         {FVIRTKEY | FCONTROL, VK_OEM_4, ID_PREV_ACCOUNT}, // Ctrl+[
         {FVIRTKEY | FCONTROL, VK_OEM_6, ID_NEXT_ACCOUNT}, // Ctrl+]
         {FVIRTKEY | FCONTROL, VK_DELETE, ID_CLEAR_TIMELINE},          // clear focused timeline
@@ -638,6 +647,24 @@ void MainWindow::update_pin_menu() {
     std::wstring label = pinned ? L"Un&pin Timeline\tCtrl+P" : L"&Pin Timeline\tCtrl+P";
     mii.dwTypeData = label.data();
     SetMenuItemInfoW(bar, ID_TOGGLE_PIN, FALSE, &mii);
+}
+
+void MainWindow::update_mute_menu() {
+    // Check the "Mute Timeline Sounds" item and flip its label to "Unmute" when the
+    // current tab is muted, so the toggle state is announced by the screen reader.
+    HMENU bar = GetMenu(hwnd_);
+    if (!bar)
+        return;
+    const Timeline* tl = current();
+    const bool muted = tl && tl->muted;
+    MENUITEMINFOW mii{};
+    mii.cbSize = sizeof(mii);
+    mii.fMask = MIIM_STATE | MIIM_STRING;
+    mii.fState = muted ? MFS_CHECKED : MFS_UNCHECKED;
+    std::wstring label =
+        muted ? L"Un&mute Timeline Sounds\tCtrl+M" : L"&Mute Timeline Sounds\tCtrl+M";
+    mii.dwTypeData = label.data();
+    SetMenuItemInfoW(bar, ID_TOGGLE_MUTE, FALSE, &mii);
 }
 
 void MainWindow::maybe_load_older(int row) {
@@ -1211,6 +1238,8 @@ void MainWindow::ev_user_picker(const json& e) {
             dispatch_cmd({{"cmd", "open_user_timeline"}, {"handle", handle}});
         else if (purpose == "follow_toggle")
             dispatch_cmd({{"cmd", "follow_toggle"}, {"handle", handle}});
+        else if (purpose == "alias")
+            dispatch_cmd({{"cmd", "begin_alias"}, {"handle", handle}});
         else
             dispatch_cmd({{"cmd", "open_user_profile"}, {"handle", handle}});
         return;
@@ -1222,6 +1251,8 @@ void MainWindow::ev_user_picker(const json& e) {
         dispatch_cmd({{"cmd", "open_user_timeline"}, {"account_id", account_id}, {"acct", acct}});
     else if (purpose == "follow_toggle")
         dispatch_cmd({{"cmd", "follow_toggle"}, {"account_id", account_id}, {"acct", acct}});
+    else if (purpose == "alias")
+        dispatch_cmd({{"cmd", "begin_alias"}, {"id", row_id}, {"account_id", account_id}});
     else
         dispatch_cmd({{"cmd", "open_user_profile"}, {"id", row_id}, {"account_id", account_id}});
 }
@@ -1798,8 +1829,20 @@ void MainWindow::handle_command(int id) {
             dispatch_cmd({{"cmd", "follow_toggle"}, {"id", id}, {"pick", true}});
         break;
     }
+    case ID_ADD_ALIAS: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "begin_alias"}, {"id", id}, {"pick", true}});
+        break;
+    }
+    case ID_MANAGE_ALIASES:
+        dispatch_cmd({{"cmd", "list_aliases"}}); // core replies with aliases_list -> manager dialog
+        break;
     case ID_NEW_TIMELINE:
         do_new_timeline();
+        break;
+    case ID_TOGGLE_MUTE:
+        dispatch_cmd({{"cmd", "toggle_mute"}});
         break;
     case ID_TOGGLE_PIN:
         dispatch_cmd({{"cmd", "toggle_pin"}});
@@ -1919,6 +1962,10 @@ void MainWindow::on_event(const std::string& js) {
         ev_hashtag_prompt(e);
     else if (ev == "followed_hashtags")
         ev_followed_hashtags(e);
+    else if (ev == "alias_prompt")
+        ev_alias_prompt(e);
+    else if (ev == "aliases_list")
+        ev_aliases_list(e);
     else if (ev == "update_status")
         ev_update_status(e);
     else if (ev == "update_ready")
@@ -1947,6 +1994,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.kind = t.value("kind", std::string{});
         tl.dismissable = t.value("dismissable", false);
         tl.pinned = t.value("pinned", false);
+        tl.muted = t.value("muted", false);
         tl.user_list = t.value("user_list", false);
         if (same_account)
             for (const auto& old : timelines_) // carry rows/position for the same timeline
@@ -1965,6 +2013,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
     populate_timelines_list();
     bind_current_to_view(/*force=*/true); // a switch always rebinds (even to an empty timeline)
     update_pin_menu();
+    update_mute_menu();
     // Match the Mac's focusTable(): when a NEW timeline appears (e.g. opening a
     // thread), put focus on the posts so the user lands on the content. Only on a
     // spawn (the count grew) — not a plain switch, or arrowing the timelines list
@@ -2321,6 +2370,36 @@ void MainWindow::ev_followed_hashtags(const json& e) {
     dlg.run(hwnd_, e);
     leave_modal(guard);
     followed_tags_mgr_ = nullptr;
+}
+
+void MainWindow::ev_alias_prompt(const json& e) {
+    const std::string key = e.value("key", std::string{});
+    if (key.empty())
+        return;
+    const std::string handle = e.value("handle", std::string{});
+    auto guard = enter_modal();
+    std::optional<std::string> result =
+        show_alias_dialog(hwnd_, inst_, handle, e.value("current", std::string{}));
+    leave_modal(guard);
+    if (!result)
+        return; // cancelled
+    if (result->empty())
+        dispatch_cmd({{"cmd", "clear_alias"}, {"key", key}, {"handle", handle}});
+    else
+        dispatch_cmd({{"cmd", "set_alias"}, {"key", key}, {"handle", handle}, {"alias", *result}});
+}
+
+void MainWindow::ev_aliases_list(const json& e) {
+    if (aliases_mgr_) { // manager is open: live-refresh its list
+        aliases_mgr_->on_aliases(e);
+        return;
+    }
+    AliasesManagerDialog dlg(inst_, [this](const json& cmd) { dispatch_cmd(cmd); });
+    aliases_mgr_ = &dlg;
+    auto guard = enter_modal();
+    dlg.run(hwnd_, e);
+    leave_modal(guard);
+    aliases_mgr_ = nullptr;
 }
 
 void MainWindow::ev_invisible_ui_action(const json& e) {

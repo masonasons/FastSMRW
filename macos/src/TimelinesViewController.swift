@@ -92,6 +92,7 @@ final class TimelinesViewController: NSViewController, NSTableViewDataSource, NS
             mi.tag = row
         }
         item(timelines[row].pinned ? "Unpin" : "Pin", #selector(pinRow(_:)))
+        item(timelines[row].muted ? "Unmute Sounds" : "Mute Sounds", #selector(muteRow(_:)))
         item("Move Up", #selector(moveUpRow(_:)))
         item("Move Down", #selector(moveDownRow(_:)))
         menu.addItem(.separator())
@@ -105,6 +106,10 @@ final class TimelinesViewController: NSViewController, NSTableViewDataSource, NS
     @objc private func pinRow(_ sender: NSMenuItem) {
         state.selectTimeline(index: sender.tag)
         state.togglePin()
+    }
+    @objc private func muteRow(_ sender: NSMenuItem) {
+        state.selectTimeline(index: sender.tag)
+        state.toggleMute()
     }
     @objc private func moveUpRow(_ sender: NSMenuItem) {
         state.selectTimeline(index: sender.tag)

@@ -89,6 +89,7 @@ enum MainMenu {
         add("View Thread", #selector(MainWindowController.viewThread(_:)), " ")
         add("Open User Timeline", #selector(MainWindowController.openUserTimeline(_:)), "u")
         add("Open User Profile", #selector(MainWindowController.openUserProfile(_:)), "u", [.command])
+        add("Add / Edit Alias…", #selector(MainWindowController.addAlias(_:)), "n", [.command, .shift])
         add("Followers", #selector(MainWindowController.openFollowers(_:)), "")
         add("Following", #selector(MainWindowController.openFollowing(_:)), "")
         add("Follow Hashtag…", #selector(MainWindowController.followHashtag(_:)), "")
@@ -131,6 +132,10 @@ enum MainMenu {
         timelineMenu.addItem(withTitle: "Pin / Unpin Timeline",
                              action: #selector(MainWindowController.togglePin(_:)),
                              keyEquivalent: "")
+        let muteTimeline = timelineMenu.addItem(withTitle: "Mute / Unmute Timeline Sounds",
+                             action: #selector(MainWindowController.toggleMute(_:)),
+                             keyEquivalent: "m")
+        muteTimeline.keyEquivalentModifierMask = [.command]
         let moveUp = timelineMenu.addItem(withTitle: "Move Timeline Up",
                                           action: #selector(MainWindowController.moveTimelineUp(_:)),
                                           keyEquivalent: "")
@@ -168,6 +173,9 @@ enum MainMenu {
                             keyEquivalent: "")
         accountMenu.addItem(withTitle: "Server Filters…",
                             action: #selector(MainWindowController.manageServerFilters(_:)),
+                            keyEquivalent: "")
+        accountMenu.addItem(withTitle: "User Aliases…",
+                            action: #selector(MainWindowController.manageAliases(_:)),
                             keyEquivalent: "")
         accountMenu.addItem(.separator())
         accountMenu.addItem(withTitle: "Remove Current Account…",

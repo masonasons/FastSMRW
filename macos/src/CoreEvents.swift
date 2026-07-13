@@ -23,10 +23,11 @@ struct Timeline: Decodable, Equatable {
     let kind: String
     var dismissable = false
     var pinned = false
+    var muted = false
     var userList = false
 
     enum CodingKeys: String, CodingKey {
-        case title, kind, dismissable, pinned
+        case title, kind, dismissable, pinned, muted
         case userList = "user_list"
     }
 }
@@ -322,6 +323,11 @@ struct SpeechCatalog: Decodable {
 /// Followed hashtags (Mastodon). `supported` is omitted on the refresh emitted
 /// after an unfollow, so tolerate its absence.
 struct HashtagPrompt: Decodable { let tags: [String] }
+
+/// Prompt to add/edit a user alias (a global, cross-account custom display name).
+struct AliasPrompt: Decodable { let key: String; let handle: String; let current: String }
+struct AliasItem: Decodable, Equatable { let key: String; let handle: String; let alias: String }
+struct AliasesList: Decodable { let aliases: [AliasItem] }
 struct FollowedTag: Decodable {
     let name: String
     var url = ""
@@ -476,6 +482,8 @@ enum CoreEvent {
     case speechCatalog(SpeechCatalog)
     case hashtagPrompt(HashtagPrompt)
     case followedHashtags(FollowedHashtags)
+    case aliasPrompt(AliasPrompt)
+    case aliasesList(AliasesList)
     case lists(Lists)
     case updateStatus(UpdateStatus)
     case serverFilters(ServerFilters)
@@ -513,6 +521,8 @@ enum CoreEvent {
         case "speech_catalog": return decode(SpeechCatalog.self).map(CoreEvent.speechCatalog)
         case "hashtag_prompt": return decode(HashtagPrompt.self).map(CoreEvent.hashtagPrompt)
         case "followed_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.followedHashtags)
+        case "alias_prompt": return decode(AliasPrompt.self).map(CoreEvent.aliasPrompt)
+        case "aliases_list": return decode(AliasesList.self).map(CoreEvent.aliasesList)
         case "lists": return decode(Lists.self).map(CoreEvent.lists)
         case "update_status": return decode(UpdateStatus.self).map(CoreEvent.updateStatus)
         case "server_filters": return decode(ServerFilters.self).map(CoreEvent.serverFilters)

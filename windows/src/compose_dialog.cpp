@@ -431,8 +431,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         show(dlg, IDC_COMPOSE_VISIBILITY, vis);
         if (vis) {
             HWND combo = GetDlgItem(dlg, IDC_COMPOSE_VISIBILITY);
-            // Order matches the Visibility enum (Public/Unlisted/Private/Direct).
-            for (const wchar_t* name : {L"Public", L"Unlisted", L"Followers only", L"Direct"})
+            // Order matches the Visibility enum (Public/Unlisted/Private/Direct);
+            // labels track Mastodon's current names (Quiet public / Followers / Specific people).
+            for (const wchar_t* name : {L"Public", L"Quiet public", L"Followers", L"Specific people"})
                 SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
             SendMessageW(combo, CB_SETCURSEL,
                          req.default_visibility ? static_cast<int>(*req.default_visibility) : 0, 0);

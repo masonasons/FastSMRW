@@ -28,6 +28,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private var mediaControllers: [NSWindowController] = []
     private var hashtagsController: HashtagsWindowController?
     private var listsController: ListsWindowController?
+    private var aliasesController: AliasesWindowController?
     private var serverFiltersController: ServerFiltersWindowController?
 
     init(state: AppState) {
@@ -167,6 +168,26 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
                                    in: window)
             }
         }
+        state.onAliasPrompt = { [weak self] prompt in
+            guard let self, let window = self.window else { return }
+            AliasPromptSheet.run(handle: prompt.handle, current: prompt.current, in: window) { value in
+                if value.isEmpty {
+                    state.clearAlias(key: prompt.key, handle: prompt.handle)
+                } else {
+                    state.setAlias(key: prompt.key, handle: prompt.handle, alias: value)
+                }
+            }
+        }
+        state.onAliasesList = { [weak self] list in
+            guard let self, let window = self.window else { return }
+            if let open = self.aliasesController {
+                open.update(list)
+            } else if window.attachedSheet == nil {
+                let controller = AliasesWindowController(state: state, list: list)
+                self.aliasesController = controller
+                controller.beginSheet(for: window) { [weak self] in self?.aliasesController = nil }
+            }
+        }
         state.onLists = { [weak self] lists in
             guard let self, let window = self.window else { return }
             if let open = self.listsController {
@@ -239,6 +260,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     @objc func togglePin(_ sender: Any?) { state.togglePin() }
+    @objc func toggleMute(_ sender: Any?) { state.toggleMute() }
     @objc func moveTimelineUp(_ sender: Any?) { state.reorderTimeline(dir: "up") }
     @objc func moveTimelineDown(_ sender: Any?) { state.reorderTimeline(dir: "down") }
     @objc func newTimeline(_ sender: Any?) { state.getSpawnable() }
@@ -296,6 +318,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func viewThread(_ sender: Any?) { postsViewController.viewThread(sender) }
     @objc func openUserTimeline(_ sender: Any?) { postsViewController.openUserTimeline(sender) }
     @objc func openUserProfile(_ sender: Any?) { postsViewController.openUserProfile(sender) }
+    @objc func addAlias(_ sender: Any?) { postsViewController.addAlias(sender) }
+    @objc func manageAliases(_ sender: Any?) { state.listAliases() }
     @objc func openFollowers(_ sender: Any?) { postsViewController.openFollowers(sender) }
     @objc func openFollowing(_ sender: Any?) { postsViewController.openFollowing(sender) }
     @objc func followHashtag(_ sender: Any?) { postsViewController.followHashtagForSelection(sender) }

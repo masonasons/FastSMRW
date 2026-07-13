@@ -262,3 +262,14 @@
 #define IDC_AS_SOUND_LABEL    556
 #define IDC_AS_SOUNDPACK      557
 #define IDC_AS_OPENPACKS      558
+
+// Add/edit user alias prompt (single-line text, prefilled with the current alias).
+#define IDD_ALIAS_PROMPT      590
+#define IDC_ALIAS_LABEL       591
+#define IDC_ALIAS_EDIT        592
+
+// User Aliases manager (Application menu): list + edit / remove.
+#define IDD_ALIASES_MANAGER   595
+#define IDC_ALM_LIST          596
+#define IDC_ALM_EDIT          597
+#define IDC_ALM_REMOVE        598

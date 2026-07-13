@@ -14,6 +14,7 @@
 #include "fastsm/auth/mastodon_auth.hpp"
 #include "fastsm/platform/bluesky/bluesky_account.hpp"
 #include "fastsm/platform/mastodon/mastodon_account.hpp"
+#include "fastsm/presentation/alias_store.hpp"
 #include "fastsm/presentation/reply_helper.hpp"
 #include "fastsm/presentation/speech_settings.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
@@ -402,6 +403,14 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_user_profile(cmd);
     else if (c == "speak_user")
         cmd_speak_user(cmd);
+    else if (c == "begin_alias")
+        cmd_begin_alias(cmd);
+    else if (c == "set_alias")
+        cmd_set_alias(cmd);
+    else if (c == "clear_alias")
+        cmd_clear_alias(cmd);
+    else if (c == "list_aliases")
+        cmd_list_aliases();
     else if (c == "speak_reply")
         cmd_speak_reply(cmd);
     else if (c == "autocomplete_users")
@@ -420,6 +429,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_reorder_timeline(cmd);
     else if (c == "toggle_pin")
         cmd_toggle_pin();
+    else if (c == "toggle_mute")
+        cmd_toggle_mute();
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -507,6 +518,7 @@ void CoreSession::cmd_start() {
             apply_settings();
             load_positions(); // remembered reading positions (before timelines build)
             load_client_filters(); // per-timeline client filters (before timelines build)
+            load_aliases(); // global user aliases (before timelines build so rows render aliased)
             rebuild_timelines();
             emit_accounts();
             emit_timelines();
@@ -1617,6 +1629,104 @@ void CoreSession::speak_user_info(const User& u) {
     });
 }
 
+namespace {
+std::string trim_alias(std::string s) {
+    const auto a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos)
+        return {};
+    const auto b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+} // namespace
+
+// Aliases are global and cross-account. begin_alias resolves the focused row's
+// user(s); a lone user (or one picked from the menu) yields an alias_prompt the
+// UI turns into a text dialog, and several users open the picker first.
+void CoreSession::cmd_begin_alias(const json& cmd) {
+    if (!accounts_.selected())
+        return;
+    if (cmd.contains("handle")) { // typed a handle from the picker's manual entry
+        resolve_handle(cmd.value("handle", std::string{}),
+                       [this](const User& u) { emit_alias_prompt(u); });
+        return;
+    }
+    TimelineController* tc = current();
+    const std::string row_id = cmd.value("id", std::string{});
+    const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
+    if (!item)
+        return;
+    const std::vector<User> users = users_in_post(*item);
+    if (users.empty())
+        return;
+    if (cmd.contains("account_id")) { // a specific user was chosen from the picker
+        const std::string aid = cmd.value("account_id", std::string{});
+        for (const User& u : users)
+            if (u.id == aid) {
+                emit_alias_prompt(u);
+                return;
+            }
+        return;
+    }
+    if (users.size() == 1 && !cmd.value("pick", false)) {
+        emit_alias_prompt(users.front());
+        return;
+    }
+    emit_user_picker("alias", row_id, users);
+}
+
+void CoreSession::emit_alias_prompt(const User& u) {
+    const std::string key = present::Aliases::key_for(u);
+    std::string current_alias;
+    if (auto it = aliases_.find(key); it != aliases_.end())
+        current_alias = it->second.alias;
+    emit({{"event", "alias_prompt"},
+          {"key", key},
+          {"handle", u.acct.empty() ? u.username : u.acct},
+          {"current", current_alias}});
+}
+
+void CoreSession::cmd_set_alias(const json& cmd) {
+    const std::string key = cmd.value("key", std::string{});
+    if (key.empty())
+        return;
+    const std::string handle = cmd.value("handle", std::string{});
+    const std::string alias = trim_alias(cmd.value("alias", std::string{}));
+    if (alias.empty()) { // empty value clears the alias (matches FastSM)
+        cmd_clear_alias({{"key", key}, {"handle", handle}});
+        return;
+    }
+    present::AliasEntry& e = aliases_[key];
+    e.alias = alias;
+    if (!handle.empty())
+        e.handle = handle; // keep the display handle fresh
+    save_aliases();
+    present::Aliases::set_current(aliases_);
+    emit_all_timelines(); // re-render every open row with the new alias
+    emit_announce(handle.empty() ? "Alias set" : "Alias set for @" + handle);
+}
+
+void CoreSession::cmd_clear_alias(const json& cmd) {
+    const std::string key = cmd.value("key", std::string{});
+    if (key.empty())
+        return;
+    std::string handle = cmd.value("handle", std::string{});
+    if (auto it = aliases_.find(key); it != aliases_.end() && handle.empty())
+        handle = it->second.handle;
+    if (aliases_.erase(key) == 0)
+        return;
+    save_aliases();
+    present::Aliases::set_current(aliases_);
+    emit_all_timelines();
+    emit_announce(handle.empty() ? "Alias removed" : "Alias removed for @" + handle);
+}
+
+void CoreSession::cmd_list_aliases() {
+    json arr = json::array();
+    for (const auto& [key, e] : aliases_)
+        arr.push_back({{"key", key}, {"handle", e.handle}, {"alias", e.alias}});
+    emit({{"event", "aliases_list"}, {"aliases", std::move(arr)}});
+}
+
 void CoreSession::cmd_autocomplete_users(const json& cmd) {
     const std::string query = cmd.value("query", std::string{});
     SocialAccount* acct = accounts_.selected();
@@ -1775,6 +1885,19 @@ void CoreSession::cmd_toggle_pin() {
     sound_.play(now_pinned ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
     emit_timelines(); // refresh the UI's dismissable/pinned flags
     emit_announce(tc->source().title() + (now_pinned ? ", pinned" : ", unpinned"));
+}
+
+void CoreSession::cmd_toggle_mute() {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const bool now_muted = !tc->muted();
+    tc->set_muted(now_muted);
+    save_open_timelines(); // mute state survives a restart
+    // Chime before we go quiet / after we come back so the toggle is audible.
+    sound_.play(now_muted ? sound::Earcon::Unfavorite : sound::Earcon::Favorite);
+    emit_timelines(); // refresh the UI's muted flag
+    emit_announce(tc->source().title() + (now_muted ? ", muted" : ", unmuted"));
 }
 
 void CoreSession::cmd_close_timeline() {
@@ -2633,6 +2756,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_reorder_timeline({{"dir", "down"}});
     if (a == "TogglePin")
         return cmd_toggle_pin();
+    if (a == "MuteTimeline")
+        return cmd_toggle_mute();
     if (a == "speak_item") {
         if (TimelineController* tc = current())
             invisible_speak_index(tc->visible_index_of(tc->selected_id()));
@@ -2720,6 +2845,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_open_user_profile({{"id", row}, {"pick", true}});
     if (a == "SpeakUser")
         return cmd_speak_user({{"id", row}});
+    if (a == "AddAlias")
+        return cmd_begin_alias({{"id", row}});
     if (a == "SpeakReply")
         return cmd_speak_reply({{"id", row}});
     if (a == "FollowToggle")
@@ -2775,12 +2902,14 @@ void CoreSession::rebuild_timelines() {
         const std::string key = account->account_key();
         std::vector<TimelineSource> sources;
         std::vector<bool> pins;
+        std::vector<bool> mutes;
         bool from_saved = false;
         if (auto it = saved.find(key); it != saved.end() && !it->second.empty()) {
             from_saved = true;
             for (const SavedTimeline& st : it->second) {
                 sources.push_back(st.source);
                 pins.push_back(st.pinned);
+                mutes.push_back(st.muted);
             }
             // Migration: make sure the account's standing (non-dismissable) default
             // timelines are present even if it was saved before those defaults
@@ -2796,6 +2925,7 @@ void CoreSession::rebuild_timelines() {
                 if (!have) {
                     sources.push_back(def);
                     pins.push_back(false);
+                    mutes.push_back(false);
                     migrated = true;
                 }
             }
@@ -2811,6 +2941,8 @@ void CoreSession::rebuild_timelines() {
         auto v = build_timelines_for(account, sources);
         for (size_t i = 0; i < v.size() && i < pins.size(); ++i)
             v[i]->set_pinned(pins[i]);
+        for (size_t i = 0; i < v.size() && i < mutes.size(); ++i)
+            v[i]->set_muted(mutes[i]);
         if (key == accounts_.selected_key())
             timelines_ = std::move(v);
         else
@@ -2869,7 +3001,7 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
     };
     tc->on_error = [this](std::string e) { emit_announce(e); };
     tc->on_received_new = [this, p](int n, bool has_direct) {
-        if (n <= 0)
+        if (n <= 0 || p->muted()) // muted tab: new items arrive silently
             return;
         const std::string pack = soundpack_for(p->account()); // sound in that account's pack
         // A direct message / direct mention gets the "messages" chime instead of
@@ -3124,6 +3256,51 @@ void CoreSession::save_client_filters() const {
         std::filesystem::remove(tmp, ec);
 }
 
+std::filesystem::path CoreSession::aliases_path() const {
+    return config_path_.parent_path() / "aliases.json";
+}
+
+void CoreSession::load_aliases() {
+    aliases_.clear();
+    std::ifstream in(aliases_path(), std::ios::binary);
+    if (in) {
+        try {
+            json root;
+            in >> root;
+            if (root.is_object())
+                for (const auto& [key, j] : root.items())
+                    if (j.is_object()) {
+                        present::AliasEntry e;
+                        e.alias = j.value("alias", std::string{});
+                        e.handle = j.value("handle", std::string{});
+                        if (!e.alias.empty())
+                            aliases_[key] = std::move(e);
+                    }
+        } catch (...) {
+        }
+    }
+    present::Aliases::set_current(aliases_); // publish to the presenters
+}
+
+void CoreSession::save_aliases() const {
+    json root = json::object();
+    for (const auto& [key, e] : aliases_)
+        root[key] = {{"alias", e.alias}, {"handle", e.handle}};
+    const std::string blob = root.dump(1);
+    const std::filesystem::path path = aliases_path();
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+        out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec)
+        std::filesystem::remove(tmp, ec);
+}
+
 std::filesystem::path CoreSession::positions_path() const {
     return config_path_.parent_path() / "positions.json";
 }
@@ -3183,7 +3360,8 @@ CoreSession::load_open_timelines() const {
                 if (arr.is_array())
                     for (const auto& j : arr)
                         if (auto s = source_from_json(j))
-                            out[key].push_back({*s, j.value("pinned", false)});
+                            out[key].push_back(
+                                {*s, j.value("pinned", false), j.value("muted", false)});
     } catch (...) {
     }
     return out;
@@ -3200,6 +3378,8 @@ void CoreSession::save_open_timelines() const {
             json j = source_to_json(tc->source());
             if (tc->pinned())
                 j["pinned"] = true;
+            if (tc->muted())
+                j["muted"] = true;
             arr.push_back(std::move(j));
         }
         root[key] = arr;
@@ -3413,6 +3593,7 @@ void CoreSession::emit_timelines() {
                        {"kind", s.cache_key()},
                        {"dismissable", s.is_dismissable() && !tc->pinned()},
                        {"pinned", tc->pinned()},
+                       {"muted", tc->muted()},
                        {"user_list", s.is_user_list()}});
     }
     emit({{"event", "timelines_changed"},

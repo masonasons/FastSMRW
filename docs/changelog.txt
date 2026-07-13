@@ -1,6 +1,14 @@
 FastSMRW changelog
 ==================
 
+0.3.1
+-----
+
+- New: you can now mute a timeline's sounds so new posts arrive silently in that tab - press Ctrl+M (Command+M on Mac, or use the tab's menu on Android) to mute or unmute.
+- New: user aliases - give someone a custom display name that shows everywhere in place of their real one and works across all your accounts; add or edit one from a post (Ctrl+Shift+N on Windows, Command+Shift+N on Mac, the post menu on Android) and manage them all from the User Aliases list.
+- Changed: post visibility now uses Mastodon's current names everywhere - "Quiet public" (was Unlisted), "Followers" (was Followers only), and "Specific people" (was Direct).
+- Changed: the global (invisible interface) hotkey for View Thread is now Alt+Win+C, and there's a new global hotkey to open a timeline, Ctrl+Alt+Win+T.
+
 0.3.0
 -----
 

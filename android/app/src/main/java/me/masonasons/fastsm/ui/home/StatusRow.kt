@@ -48,6 +48,7 @@ fun StatusRow(
     onSpeakUser: (String) -> Unit,
     onSpeakReply: (String) -> Unit,
     onJumpToReply: (String) -> Unit,
+    onAddAlias: (String) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -62,6 +63,7 @@ fun StatusRow(
         add(MenuAction("View author's posts") { onOpenAuthor(row.id) })
         add(MenuAction("View author's profile") { onOpenProfile(row.id) })
         add(MenuAction("Speak user info") { onSpeakUser(row.id) })
+        add(MenuAction("Add or edit alias") { onAddAlias(row.id) })
         if (row.isReply) {
             add(MenuAction("Speak referenced reply") { onSpeakReply(row.id) })
             add(MenuAction("Jump to referenced reply") { onJumpToReply(row.id) })

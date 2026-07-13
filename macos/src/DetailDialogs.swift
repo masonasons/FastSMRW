@@ -334,6 +334,7 @@ final class UserPickerWindowController: NSWindowController, NSTableViewDataSourc
         case "timeline": state.openUserTimeline(accountId: user.id, acct: user.acct)
         case "profile": state.openUserProfile(accountId: user.id, acct: user.acct)
         case "follow_toggle": state.followToggle(accountId: user.id, acct: user.acct)
+        case "alias": state.beginAliasAccount(id: picker.id, accountId: user.id)
         default: break
         }
         dismiss()

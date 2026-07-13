@@ -146,7 +146,7 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
         // Visibility (Mastodon, not while editing).
         if feature("visibility"), !isEditing {
             showVisibility = true
-            visibilityPopup.addItems(withTitles: ["Public", "Unlisted", "Followers only", "Direct"])
+            visibilityPopup.addItems(withTitles: ["Public", "Quiet public", "Followers", "Specific people"])
             visibilityPopup.selectItem(at: context.defaultVisibility ?? 0)
             visibilityPopup.setAccessibilityLabel("Visibility")
             sections.append(labeledRow("Visibility:", visibilityPopup))

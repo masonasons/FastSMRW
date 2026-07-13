@@ -44,6 +44,8 @@ final class AppState {
     var onClientFilter: ((ClientFilter) -> Void)?
     var onHashtagPrompt: (([String]) -> Void)?
     var onFollowedHashtags: ((FollowedHashtags) -> Void)?
+    var onAliasPrompt: ((AliasPrompt) -> Void)?
+    var onAliasesList: ((AliasesList) -> Void)?
     var onLists: ((Lists) -> Void)?
     var onServerFilters: ((ServerFilters) -> Void)?
     var onUserSuggestions: ((UserSuggestions) -> Void)?
@@ -146,6 +148,10 @@ final class AppState {
             onHashtagPrompt?(e.tags)
         case let .followedHashtags(e):
             onFollowedHashtags?(e)
+        case let .aliasPrompt(e):
+            onAliasPrompt?(e)
+        case let .aliasesList(e):
+            onAliasesList?(e)
         case let .lists(e):
             onLists?(e)
         case let .serverFilters(e):
@@ -203,6 +209,19 @@ final class AppState {
     func closeTimeline() { client.send("close_timeline") }
     func clearTimeline() { client.send("clear_timeline") }
     func togglePin() { client.send("toggle_pin") }
+    func toggleMute() { client.send("toggle_mute") }
+    func beginAlias(id: String) { client.send("begin_alias", ["id": id, "pick": true]) }
+    func beginAliasAccount(id: String, accountId: String) {
+        client.send("begin_alias", ["id": id, "account_id": accountId])
+    }
+    func beginAliasHandle(_ handle: String) { client.send("begin_alias", ["handle": handle]) }
+    func setAlias(key: String, handle: String, alias: String) {
+        client.send("set_alias", ["key": key, "handle": handle, "alias": alias])
+    }
+    func clearAlias(key: String, handle: String) {
+        client.send("clear_alias", ["key": key, "handle": handle])
+    }
+    func listAliases() { client.send("list_aliases") }
     func reorderTimeline(dir: String) { client.send("reorder_timeline", ["dir": dir]) }
     // Speech field order/enable (nested under settings.speech.<category>).
     func speechItems(for category: String) -> [[String: Any]] {

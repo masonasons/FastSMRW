@@ -14,6 +14,7 @@
 
 #include "fastsm/net/http_client.hpp"
 #include "fastsm/platform/mastodon/mastodon_credentials.hpp"
+#include "fastsm/presentation/alias_store.hpp"
 #include "fastsm/runtime/worker_queue.hpp"
 #include "fastsm/sound/sound_manager.hpp"
 #include "fastsm/store/account_store.hpp"
@@ -113,6 +114,14 @@ private:
     // referenced (in_reply_to) parent; a second press within a moment jumps to it.
     void cmd_speak_user(const nlohmann::json& cmd);
     void cmd_speak_reply(const nlohmann::json& cmd);
+    // User aliases (global, cross-account custom display names). begin_alias
+    // resolves the focused row's user(s) and emits an alias_prompt; set_alias /
+    // clear_alias mutate + persist the store; list_aliases feeds the manager UI.
+    void cmd_begin_alias(const nlohmann::json& cmd);
+    void emit_alias_prompt(const User& u);
+    void cmd_set_alias(const nlohmann::json& cmd);
+    void cmd_clear_alias(const nlohmann::json& cmd);
+    void cmd_list_aliases();
     // Typeahead for @-mention autocomplete: search accounts by partial handle and
     // emit a "user_suggestions" event (echoing the query so stale replies drop).
     void cmd_autocomplete_users(const nlohmann::json& cmd);
@@ -143,6 +152,7 @@ private:
     void resolve_handle(const std::string& handle, std::function<void(const User&)> then);
     void cmd_reorder_timeline(const nlohmann::json& cmd); // move current timeline up/down
     void cmd_toggle_pin(); // pin/unpin the current tab (locks/unlocks dismissal)
+    void cmd_toggle_mute(); // mute/unmute the current tab's new-item earcon
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_clear_all_timelines();
@@ -213,6 +223,7 @@ private:
     struct SavedTimeline {
         TimelineSource source;
         bool pinned = false;
+        bool muted = false;
     };
     std::map<std::string, std::vector<SavedTimeline>> load_open_timelines() const;
     void save_open_timelines() const;
@@ -236,6 +247,9 @@ private:
     void save_config();
     // Per-timeline reading position (cache_key -> selected post id), remembered
     // across restarts in a small positions.json (separate from the item cache).
+    std::filesystem::path aliases_path() const;
+    void load_aliases();
+    void save_aliases() const;
     std::filesystem::path positions_path() const;
     void load_positions();
     void save_positions() const;
@@ -261,6 +275,7 @@ private:
     std::filesystem::path bundled_keymaps_dir_; // read-only keymaps shipped with the app
     std::map<std::string, std::string> positions_; // cache_key -> remembered selected id
     std::map<std::string, ClientFilter> client_filters_; // cache_key -> per-timeline client filter
+    std::map<std::string, present::AliasEntry> aliases_; // canonical key -> user alias (global)
     // account_key -> the account's timeline lists, refreshed in the background so
     // Ctrl+T can offer them without a network round trip in the hot path.
     std::map<std::string, std::vector<TimelineList>> lists_by_account_;

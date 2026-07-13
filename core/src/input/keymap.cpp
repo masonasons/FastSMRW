@@ -306,7 +306,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"Enter", "Default action (like Enter)", "alt+win+return"},
         {"SecondaryAction", "Secondary action (like Shift+Enter)", "alt+shift+win+return"},
         {"Url", "Open link in post", ""}, // unbound by default (was alt+win+return)
-        {"open_thread", "View thread", "alt+win+t"},
+        {"open_thread", "View thread", "alt+win+c"}, // Win8.1 keymap rebinds to control+win+t
         // --- user actions ---
         {"UserTimeline", "Open user timeline", "alt+win+u"},
         {"UserProfile", "Open user profile", "alt+win+shift+u"},
@@ -316,12 +316,14 @@ const std::vector<ActionDef>& action_catalog() {
         {"SpeakReply", "Speak referenced reply", "alt+win+shift+;"},
         {"FollowToggle", "Follow / Unfollow", "alt+win+l"},
         {"MuteToggle", "Mute / Unmute user", "alt+win+shift+l"},
+        {"AddAlias", "Add / edit user alias", "control+alt+win+n"}, // matches FastSM (in-app Ctrl+Shift+N)
         {"BlockToggle", "Block / Unblock user", "control+shift+win+b"},
         // --- timeline / app ---
-        {"NewTimeline", "New timeline", ""}, // unbound by default (in-app Ctrl+T); opens the dialog
+        {"NewTimeline", "New timeline", "control+alt+win+t"}, // opens the dialog (in-app Ctrl+T)
         {"MoveTimelineUp", "Move timeline up", ""},       // unbound (in-app Shift+Up)
         {"MoveTimelineDown", "Move timeline down", ""},   // unbound (in-app Shift+Down)
         {"TogglePin", "Pin / unpin timeline", ""},        // unbound (in-app Ctrl+P)
+        {"MuteTimeline", "Mute / unmute timeline sounds", ""}, // unbound (in-app Ctrl+M)
         {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
         {"DeletePost", "Delete your post", "alt+win+delete"}, // in-app Delete; Win8.1 overrides
         {"FollowHashtag", "Follow a hashtag", "alt+win+h"}, // in-app / layer H
