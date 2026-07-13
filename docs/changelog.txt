@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.3.3
+-----
+
+- Fixed: the Windows app no longer gets stuck at the top of a timeline after an update - if your saved post hasn't finished loading yet, it now jumps to it once it arrives instead of stranding you at the newest post.
+
 0.3.2
 -----
 

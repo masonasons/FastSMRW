@@ -734,10 +734,13 @@ void MainWindow::bind_current_to_view(bool force) {
     if (tc && count > 0) {
         int idx = index_of_id(*tc, tc->selected_id);
         if (idx < 0) {
-            // No remembered row: land on the newest post — the top normally, or the
-            // bottom when the timeline is reversed (newest-at-bottom).
+            // The remembered row isn't loaded yet — e.g. a cold load after a cache
+            // reset (an update) only holds the newest posts, or a refresh hasn't
+            // reached it. Focus the newest post for now (top, or bottom when
+            // reversed) but KEEP selected_id, so a later update re-selects the
+            // remembered row once it loads. Overwriting it here would strand us at
+            // the top permanently, since we only re-adopt the position while unset.
             idx = tc->reversed ? count - 1 : 0;
-            tc->selected_id = tc->rows[static_cast<size_t>(idx)].id;
         }
         const UINT want = LVIS_SELECTED | LVIS_FOCUSED;
         if ((ListView_GetItemState(timeline_view_, idx, want) & want) != want)
