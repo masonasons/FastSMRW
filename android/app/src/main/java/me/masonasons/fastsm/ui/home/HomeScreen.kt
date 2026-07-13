@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import me.masonasons.fastsm.ui.AliasEntry
 import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.RowUi
 import me.masonasons.fastsm.ui.TabUi
