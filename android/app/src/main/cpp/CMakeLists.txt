@@ -50,6 +50,7 @@ set(CORE_SRC
     ${CORE}/timeline/client_filter.cpp
     ${CORE}/presentation/status_presenter.cpp
     ${CORE}/presentation/speech_settings.cpp
+    ${CORE}/presentation/alias_store.cpp
     ${CORE}/presentation/reply_helper.cpp
     ${CORE}/sound/sound_manager.cpp
     ${CORE}/input/keymap.cpp
