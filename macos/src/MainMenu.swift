@@ -80,11 +80,14 @@ enum MainMenu {
         delete.keyEquivalentModifierMask = [.command]
         add("Pin to Profile", #selector(MainWindowController.pinPostSelection(_:)), "")
         statusMenu.addItem(.separator())
-        add("Speak User", #selector(MainWindowController.speakUserForSelection(_:)), ";")
-        add("Speak Referenced Reply", #selector(MainWindowController.speakReplyForSelection(_:)), ";", [.command])
+        add("Speak User", #selector(MainWindowController.speakUserForSelection(_:)), ";", [.command])
+        add("Speak Referenced Reply", #selector(MainWindowController.speakReplyForSelection(_:)), ";", [.command, .shift])
         statusMenu.addItem(.separator())
         add("Post Info…", #selector(MainWindowController.showPostInfo(_:)), "i", [.command])
-        add("View Media…", #selector(MainWindowController.playMediaForSelection(_:)), "\r", [.shift])
+        // No ⇧Return equivalent: Shift+Return is the configurable "secondary
+        // interact" (Behavior settings), handled on the posts table. This item
+        // stays as an explicit, always-media action reachable from the menu.
+        add("View Media…", #selector(MainWindowController.playMediaForSelection(_:)), "")
         add("Open Link…", #selector(MainWindowController.openLinksForSelection(_:)), "\r", [.command])
         add("View Thread", #selector(MainWindowController.viewThread(_:)), " ")
         add("Open User Timeline", #selector(MainWindowController.openUserTimeline(_:)), "u")

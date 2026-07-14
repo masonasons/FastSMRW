@@ -1,6 +1,14 @@
 FastSMRW changelog
 ==================
 
+0.3.4
+-----
+
+- Fixed: on the Mac, pressing Enter and Shift+Enter on a post now do whatever you've picked for the interact and secondary interact actions in settings, instead of always showing post info and playing media.
+- Changed: on the Mac, Speak User is now Command+Semicolon and Speak Referenced Reply is Command+Shift+Semicolon.
+- Fixed: on the Mac, Speak User and Speak Referenced Reply now speak the user or reply instead of VoiceOver just reading out the menu item name.
+- New: on Windows, exiting with the invisible interface hotkey now says "Exiting" as a confirmation before the app closes.
+
 0.3.3
 -----
 

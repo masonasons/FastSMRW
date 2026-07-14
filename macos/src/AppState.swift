@@ -54,7 +54,13 @@ final class AppState {
     var onMediaPicker: ((MediaPicker) -> Void)?
     var onURLPicker: ((URLPicker) -> Void)?
     var onUpdateStatus: ((UpdateStatus) -> Void)?
+    /// The core's "UserActions" request (Enter on a user row when enter_user_action
+    /// is "actions"): the Mac's equivalent is opening the user profile dialog.
+    var onUserActionsMenu: (() -> Void)?
     private var didStartupUpdateCheck = false
+    /// One-shot: delay the next `announce` slightly so a menu key-equivalent's
+    /// title (spoken by VoiceOver) doesn't stomp a Speak User/Reply result.
+    private var delayNextAnnounce = false
 
     var currentRows: [Row] { rowsByIndex[currentIndex] ?? [] }
     var currentSelectedId: String { selectedIdByIndex[currentIndex] ?? "" }
@@ -106,6 +112,13 @@ final class AppState {
             }
             return
         }
+        // The core asks the UI to show its per-platform "user actions" affordance.
+        if let data = json.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           obj["event"] as? String == "invisible_ui_action" {
+            if obj["action"] as? String == "UserActions" { onUserActionsMenu?() }
+            return
+        }
         guard let event = CoreEvent.decode(json) else { return }
         switch event {
         case let .accountsChanged(e):
@@ -125,7 +138,15 @@ final class AppState {
         case let .selectRow(e):
             onSelectRow?(e.id)
         case let .announce(e):
-            onAnnounce?(e.message)
+            if delayNextAnnounce {
+                delayNextAnnounce = false
+                let message = e.message
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.onAnnounce?(message)
+                }
+            } else {
+                onAnnounce?(e.message)
+            }
         case let .openURL(e):
             if let url = URL(string: e.url) { onOpenURL?(url) }
         case let .authResult(e):
@@ -178,6 +199,12 @@ final class AppState {
     // MARK: Command helpers
 
     func playEarcon(_ name: String) { client.send("play_earcon", ["name": name]) }
+
+    /// The configurable "interact" ("Enter") and "secondary interact"
+    /// ("SecondaryAction") actions. The core resolves them from the Behavior
+    /// settings (enter_post_action / enter_user_action / secondary_post_action)
+    /// against the currently selected row, so the app doesn't duplicate that logic.
+    func performAction(_ action: String) { client.send("perform_action", ["action": action]) }
     func refresh() { client.send("refresh") }
 
     // Settings: mutate the full object and echo it back so the core keeps every
@@ -298,8 +325,12 @@ final class AppState {
     func togglePinPost(id: String) { client.send("toggle_pin_post", ["id": id]) }
     func deletePost(id: String) { client.send("delete_post", ["id": id]) }
     func openStatus(id: String) { client.send("open_status", ["id": id]) }
-    func speakUser(id: String) { client.send("speak_user", ["id": id]) }
-    func speakReply(id: String) { client.send("speak_reply", ["id": id]) }
+    // These are invoked from menu items with ⌘/⌘⇧ key-equivalents. VoiceOver
+    // speaks the menu item's title when a key-equivalent fires, which stomps the
+    // text we announce back. Arm a one-shot delay so our announcement lands just
+    // after the title and wins.
+    func speakUser(id: String) { delayNextAnnounce = true; client.send("speak_user", ["id": id]) }
+    func speakReply(id: String) { delayNextAnnounce = true; client.send("speak_reply", ["id": id]) }
     func votePoll(id: String, choices: [Int]) { client.send("vote_poll", ["id": id, "choices": choices]) }
     func goBack() { client.send("go_back") }
     func refreshAll() { client.send("refresh_all") }

@@ -39,6 +39,7 @@ constexpr wchar_t kClassName[] = L"FastSMRWMain";
 constexpr int kTimelinesPaneWidth = 220;
 constexpr int kMinWidth = 920;
 constexpr UINT_PTR kMediaBgTimer = 1; // WM_TIMER id for background-audio end polling
+constexpr UINT_PTR kExitTimer = 2;    // brief delay so "Exiting" is spoken before we quit
 constexpr int kMinHeight = 720;
 
 enum {
@@ -542,6 +543,9 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         if (wp == kMediaBgTimer && media_bg_ && media_bg_->completed()) {
             media_bg_->stop(); // background audio finished; clear it
             KillTimer(hwnd_, kMediaBgTimer);
+        } else if (wp == kExitTimer) {
+            KillTimer(hwnd_, kExitTimer);
+            DestroyWindow(hwnd_); // "Exiting" has been spoken; now really quit
         }
         return 0;
 
@@ -2451,7 +2455,11 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
     } else if (a == "StopMedia") {
         stop_media();
     } else if (a == "Exit") {
-        DestroyWindow(hwnd_); // real quit (same as the Quit menu item), not just hide
+        // Speak a confirmation, then quit after a beat so it isn't cut off (the
+        // invisible-interface exit is otherwise silent). Same real quit as the
+        // Quit menu item, not just a hide.
+        announce("Exiting");
+        SetTimer(hwnd_, kExitTimer, 500, nullptr);
     }
 }
 

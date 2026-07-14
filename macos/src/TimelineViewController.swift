@@ -66,8 +66,13 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         tableView.onLeftArrow = { [weak self] in self?.state.selectTimeline(dir: "prev") }
         tableView.onRightArrow = { [weak self] in self?.state.selectTimeline(dir: "next") }
         tableView.onBoundary = { [weak self] in self?.state.playEarcon("boundary") }
-        tableView.onReturn = { [weak self] in self?.showPostInfo(nil) }
-        tableView.onShiftReturn = { [weak self] in self?.playMediaForSelection(nil) }
+        // Return / Shift+Return are the configurable interact / secondary-interact
+        // actions; the core resolves them from Behavior settings for the current row.
+        tableView.onReturn = { [weak self] in self?.state.performAction("Enter") }
+        tableView.onShiftReturn = { [weak self] in self?.state.performAction("SecondaryAction") }
+        // Enter on a user row with enter_user_action = "actions" (the default):
+        // the core asks for the platform "user actions" affordance — the profile.
+        state.onUserActionsMenu = { [weak self] in self?.openUserProfile(nil) }
         tableView.onCommandReturn = { [weak self] in self?.openLinksForSelection(nil) }
         tableView.onSpace = { [weak self] in self?.viewThread(nil) }
         // Backspace closes the current timeline; ⌘Backspace deletes the post.
