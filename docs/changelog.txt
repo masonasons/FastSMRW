@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.3.5
+-----
+
+- New: on Windows, spoken messages are now also sent to your braille display, so anything the app announces is brailled as well as spoken.
+
 0.3.4
 -----
 
