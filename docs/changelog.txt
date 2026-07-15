@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.3.6
+-----
+
+- Fixed: on Android, editing a spoken detail now lets you turn off the separator after that field, matching the same option in the Windows and Mac apps.
+- Fixed: on Android, you can now use a single space as the text spoken before or after a detail, instead of it being thrown away like the Windows and Mac apps allow.
+
 0.3.5
 -----
 

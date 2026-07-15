@@ -376,7 +376,10 @@ private fun SpeechFieldEditor(s: JSONObject, list: String, vm: CoreViewModel) {
             fieldLabel = fieldLabel(list, field),
             before = o?.optString("before") ?: "",
             after = o?.optString("after") ?: "",
-            onSave = { b, a -> vm.setSpeechWrap(list, field, b, a); editing = null },
+            noSeparatorAfter = o?.optBoolean("no_separator_after") ?: false,
+            onSave = { b, a, noSep ->
+                vm.setSpeechWrap(list, field, b, a, noSep); editing = null
+            },
             onDismiss = { editing = null },
         )
     }
@@ -387,11 +390,13 @@ private fun WrapDialog(
     fieldLabel: String,
     before: String,
     after: String,
-    onSave: (String, String) -> Unit,
+    noSeparatorAfter: Boolean,
+    onSave: (String, String, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var b by remember { mutableStateOf(before) }
     var a by remember { mutableStateOf(after) }
+    var noSep by remember { mutableStateOf(noSeparatorAfter) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Extra spoken text: $fieldLabel") },
@@ -411,9 +416,27 @@ private fun WrapDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = noSep,
+                            role = Role.Switch,
+                            onValueChange = { noSep = it },
+                        )
+                        .padding(top = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "No separator after this field",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = noSep, onCheckedChange = null)
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(b, a) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(b, a, noSep) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

@@ -730,15 +730,28 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Set the optional text spoken before/after a field's value. */
-    fun setSpeechWrap(list: String, field: String, before: String, after: String) {
+    /**
+     * Set the optional text spoken before/after a field's value, and whether the
+     * separator is suppressed after this field.
+     */
+    fun setSpeechWrap(
+        list: String,
+        field: String,
+        before: String,
+        after: String,
+        noSeparatorAfter: Boolean,
+    ) {
         updateSetting {
             val arr = optJSONObject("speech")?.optJSONArray(list) ?: return@updateSetting
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
                 if (o.optString("field") == field) {
-                    if (before.isBlank()) o.remove("before") else o.put("before", before)
-                    if (after.isBlank()) o.remove("after") else o.put("after", after)
+                    // Only drop when truly empty — a lone space is a valid value
+                    // (it separates a field's before/after text), same as Win/Mac.
+                    if (before.isEmpty()) o.remove("before") else o.put("before", before)
+                    if (after.isEmpty()) o.remove("after") else o.put("after", after)
+                    if (noSeparatorAfter) o.put("no_separator_after", true)
+                    else o.remove("no_separator_after")
                     break
                 }
             }
