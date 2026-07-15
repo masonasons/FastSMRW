@@ -249,6 +249,9 @@ final class AppState {
         client.send("clear_alias", ["key": key, "handle": handle])
     }
     func listAliases() { client.send("list_aliases") }
+    // User Analysis: fetch the full follow lists and spawn a user timeline of the
+    // chosen category (or announce an error if they can't be fully loaded).
+    func analyzeUsers(category: String) { client.send("analyze_users", ["category": category]) }
     func reorderTimeline(dir: String) { client.send("reorder_timeline", ["dir": dir]) }
     // Speech field order/enable (nested under settings.speech.<category>).
     func speechItems(for category: String) -> [[String: Any]] {

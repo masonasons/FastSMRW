@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.3.7
+-----
+
+- New: User Analysis in the Me menu opens a list of people who follow you but you don't follow back, people you follow who don't follow you back, or your mutual follows — and tells you if it couldn't load your full follow lists instead of showing a partial result.
+
 0.3.6
 -----
 

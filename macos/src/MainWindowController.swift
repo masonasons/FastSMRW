@@ -24,6 +24,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private var addAccountController: AddAccountWindowController?
     private var composeController: ComposeWindowController?
     private var newTimelineController: NewTimelineWindowController?
+    private var userAnalysisController: UserAnalysisWindowController?
     private var detailController: NSWindowController?
     private var mediaControllers: [NSWindowController] = []
     private var hashtagsController: HashtagsWindowController?
@@ -320,6 +321,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func openUserProfile(_ sender: Any?) { postsViewController.openUserProfile(sender) }
     @objc func addAlias(_ sender: Any?) { postsViewController.addAlias(sender) }
     @objc func manageAliases(_ sender: Any?) { state.listAliases() }
+    @objc func userAnalysis(_ sender: Any?) { presentUserAnalysis() }
     @objc func openFollowers(_ sender: Any?) { postsViewController.openFollowers(sender) }
     @objc func openFollowing(_ sender: Any?) { postsViewController.openFollowing(sender) }
     @objc func followHashtag(_ sender: Any?) { postsViewController.followHashtagForSelection(sender) }
@@ -366,6 +368,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         newTimelineController = controller
         controller.beginSheet(for: window) { [weak self] in
             self?.newTimelineController = nil
+            self?.postsViewController.focusTable()
+        }
+    }
+
+    private func presentUserAnalysis() {
+        guard let window, userAnalysisController == nil else { return }
+        let controller = UserAnalysisWindowController(state: state)
+        userAnalysisController = controller
+        controller.beginSheet(for: window) { [weak self] in
+            self?.userAnalysisController = nil
             self?.postsViewController.focusTable()
         }
     }

@@ -22,6 +22,7 @@
 #include "server_filters_dialog.hpp"
 #include "media_player_window.hpp"
 #include "post_info_dialog.hpp"
+#include "user_analysis_dialog.hpp"
 #include "user_profile_dialog.hpp"
 #include "settings_dialog.hpp"
 #include "utf.hpp"
@@ -92,6 +93,7 @@ enum {
     ID_VIEW_BLOCKS,
     ID_FOLLOW_REQUESTS,
     ID_FOLLOWED_HASHTAGS,
+    ID_USER_ANALYSIS,
     ID_STOP_MEDIA,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
@@ -214,6 +216,7 @@ HMENU build_menu() {
     AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
     AppendMenuW(me, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
     AppendMenuW(me, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
+    AppendMenuW(me, MF_STRING, ID_USER_ANALYSIS, L"User A&nalysis…");
     AppendMenuW(me, MF_STRING, ID_MANAGE_ALIASES, L"User A&liases…");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(me), L"&Me");
 
@@ -1741,6 +1744,10 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_FOLLOWED_HASHTAGS:
         dispatch_cmd({{"cmd", "list_followed_hashtags"}}); // core replies -> manager dialog
+        break;
+    case ID_USER_ANALYSIS:
+        if (auto category = fastsmui::show_user_analysis_dialog(hwnd_, inst_))
+            dispatch_cmd({{"cmd", "analyze_users"}, {"category", *category}});
         break;
     case ID_STOP_MEDIA:
         stop_media();

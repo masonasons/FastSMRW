@@ -85,6 +85,8 @@ fun HomeScreen(
 
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
+    // The User Analysis picker (opened from the overflow menu).
+    var showUserAnalysis by remember { mutableStateOf(false) }
 
     // Keep the pager and the core's selected timeline in sync both ways.
     LaunchedEffect(currentTab) {
@@ -130,6 +132,10 @@ fun HomeScreen(
                             DropdownMenuItem(
                                 text = { Text("User aliases") },
                                 onClick = { menuOpen = false; viewModel.listAliases() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("User analysis") },
+                                onClick = { menuOpen = false; showUserAnalysis = true },
                             )
                             DropdownMenuItem(
                                 text = { Text("Settings") },
@@ -285,6 +291,16 @@ fun HomeScreen(
         }
     }
 
+    if (showUserAnalysis) {
+        UserAnalysisDialog(
+            onSelect = { category ->
+                viewModel.analyzeUsers(category)
+                showUserAnalysis = false
+            },
+            onDismiss = { showUserAnalysis = false },
+        )
+    }
+
     val mediaPicker by viewModel.mediaPicker.collectAsStateWithLifecycle()
     mediaPicker?.let { items ->
         AlertDialog(
@@ -305,6 +321,43 @@ fun HomeScreen(
             },
         )
     }
+}
+
+/**
+ * User Analysis picker: choose an analysis of your follow relationships. Picking
+ * one dispatches analyze_users; the core spawns a user timeline of the result (or
+ * announces an error if your follow lists can't be fully loaded). Keep the options
+ * in sync with the Windows/Mac pickers and CoreSession::cmd_analyze_users.
+ */
+@Composable
+private fun UserAnalysisDialog(
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val analyses = listOf(
+        "People who follow you that you don't follow back" to "not_following_back",
+        "People you follow who don't follow you back" to "no_followback",
+        "Mutual follows (you both follow each other)" to "mutuals",
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("User Analysis") },
+        text = {
+            Column {
+                analyses.forEach { (label, category) ->
+                    TextButton(
+                        onClick = { onSelect(category) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(label, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 /** Prompt for a user's alias. An empty value clears the alias. */

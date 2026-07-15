@@ -273,3 +273,8 @@
 #define IDC_ALM_LIST          596
 #define IDC_ALM_EDIT          597
 #define IDC_ALM_REMOVE        598
+
+// User Analysis picker (Me menu): choose an analysis; running it spawns a user
+// timeline of the result.
+#define IDD_USER_ANALYSIS     600
+#define IDC_UA_LIST           601

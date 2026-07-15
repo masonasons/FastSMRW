@@ -117,6 +117,10 @@ public:
     void set_origin_key(std::string key) { origin_key_ = std::move(key); }
     const std::string& origin_key() const { return origin_key_; }
 
+    // Replace the display title (only affects title_text) — used to refresh a
+    // re-seeded static timeline's title, e.g. a User Analysis result count.
+    void set_source_title(std::string title) { source_.title_text = std::move(title); }
+
     // Go Back (Ctrl+Z): pop the nav history to the most recent still-present row,
     // make it the position, and return its id (empty if nothing to undo). This
     // restore itself is not recorded.

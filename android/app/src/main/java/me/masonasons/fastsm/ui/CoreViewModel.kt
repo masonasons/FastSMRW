@@ -593,6 +593,14 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Ask the core for the full alias list (opens/refreshes the aliases manager). */
     fun listAliases() = core.dispatch("list_aliases")
 
+    /**
+     * User Analysis: fetch the current account's complete followers/following
+     * lists and spawn a user timeline of the chosen category ("not_following_back"
+     * | "no_followback" | "mutuals"). The core announces an error and spawns
+     * nothing if the lists can't be fully loaded (rate limit / failure).
+     */
+    fun analyzeUsers(category: String) = core.dispatch("analyze_users") { put("category", category) }
+
     fun dismissAliasPrompt() { _aliasPrompt.value = null }
     fun dismissAliasesList() { _aliasesList.value = null }
 

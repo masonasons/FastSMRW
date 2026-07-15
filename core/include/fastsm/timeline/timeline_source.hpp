@@ -31,6 +31,9 @@ struct TimelineSource {
         FollowRequests, // accounts requesting to follow you; rows are users
         PostUsers,   // the users referenced in one post (author + mentions); rows are
                      // users, seeded from the post (not fetched). param = status id.
+        AnalyzedUsers, // result of a User Analysis (e.g. "don't follow you back");
+                       // rows are users, seeded at spawn (not fetched). param = the
+                       // analysis category id.
     };
 
     Kind kind = Kind::Home;
@@ -81,6 +84,8 @@ struct TimelineSource {
             return "Follow Requests";
         case Kind::PostUsers:
             return title_text.empty() ? "Users in post" : title_text;
+        case Kind::AnalyzedUsers:
+            return title_text.empty() ? "User Analysis" : title_text;
         }
         return "Timeline";
     }
@@ -130,6 +135,8 @@ struct TimelineSource {
             return "followRequests";
         case Kind::PostUsers:
             return "postUsers:" + param;
+        case Kind::AnalyzedUsers:
+            return "analyzedUsers:" + param;
         }
         return "timeline";
     }
@@ -138,10 +145,13 @@ struct TimelineSource {
     // so they never collide) and reloads instantly on restart. Spawned timelines
     // (threads, author timelines, hashtags, searches, lists, remote feeds, people
     // lists) drop their cache when closed.
-    bool is_cacheable() const { return kind != Kind::PostUsers; }
+    bool is_cacheable() const { return !is_static(); }
     // A synthetic timeline whose rows are provided at spawn (not fetched, refreshed,
-    // paged, cached, or restored on restart). Currently only the post-users list.
-    bool is_static() const { return kind == Kind::PostUsers; }
+    // paged, cached, or restored on restart): the post-users list and the User
+    // Analysis results.
+    bool is_static() const {
+        return kind == Kind::PostUsers || kind == Kind::AnalyzedUsers;
+    }
     // Time-ordered feeds re-sort newest-first on merge; threads keep conversation
     // order, user lists keep server order, and searches keep relevance order.
     bool is_time_ordered() const {
@@ -151,7 +161,7 @@ struct TimelineSource {
     bool is_user_list() const {
         return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople ||
                kind == Kind::Mutes || kind == Kind::Blocks || kind == Kind::FollowRequests ||
-               kind == Kind::PostUsers;
+               kind == Kind::PostUsers || kind == Kind::AnalyzedUsers;
     }
     // Mastodon paginates these by item id (max_id), so scrollback can be re-seeded
     // from the oldest loaded row after a cache load.
@@ -210,6 +220,7 @@ struct TimelineSource {
         case Kind::Blocks:
         case Kind::FollowRequests:
         case Kind::PostUsers:
+        case Kind::AnalyzedUsers:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -257,6 +268,10 @@ struct TimelineSource {
     // The users referenced in one post (author + mentions), seeded at spawn.
     static TimelineSource post_users(std::string status_id, std::string title = {}) {
         return {Kind::PostUsers, std::move(status_id), std::move(title)};
+    }
+    // The result of a User Analysis (category = which analysis), seeded at spawn.
+    static TimelineSource analyzed_users(std::string category, std::string title = {}) {
+        return {Kind::AnalyzedUsers, std::move(category), std::move(title)};
     }
     static TimelineSource mutes() { return {Kind::Mutes}; }
     static TimelineSource blocks() { return {Kind::Blocks}; }

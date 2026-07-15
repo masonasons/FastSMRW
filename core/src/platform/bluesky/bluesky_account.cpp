@@ -363,6 +363,49 @@ std::vector<User> BlueskyAccount::search_accounts(const std::string& query, int 
     return out;
 }
 
+// getFollowers / getFollows, paging through every page via the opaque cursor.
+// All-or-nothing: a 429 aborts as RateLimited and any other failure as Failed, so
+// a partial list is never returned as if complete.
+FullRelationResult BlueskyAccount::fetch_all_relations(const std::string& id, bool following) {
+    FullRelationResult out;
+    const std::string base = session_.pds_url + "/xrpc/";
+    const std::string ep = following ? "app.bsky.graph.getFollows" : "app.bsky.graph.getFollowers";
+    const char* key = following ? "follows" : "followers";
+    std::string cursor;
+    // Cap the page count as a safety net against a never-ending cursor.
+    for (int page = 0; page < 1000; ++page) {
+        std::string url = base + ep + "?actor=" + util::percent_encode(id) + "&limit=100";
+        if (!cursor.empty())
+            url += "&cursor=" + util::percent_encode(cursor);
+        const net::HttpResponse res = send_authed("GET", url, "");
+        if (res.status == 429) {
+            out.status = FullRelationResult::Status::RateLimited;
+            return out;
+        }
+        if (!res.ok()) {
+            out.status = FullRelationResult::Status::Failed;
+            return out;
+        }
+        json j;
+        try {
+            j = json::parse(res.body);
+        } catch (...) {
+            out.status = FullRelationResult::Status::Failed;
+            return out;
+        }
+        if (auto a = j.find(key); a != j.end() && a->is_array())
+            for (const auto& prof : *a)
+                out.users.push_back(bluesky::map_author(prof));
+        // No cursor == reached the end of the list.
+        auto c = j.find("cursor");
+        if (c == j.end() || !c->is_string() || c->get<std::string>().empty())
+            break;
+        cursor = c->get<std::string>();
+    }
+    out.status = FullRelationResult::Status::Ok;
+    return out;
+}
+
 std::optional<Relationship> BlueskyAccount::relationship(const std::string& id) {
     auto body = get_profile_body(id);
     if (!body)

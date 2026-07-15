@@ -421,6 +421,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_open_followers(cmd);
     else if (c == "open_following")
         cmd_open_following(cmd);
+    else if (c == "analyze_users")
+        cmd_analyze_users(cmd);
     else if (c == "user_action")
         cmd_user_action(cmd);
     else if (c == "follow_toggle")
@@ -1804,6 +1806,96 @@ void CoreSession::spawn_post_users(const std::vector<User>& users, const std::st
                 p->seed_users(std::move(full));
         });
     });
+}
+
+void CoreSession::cmd_analyze_users(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct) {
+        emit_announce("No account selected.");
+        return;
+    }
+    const std::string category = cmd.value("category", std::string{"not_following_back"});
+    const std::string me_id = acct->me().id;
+    if (me_id.empty()) {
+        emit_announce("Couldn't determine your account.");
+        return;
+    }
+    emit_announce("Analyzing your follow lists…");
+    // Both complete lists are pulled on the worker thread (each may be many pages).
+    worker_.post([this, acct, me_id, category] {
+        FullRelationResult followers = acct->fetch_all_relations(me_id, /*following=*/false);
+        FullRelationResult following = acct->fetch_all_relations(me_id, /*following=*/true);
+        loop_.post([this, category, followers = std::move(followers),
+                    following = std::move(following)]() mutable {
+            using S = FullRelationResult::Status;
+            // All-or-nothing: unless BOTH lists came back complete, show an error
+            // and no list — never a partial/false result.
+            if (followers.status != S::Ok || following.status != S::Ok) {
+                const bool rate_limited =
+                    followers.status == S::RateLimited || following.status == S::RateLimited;
+                sound_.play(sound::Earcon::Error);
+                emit_announce(rate_limited
+                                  ? "Couldn't finish loading your follow lists — the server "
+                                    "rate-limited the request. Please try again in a few minutes."
+                                  : "Couldn't load your follow lists. Please try again.");
+                return;
+            }
+            std::set<std::string> follower_ids, following_ids;
+            for (const auto& u : followers.users)
+                follower_ids.insert(u.id);
+            for (const auto& u : following.users)
+                following_ids.insert(u.id);
+
+            std::vector<User> result;
+            std::string label;
+            if (category == "no_followback") {
+                // People you follow who don't follow you back.
+                for (const auto& u : following.users)
+                    if (!follower_ids.count(u.id))
+                        result.push_back(u);
+                label = "Don't follow you back";
+            } else if (category == "mutuals") {
+                // Users you both follow.
+                for (const auto& u : following.users)
+                    if (follower_ids.count(u.id))
+                        result.push_back(u);
+                label = "Mutual follows";
+            } else {
+                // Default: people who follow you that you don't follow back.
+                for (const auto& u : followers.users)
+                    if (!following_ids.count(u.id))
+                        result.push_back(u);
+                label = "You don't follow back";
+            }
+            const std::string title = label + " (" + std::to_string(result.size()) + ")";
+            spawn_analyzed_users(result, category, title);
+        });
+    });
+}
+
+void CoreSession::spawn_analyzed_users(const std::vector<User>& users, const std::string& category,
+                                       const std::string& title) {
+    const TimelineSource src = TimelineSource::analyzed_users(category, title);
+    // Re-running an analysis that's already open re-seeds it with fresh results
+    // (the lists are always fetched live) and focuses it, keeping its title current.
+    for (size_t i = 0; i < timelines_.size(); ++i)
+        if (timelines_[i]->source().cache_key() == src.cache_key()) {
+            timelines_[i]->set_source_title(title);
+            timelines_[i]->seed_users(users);
+            current_ = static_cast<int>(i);
+            emit_timelines();
+            return;
+        }
+    std::string origin;
+    if (current_ >= 0 && current_ < static_cast<int>(timelines_.size()))
+        origin = timelines_[static_cast<size_t>(current_)]->source().cache_key();
+    timelines_.push_back(make_controller(accounts_.selected(), src));
+    current_ = static_cast<int>(timelines_.size()) - 1;
+    sound_.play_named("open", soundpack_for(accounts_.selected()));
+    TimelineController* p = timelines_.back().get();
+    p->set_origin_key(origin);
+    emit_timelines();
+    p->seed_users(users);
 }
 
 bool CoreSession::jump_to_row(const std::string& row_id) {

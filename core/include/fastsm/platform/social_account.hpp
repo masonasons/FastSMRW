@@ -55,6 +55,17 @@ struct Relationship {
     bool showing_reblogs = true;   // false == this account's boosts are hidden
 };
 
+// Outcome of fetching a COMPLETE relation list (all followers / all following).
+// Only Ok means `users` is the full, trustworthy list; on RateLimited or Failed
+// the list is partial and MUST NOT be presented (used by User Analysis, which
+// must never show a false result). RateLimited is called out separately so the
+// UI can tell the user to try again later rather than reporting a generic error.
+struct FullRelationResult {
+    enum class Status { Ok, RateLimited, Failed };
+    Status status = Status::Failed;
+    std::vector<User> users;
+};
+
 // Pagination cursor. Mastodon pages by max_id; Bluesky by an opaque token.
 enum class CursorKind { Start, MaxID, Token };
 
@@ -201,6 +212,14 @@ public:
     // users (best-match first), empty if none/unsupported. Runs synchronously on
     // the worker thread.
     virtual std::vector<User> search_accounts(const std::string& /*query*/, int /*limit*/) {
+        return {};
+    }
+    // Fetch the COMPLETE followers (following=false) or following (following=true)
+    // list for account `id`, paging through EVERY page. Runs synchronously on the
+    // worker thread. Returns Ok only if every page was retrieved; RateLimited if a
+    // 429 stopped it partway; Failed on any other error. On non-Ok the users are
+    // partial and must be discarded, not shown. Default is Failed (unsupported).
+    virtual FullRelationResult fetch_all_relations(const std::string& /*id*/, bool /*following*/) {
         return {};
     }
     // The viewer's relationship to an account, or nullopt if unsupported/failed.

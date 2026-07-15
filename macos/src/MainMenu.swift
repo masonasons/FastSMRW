@@ -180,6 +180,9 @@ enum MainMenu {
         accountMenu.addItem(withTitle: "User Aliases…",
                             action: #selector(MainWindowController.manageAliases(_:)),
                             keyEquivalent: "")
+        accountMenu.addItem(withTitle: "User Analysis…",
+                            action: #selector(MainWindowController.userAnalysis(_:)),
+                            keyEquivalent: "")
         accountMenu.addItem(.separator())
         accountMenu.addItem(withTitle: "Remove Current Account…",
                             action: #selector(MainWindowController.removeCurrentAccount(_:)),

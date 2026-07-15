@@ -39,6 +39,7 @@ public:
     std::optional<User> lookup_user(const std::string& handle) override;
     std::optional<Status> fetch_status(const std::string& uri) override;
     std::vector<User> search_accounts(const std::string& query, int limit) override;
+    FullRelationResult fetch_all_relations(const std::string& id, bool following) override;
     std::optional<Relationship> relationship(const std::string& id) override;
     bool follow(const std::string& id) override;
     bool unfollow(const std::string& id) override;

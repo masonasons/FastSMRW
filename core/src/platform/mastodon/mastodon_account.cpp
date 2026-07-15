@@ -814,6 +814,55 @@ std::vector<User> MastodonAccount::search_accounts(const std::string& query, int
     return out;
 }
 
+// GET /api/v1/accounts/:id/{followers,following}, paging through every page via
+// the Link header's rel="next" (the cursor is a relationship-internal id, not an
+// account id, so it only appears in the header). All-or-nothing: any 429 aborts
+// as RateLimited and any other failure as Failed, so a partial list is never
+// handed back as if it were complete.
+FullRelationResult MastodonAccount::fetch_all_relations(const std::string& id, bool following) {
+    FullRelationResult out;
+    const std::string path = "/api/v1/accounts/" + id + (following ? "/following" : "/followers");
+    std::string url = credentials_.instance_url + path + "?limit=80";
+    // Cap the page count as a safety net against a server that never stops paging.
+    for (int page = 0; page < 1000; ++page) {
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = url;
+        req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+        const net::HttpResponse res = http_->send(req);
+        if (res.status == 429) {
+            out.status = FullRelationResult::Status::RateLimited;
+            return out;
+        }
+        if (!res.ok()) {
+            out.status = FullRelationResult::Status::Failed;
+            return out;
+        }
+        json j;
+        try {
+            j = json::parse(res.body);
+        } catch (...) {
+            out.status = FullRelationResult::Status::Failed;
+            return out;
+        }
+        if (!j.is_array()) {
+            out.status = FullRelationResult::Status::Failed;
+            return out;
+        }
+        for (const auto& entry : j)
+            out.users.push_back(mastodon::map_user(entry));
+        // rel="next" absent == reached the end of the list.
+        std::optional<std::string> next;
+        if (auto link = res.header("Link"))
+            next = parse_next_max_id(*link);
+        if (!next)
+            break;
+        url = credentials_.instance_url + path + "?limit=80&max_id=" + *next;
+    }
+    out.status = FullRelationResult::Status::Ok;
+    return out;
+}
+
 std::optional<Relationship> MastodonAccount::relationship(const std::string& id) {
     const std::string url = credentials_.instance_url + "/api/v1/accounts/relationships?id[]=" + id;
     std::string body;

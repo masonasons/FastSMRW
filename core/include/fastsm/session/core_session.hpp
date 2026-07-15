@@ -132,6 +132,13 @@ private:
     void speak_user_info(const User& u);          // fetch full profile, speak via template
     void spawn_post_users(const std::vector<User>& users, const std::string& status_id,
                           const std::string& title);
+    // User Analysis: fetch the current account's COMPLETE followers + following
+    // lists, compute the requested category, and spawn a seeded user timeline of
+    // the result. If either list can't be fully loaded (rate limit / failure),
+    // announce an error and spawn NOTHING — a partial list is never shown.
+    void cmd_analyze_users(const nlohmann::json& cmd);
+    void spawn_analyzed_users(const std::vector<User>& users, const std::string& category,
+                              const std::string& title);
     // Select (jump to) a row by id if it's in the current timeline; returns true.
     bool jump_to_row(const std::string& row_id);
     // The first loaded copy of a status (by id) across all open timelines, or null.
