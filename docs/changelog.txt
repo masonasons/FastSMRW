@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.3.8
+-----
+
+- New: a "Sent" timeline in the Add Timeline dialog shows your own posts, and can be pinned or closed like any other timeline.
+- Fixed: pressing Ctrl+E on someone else's post no longer opens an edit box you couldn't actually save; it now tells you that you can only edit your own posts.
+
 0.3.7
 -----
 

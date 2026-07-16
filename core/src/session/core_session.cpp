@@ -854,6 +854,20 @@ void CoreSession::cmd_get_spawnable() {
             if (!open)
                 tls.push_back({{"kind", src.cache_key()}, {"title", src.title()}});
         }
+        // "Sent" — your own posts as a standard user timeline. Available on every
+        // platform. Hidden once it's open (its cache key matches your own user
+        // timeline), matching the built-in dedup above.
+        {
+            const std::string sent_key = TimelineSource::user_posts(account->me().id).cache_key();
+            bool open = false;
+            for (auto& tc : timelines_)
+                if (tc->source().cache_key() == sent_key) {
+                    open = true;
+                    break;
+                }
+            if (!open)
+                tls.push_back({{"kind", "sent"}, {"title", "Sent"}});
+        }
         // Parameterized timelines: an "input" label tells the UI to prompt for a value.
         if (account->platform() == Platform::Mastodon) {
             tls.push_back({{"kind", "hashtag"}, {"title", "Hashtag"}, {"input", "Hashtag"}});
@@ -1122,6 +1136,12 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
                         break;
                     }
         spawn_source(TimelineSource::list(id, "List: " + title));
+        return;
+    }
+    // "Sent" is your own posts, shown as a standard (dismissable, pinnable) user
+    // timeline. It reuses UserPosts with your account id, titled "Sent".
+    if (kind == "sent") {
+        spawn_source(TimelineSource::user_posts(accounts_.selected()->me().id, "Sent"));
         return;
     }
     if (kind == "mutes" || kind == "blocks" || kind == "follow_requests") {
@@ -2239,6 +2259,17 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         if (target->instance_url && !target->url.empty()) // remote: resolve to a local id
             ctx["quoted_status_url"] = target->url;
     } else if (mode == "edit" && target) {
+        // You can only edit your own posts. Opening an edit field on someone
+        // else's post is deceptive — the changes can't be applied and are
+        // silently discarded — so refuse it up front.
+        if (target->account.id != account->me().id) {
+            emit_announce("You can only edit your own posts.");
+            return;
+        }
+        if (!account->features().editing) {
+            emit_announce("Editing posts isn't supported on this account.");
+            return;
+        }
         ctx["title"] = "Edit Post";
         ctx["prefill_text"] = target->text;
         if (target->spoiler_text)
