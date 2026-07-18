@@ -44,6 +44,7 @@ final class AppState {
     var onClientFilter: ((ClientFilter) -> Void)?
     var onHashtagPrompt: (([String]) -> Void)?
     var onFollowedHashtags: ((FollowedHashtags) -> Void)?
+    var onTrendingHashtags: ((FollowedHashtags) -> Void)?
     var onAliasPrompt: ((AliasPrompt) -> Void)?
     var onAliasesList: ((AliasesList) -> Void)?
     var onLists: ((Lists) -> Void)?
@@ -169,6 +170,8 @@ final class AppState {
             onHashtagPrompt?(e.tags)
         case let .followedHashtags(e):
             onFollowedHashtags?(e)
+        case let .trendingHashtags(e):
+            onTrendingHashtags?(e)
         case let .aliasPrompt(e):
             onAliasPrompt?(e)
         case let .aliasesList(e):
@@ -270,6 +273,7 @@ final class AppState {
     func followHashtag(name: String) { client.send("follow_hashtag", ["name": name]) }
     func unfollowHashtag(name: String) { client.send("unfollow_hashtag", ["name": name]) }
     func listFollowedHashtags() { client.send("list_followed_hashtags") }
+    func listTrendingHashtags() { client.send("list_trending_hashtags") }
 
     // Mastodon lists
     func listLists() { client.send("list_lists") }

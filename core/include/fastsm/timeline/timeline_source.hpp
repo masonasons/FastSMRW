@@ -34,6 +34,8 @@ struct TimelineSource {
         AnalyzedUsers, // result of a User Analysis (e.g. "don't follow you back");
                        // rows are users, seeded at spawn (not fetched). param = the
                        // analysis category id.
+        Trends,        // the instance's trending posts (Mastodon /trends/statuses),
+                       // ordered by trend score rather than time.
     };
 
     Kind kind = Kind::Home;
@@ -86,6 +88,8 @@ struct TimelineSource {
             return title_text.empty() ? "Users in post" : title_text;
         case Kind::AnalyzedUsers:
             return title_text.empty() ? "User Analysis" : title_text;
+        case Kind::Trends:
+            return "Trending Posts";
         }
         return "Timeline";
     }
@@ -137,6 +141,8 @@ struct TimelineSource {
             return "postUsers:" + param;
         case Kind::AnalyzedUsers:
             return "analyzedUsers:" + param;
+        case Kind::Trends:
+            return "trends";
         }
         return "timeline";
     }
@@ -155,7 +161,8 @@ struct TimelineSource {
     // Time-ordered feeds re-sort newest-first on merge; threads keep conversation
     // order, user lists keep server order, and searches keep relevance order.
     bool is_time_ordered() const {
-        return kind != Kind::Thread && kind != Kind::SearchPosts && !is_user_list();
+        return kind != Kind::Thread && kind != Kind::SearchPosts && kind != Kind::Trends &&
+               !is_user_list();
     }
     // Rows are users (not statuses), so the UI offers multi-select + batch actions.
     bool is_user_list() const {
@@ -221,6 +228,7 @@ struct TimelineSource {
         case Kind::FollowRequests:
         case Kind::PostUsers:
         case Kind::AnalyzedUsers:
+        case Kind::Trends:
             return std::nullopt; // not a streaming feed; no new-items chime
         }
         return std::nullopt;
@@ -273,6 +281,8 @@ struct TimelineSource {
     static TimelineSource analyzed_users(std::string category, std::string title = {}) {
         return {Kind::AnalyzedUsers, std::move(category), std::move(title)};
     }
+    // The instance's trending posts (Mastodon only).
+    static TimelineSource trends() { return {Kind::Trends}; }
     static TimelineSource mutes() { return {Kind::Mutes}; }
     static TimelineSource blocks() { return {Kind::Blocks}; }
     static TimelineSource follow_requests() { return {Kind::FollowRequests}; }

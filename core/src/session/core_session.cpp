@@ -244,6 +244,7 @@ const char* kind_name(TimelineSource::Kind k) {
     case K::Mutes: return "mutes";
     case K::Blocks: return "blocks";
     case K::FollowRequests: return "followRequests";
+    case K::Trends: return "trends";
     }
     return "home";
 }
@@ -270,6 +271,7 @@ std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
     if (s == "mutes") return K::Mutes;
     if (s == "blocks") return K::Blocks;
     if (s == "followRequests") return K::FollowRequests;
+    if (s == "trends") return K::Trends;
     return std::nullopt;
 }
 
@@ -507,6 +509,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_unfollow_hashtag(cmd);
     else if (c == "list_followed_hashtags")
         cmd_list_followed_hashtags();
+    else if (c == "list_trending_hashtags")
+        cmd_list_trending_hashtags();
 }
 
 // --- lifecycle / accounts ---
@@ -1219,6 +1223,22 @@ void CoreSession::cmd_unfollow_hashtag(const json& cmd) {
 }
 
 void CoreSession::cmd_list_followed_hashtags() { emit_followed_hashtags(); }
+
+void CoreSession::cmd_list_trending_hashtags() {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct || !acct->features().follow_hashtags) {
+        emit({{"event", "trending_hashtags"}, {"supported", false}, {"tags", json::array()}});
+        return;
+    }
+    worker_.post([this, acct] {
+        auto tags = acct->trending_hashtags();
+        loop_.post([this, tags = std::move(tags)]() mutable {
+            emit({{"event", "trending_hashtags"},
+                  {"supported", true},
+                  {"tags", followed_tags_to_json(tags)}});
+        });
+    });
+}
 
 void CoreSession::emit_followed_hashtags() {
     SocialAccount* acct = accounts_.selected();
@@ -3616,12 +3636,20 @@ void CoreSession::update_streaming() {
                 const Notification* n = item.item.notification();
                 const bool is_mention =
                     n && n->type == Notification::Kind::Mention && n->status;
+                // A streamed post also belongs in an open user timeline for its
+                // author -- most visibly your own "Sent" tab, but also any user's
+                // posts you're watching. /accounts/:id/statuses would list it, so
+                // without this the tab only updates on a manual refresh or restart.
+                const Status* posted = item.item.status();
                 for (auto& tc : *dest) {
                     const TimelineSource& s = tc->source();
                     if (s.cache_key() == target)
                         tc->ingest_realtime(TimelineItem{item.item});
                     else if (is_mention && s.kind == TimelineSource::Kind::Mentions)
                         tc->ingest_realtime(TimelineItem{*n->status});
+                    else if (posted && s.kind == TimelineSource::Kind::UserPosts &&
+                             s.param == posted->account.id)
+                        tc->ingest_realtime(TimelineItem{*posted});
                 }
             });
         }
@@ -3679,6 +3707,8 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::blocks();
     if (kind == "follow_requests")
         return TimelineSource::follow_requests();
+    if (kind == "trends")
+        return TimelineSource::trends();
     return std::nullopt;
 }
 

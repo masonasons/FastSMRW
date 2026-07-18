@@ -171,6 +171,9 @@ enum MainMenu {
         accountMenu.addItem(withTitle: "Followed Hashtags…",
                             action: #selector(MainWindowController.manageHashtags(_:)),
                             keyEquivalent: "")
+        accountMenu.addItem(withTitle: "Trending Hashtags…",
+                            action: #selector(MainWindowController.trendingHashtags(_:)),
+                            keyEquivalent: "")
         accountMenu.addItem(withTitle: "Manage Lists…",
                             action: #selector(MainWindowController.manageLists(_:)),
                             keyEquivalent: "")

@@ -110,6 +110,7 @@ private:
     void cmd_unfollow_hashtag(const nlohmann::json& cmd);      // {name}
     void cmd_list_followed_hashtags();                         // -> followed_hashtags event
     void emit_followed_hashtags();
+    void cmd_list_trending_hashtags();                         // -> trending_hashtags event
     void cmd_open_thread(const nlohmann::json& cmd);
     void cmd_open_user_timeline(const nlohmann::json& cmd);
     void cmd_open_user_profile(const nlohmann::json& cmd);

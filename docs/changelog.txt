@@ -1,6 +1,13 @@
 FastSMRW changelog
 ==================
 
+0.3.9
+-----
+
+- New: a "Trending Posts" timeline in the Add Timeline dialog shows what's trending on your instance (Mastodon).
+- New: Trending Hashtags in the Me menu lists your instance's trending tags so you can open one as a timeline or follow it (Mastodon).
+- Fixed: the Sent timeline (and other open user timelines) now show new posts live instead of staying stale until you restart the app.
+
 0.3.8
 -----
 

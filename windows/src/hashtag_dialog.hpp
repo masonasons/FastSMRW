@@ -47,4 +47,30 @@ private:
     nlohmann::json tags_ = nlohmann::json::array(); // [{name,url,following}]
 };
 
+// The Trending Hashtags manager (Me menu). Same shape as the Followed Hashtags
+// manager, but the list is the instance's trending tags and the action is Follow
+// (disabled for tags you already follow) rather than Unfollow. Open spawns the
+// tag's timeline.
+class TrendingHashtagsDialog {
+public:
+    TrendingHashtagsDialog(HINSTANCE inst, std::function<void(const nlohmann::json&)> dispatch);
+
+    // Run modally. `initial` is the trending_hashtags event that triggered opening.
+    void run(HWND parent, const nlohmann::json& initial);
+
+private:
+    static INT_PTR CALLBACK proc(HWND, UINT, WPARAM, LPARAM);
+    INT_PTR handle(HWND dlg, UINT msg, WPARAM wp, LPARAM lp);
+    void refresh_list();
+    void update_enabled();
+    int selected_index() const;
+    void do_open();
+    void do_follow();
+
+    HINSTANCE inst_;
+    std::function<void(const nlohmann::json&)> dispatch_;
+    HWND dlg_ = nullptr;
+    nlohmann::json tags_ = nlohmann::json::array(); // [{name,url,following}]
+};
+
 } // namespace fastsmui

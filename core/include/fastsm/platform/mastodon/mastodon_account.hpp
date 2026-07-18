@@ -59,6 +59,7 @@ public:
     bool follow_hashtag(const std::string& name) override;
     bool unfollow_hashtag(const std::string& name) override;
     std::vector<FollowedTag> followed_hashtags() override;
+    std::vector<FollowedTag> trending_hashtags() override;
 
     std::vector<TimelineList> lists() override;
     std::vector<TimelineList> account_lists(const std::string& account_id) override;

@@ -168,6 +168,7 @@ private:
     void ev_lists(const nlohmann::json& e);          // forward into the open Lists manager
     void ev_hashtag_prompt(const nlohmann::json& e);    // prompt to follow a hashtag
     void ev_followed_hashtags(const nlohmann::json& e); // open / refresh Followed Hashtags manager
+    void ev_trending_hashtags(const nlohmann::json& e); // open the Trending Hashtags manager
     void ev_alias_prompt(const nlohmann::json& e);      // prompt to add/edit a user alias
     void ev_aliases_list(const nlohmann::json& e);      // open / refresh the User Aliases manager
     void ev_update_status(const nlohmann::json& e); // check result -> prompt / announce

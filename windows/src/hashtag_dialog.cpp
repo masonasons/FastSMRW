@@ -198,4 +198,123 @@ void FollowedHashtagsDialog::do_unfollow() {
     dispatch_({{"cmd", "unfollow_hashtag"}, {"name", name}});
 }
 
+// --- Trending Hashtags manager ---
+
+TrendingHashtagsDialog::TrendingHashtagsDialog(HINSTANCE inst,
+                                               std::function<void(const json&)> dispatch)
+    : inst_(inst), dispatch_(std::move(dispatch)) {}
+
+void TrendingHashtagsDialog::run(HWND parent, const json& initial) {
+    if (initial.contains("tags") && initial["tags"].is_array())
+        tags_ = initial["tags"];
+    DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_TRENDING_HASHTAGS), parent,
+                    &TrendingHashtagsDialog::proc, reinterpret_cast<LPARAM>(this));
+}
+
+INT_PTR CALLBACK TrendingHashtagsDialog::proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_INITDIALOG)
+        SetWindowLongPtrW(dlg, DWLP_USER, lp);
+    auto* self = reinterpret_cast<TrendingHashtagsDialog*>(GetWindowLongPtrW(dlg, DWLP_USER));
+    return self ? self->handle(dlg, msg, wp, lp) : FALSE;
+}
+
+INT_PTR TrendingHashtagsDialog::handle(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG:
+        dlg_ = dlg;
+        refresh_list();
+        update_enabled();
+        SetFocus(GetDlgItem(dlg, IDC_THM_LIST));
+        return FALSE;
+    case WM_COMMAND:
+        switch (LOWORD(wp)) {
+        case IDC_THM_OPEN:
+            do_open();
+            return TRUE;
+        case IDC_THM_FOLLOW:
+            do_follow();
+            return TRUE;
+        case IDCANCEL:
+            dlg_ = nullptr;
+            EndDialog(dlg, 0);
+            return TRUE;
+        }
+        break;
+    case WM_NOTIFY:
+        if (reinterpret_cast<LPNMHDR>(lp)->idFrom == IDC_THM_LIST) {
+            auto* nm = reinterpret_cast<LPNMLISTVIEW>(lp);
+            if (nm->hdr.code == LVN_ITEMCHANGED)
+                update_enabled();
+            // Double-click opens the tag's timeline.
+            else if (nm->hdr.code == NM_DBLCLK)
+                do_open();
+        }
+        break;
+    }
+    return FALSE;
+}
+
+void TrendingHashtagsDialog::refresh_list() {
+    HWND list = GetDlgItem(dlg_, IDC_THM_LIST);
+    const int keep = selected_index();
+    ListView_DeleteAllItems(list);
+    int i = 0;
+    for (const auto& t : tags_) {
+        std::wstring text = L"#" + to_wide(t.value("name", std::string{}));
+        LVITEMW it{};
+        it.mask = LVIF_TEXT;
+        it.iItem = i;
+        it.pszText = text.data();
+        ListView_InsertItem(list, &it);
+        ++i;
+    }
+    const int count = static_cast<int>(tags_.size());
+    if (count > 0) {
+        int sel = keep < 0 ? 0 : (keep >= count ? count - 1 : keep);
+        ListView_SetItemState(list, sel, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+    }
+}
+
+void TrendingHashtagsDialog::update_enabled() {
+    const int idx = selected_index();
+    const bool has_sel = idx >= 0 && idx < static_cast<int>(tags_.size());
+    EnableWindow(GetDlgItem(dlg_, IDC_THM_OPEN), has_sel);
+    // Already-followed tags can't be followed again; a disabled Follow button is
+    // the spoken cue that you already follow this one.
+    const bool followable =
+        has_sel && !tags_[static_cast<size_t>(idx)].value("following", false);
+    EnableWindow(GetDlgItem(dlg_, IDC_THM_FOLLOW), followable);
+}
+
+int TrendingHashtagsDialog::selected_index() const {
+    return ListView_GetNextItem(GetDlgItem(dlg_, IDC_THM_LIST), -1, LVNI_SELECTED);
+}
+
+void TrendingHashtagsDialog::do_open() {
+    const int idx = selected_index();
+    if (idx < 0 || idx >= static_cast<int>(tags_.size()))
+        return;
+    const std::string name = tags_[static_cast<size_t>(idx)].value("name", std::string{});
+    if (name.empty())
+        return;
+    dispatch_({{"cmd", "spawn_timeline"}, {"kind", "hashtag"}, {"value", name}});
+    HWND dlg = dlg_;
+    dlg_ = nullptr;
+    EndDialog(dlg, 0); // close the manager; the timeline opens behind it
+}
+
+void TrendingHashtagsDialog::do_follow() {
+    const int idx = selected_index();
+    if (idx < 0 || idx >= static_cast<int>(tags_.size()))
+        return;
+    const std::string name = tags_[static_cast<size_t>(idx)].value("name", std::string{});
+    if (name.empty())
+        return;
+    // The core follows and announces the result. Reflect it optimistically so the
+    // Follow button greys out for this tag (and stays greyed if reopened).
+    dispatch_({{"cmd", "follow_hashtag"}, {"name", name}});
+    tags_[static_cast<size_t>(idx)]["following"] = true;
+    update_enabled();
+}
+
 } // namespace fastsmui

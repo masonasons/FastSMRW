@@ -105,6 +105,9 @@ data class AliasPromptRequest(val key: String, val handle: String, val current: 
 /** One saved alias (aliases_list event), for the aliases manager. */
 data class AliasEntry(val key: String, val handle: String, val alias: String)
 
+/** One trending hashtag (from trending_hashtags). [following] = you already follow it. */
+data class TrendingTagUi(val name: String, val url: String, val following: Boolean)
+
 /** A user's profile card (user_profile event). [text] is the composed profile. */
 data class ProfileUi(
     val text: String,
@@ -211,6 +214,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while the aliases manager should be shown (the current alias list). */
     private val _aliasesList = MutableStateFlow<List<AliasEntry>?>(null)
     val aliasesList: StateFlow<List<AliasEntry>?> = _aliasesList.asStateFlow()
+
+    /** Non-null while the Trending Hashtags picker should be shown (the trend list). */
+    private val _trendingHashtags = MutableStateFlow<List<TrendingTagUi>?>(null)
+    val trendingHashtags: StateFlow<List<TrendingTagUi>?> = _trendingHashtags.asStateFlow()
 
     /** Latest @-mention autocomplete results (from user_suggestions), or null. */
     private val _mentionSuggestions = MutableStateFlow<MentionSuggestions?>(null)
@@ -388,6 +395,26 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                     if (arr != null) for (i in 0 until arr.length()) {
                         val a = arr.getJSONObject(i)
                         add(AliasEntry(a.optString("key"), a.optString("handle"), a.optString("alias")))
+                    }
+                }
+            }
+
+            "trending_hashtags" -> {
+                if (!e.optBoolean("supported", false)) {
+                    _announcements.tryEmit("Trending hashtags are only available for Mastodon accounts.")
+                } else {
+                    val arr = e.optJSONArray("tags")
+                    _trendingHashtags.value = buildList {
+                        if (arr != null) for (i in 0 until arr.length()) {
+                            val t = arr.getJSONObject(i)
+                            add(
+                                TrendingTagUi(
+                                    name = t.optString("name"),
+                                    url = t.optString("url"),
+                                    following = t.optBoolean("following", false),
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -603,6 +630,13 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissAliasPrompt() { _aliasPrompt.value = null }
     fun dismissAliasesList() { _aliasesList.value = null }
+
+    /** Open the Trending Hashtags picker (the core replies with trending_hashtags). */
+    fun listTrendingHashtags() = core.dispatch("list_trending_hashtags")
+    fun dismissTrendingHashtags() { _trendingHashtags.value = null }
+
+    /** Follow a hashtag by name (no '#'). */
+    fun followHashtag(name: String) = core.dispatch("follow_hashtag") { put("name", name) }
 
     /** Close a tab: select it (so it's current), then dismiss it. */
     fun closeTimeline(index: Int) {

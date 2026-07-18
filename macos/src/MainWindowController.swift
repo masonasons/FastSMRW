@@ -28,6 +28,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private var detailController: NSWindowController?
     private var mediaControllers: [NSWindowController] = []
     private var hashtagsController: HashtagsWindowController?
+    private var trendingHashtagsController: TrendingHashtagsWindowController?
     private var listsController: ListsWindowController?
     private var aliasesController: AliasesWindowController?
     private var serverFiltersController: ServerFiltersWindowController?
@@ -166,6 +167,21 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
                 controller.beginSheet(for: window) { [weak self] in self?.hashtagsController = nil }
             } else if !hashtags.supported {
                 ErrorAlert.present("Followed hashtags are only available for Mastodon accounts.",
+                                   in: window)
+            }
+        }
+        state.onTrendingHashtags = { [weak self] hashtags in
+            guard let self, let window = self.window else { return }
+            if let open = self.trendingHashtagsController {
+                open.update(hashtags)
+            } else if hashtags.supported, window.attachedSheet == nil {
+                let controller = TrendingHashtagsWindowController(state: state, hashtags: hashtags)
+                self.trendingHashtagsController = controller
+                controller.beginSheet(for: window) { [weak self] in
+                    self?.trendingHashtagsController = nil
+                }
+            } else if !hashtags.supported {
+                ErrorAlert.present("Trending hashtags are only available for Mastodon accounts.",
                                    in: window)
             }
         }
@@ -326,6 +342,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func openFollowing(_ sender: Any?) { postsViewController.openFollowing(sender) }
     @objc func followHashtag(_ sender: Any?) { postsViewController.followHashtagForSelection(sender) }
     @objc func manageHashtags(_ sender: Any?) { state.listFollowedHashtags() }
+    @objc func trendingHashtags(_ sender: Any?) { state.listTrendingHashtags() }
     @objc func manageLists(_ sender: Any?) { state.listLists() }
     @objc func manageServerFilters(_ sender: Any?) { state.listServerFilters() }
 

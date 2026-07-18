@@ -76,7 +76,7 @@ std::vector<TimelineSource> MastodonAccount::default_timelines() const {
 std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
     return {TimelineSource::local(),     TimelineSource::federated(),
             TimelineSource::mentions(),  TimelineSource::bookmarks(),
-            TimelineSource::favorites()};
+            TimelineSource::favorites(), TimelineSource::trends()};
 }
 
 void MastodonAccount::load_configuration() {
@@ -226,6 +226,29 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         return page;
     }
 
+    // Trending posts: /api/v1/trends/statuses returns a plain array ordered by
+    // trend score. It paginates by offset, but a single top page is plenty for a
+    // "what's hot right now" tab, so (like Search) we return the top results only.
+    if (source.kind == TimelineSource::Kind::Trends) {
+        const std::string url = credentials_.instance_url +
+                                "/api/v1/trends/statuses?limit=" + std::to_string(limit);
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = url;
+        req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+        const net::HttpResponse res = http_->send(req);
+        if (!res.ok())
+            return page;
+        try {
+            const json j = json::parse(res.body);
+            if (j.is_array())
+                for (const auto& s : j)
+                    page.items.push_back(TimelineItem{mastodon::map_status(s)});
+        } catch (...) {
+        }
+        return page;
+    }
+
     // Remote timelines: fetched unauthenticated from a foreign instance, then
     // tagged with that instance so interactions resolve to a local copy first.
     if (source.kind == TimelineSource::Kind::RemoteLocal ||
@@ -337,6 +360,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::SearchPeople:
     case TimelineSource::Kind::RemoteLocal:
     case TimelineSource::Kind::RemoteUser:
+    case TimelineSource::Kind::Trends:
         break; // handled above (early return)
     }
 
@@ -1023,6 +1047,32 @@ std::vector<FollowedTag> MastodonAccount::followed_hashtags() {
                 t.name = j.value("name", std::string{});
                 t.url = j.value("url", std::string{});
                 t.following = true;
+                if (!t.name.empty())
+                    out.push_back(std::move(t));
+            }
+    } catch (...) {
+    }
+    return out;
+}
+
+std::vector<FollowedTag> MastodonAccount::trending_hashtags() {
+    // GET /api/v1/trends/tags — the instance's currently trending hashtags. Each
+    // entry carries `following` (true if the viewer already follows it). One page
+    // is plenty for a picker.
+    const std::string url = credentials_.instance_url + "/api/v1/trends/tags?limit=20";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return {};
+    std::vector<FollowedTag> out;
+    try {
+        const json arr = json::parse(body);
+        if (arr.is_array())
+            for (const auto& j : arr) {
+                FollowedTag t;
+                t.name = j.value("name", std::string{});
+                t.url = j.value("url", std::string{});
+                t.following = j.value("following", false);
                 if (!t.name.empty())
                     out.push_back(std::move(t));
             }

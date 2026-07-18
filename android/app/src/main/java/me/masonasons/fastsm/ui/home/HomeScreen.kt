@@ -60,6 +60,7 @@ import me.masonasons.fastsm.ui.AliasEntry
 import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.RowUi
 import me.masonasons.fastsm.ui.TabUi
+import me.masonasons.fastsm.ui.TrendingTagUi
 
 /**
  * The home surface: account picker + timeline tabs + a pager of row lists.
@@ -136,6 +137,10 @@ fun HomeScreen(
                             DropdownMenuItem(
                                 text = { Text("User analysis") },
                                 onClick = { menuOpen = false; showUserAnalysis = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Trending hashtags") },
+                                onClick = { menuOpen = false; viewModel.listTrendingHashtags() },
                             )
                             DropdownMenuItem(
                                 text = { Text("Settings") },
@@ -301,6 +306,20 @@ fun HomeScreen(
         )
     }
 
+    // Trending hashtags: pick one to open as a timeline or follow it.
+    val trendingHashtags by viewModel.trendingHashtags.collectAsStateWithLifecycle()
+    trendingHashtags?.let { tags ->
+        TrendingHashtagsDialog(
+            tags = tags,
+            onOpen = { name ->
+                viewModel.spawnTimeline("hashtag", value = name)
+                viewModel.dismissTrendingHashtags()
+            },
+            onFollow = { name -> viewModel.followHashtag(name) },
+            onDismiss = viewModel::dismissTrendingHashtags,
+        )
+    }
+
     val mediaPicker by viewModel.mediaPicker.collectAsStateWithLifecycle()
     mediaPicker?.let { items ->
         AlertDialog(
@@ -356,6 +375,58 @@ private fun UserAnalysisDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+/**
+ * Trending Hashtags picker: the instance's trending tags. Open one as a timeline
+ * or follow it (Follow is disabled for tags you already follow). Mirrors the
+ * Windows/Mac Trending Hashtags managers.
+ */
+@Composable
+private fun TrendingHashtagsDialog(
+    tags: List<TrendingTagUi>,
+    onOpen: (String) -> Unit,
+    onFollow: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Track tags followed during this session so Follow greys out immediately.
+    var justFollowed by remember { mutableStateOf(setOf<String>()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Trending Hashtags") },
+        text = {
+            if (tags.isEmpty()) {
+                Text("Nothing is trending right now.")
+            } else {
+                LazyColumn {
+                    items(tags, key = { it.name }) { tag ->
+                        val followed = tag.following || tag.name in justFollowed
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                "#${tag.name}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { onOpen(tag.name) }) { Text("Open") }
+                            TextButton(
+                                enabled = !followed,
+                                onClick = {
+                                    onFollow(tag.name)
+                                    justFollowed = justFollowed + tag.name
+                                },
+                            ) { Text(if (followed) "Following" else "Follow") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
         },
     )
 }

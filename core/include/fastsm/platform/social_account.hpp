@@ -243,6 +243,10 @@ public:
     // The hashtags the viewer currently follows. Runs synchronously on the worker
     // thread. Empty for platforms without hashtag following (Bluesky).
     virtual std::vector<FollowedTag> followed_hashtags() { return {}; }
+    // The instance's currently trending hashtags (Mastodon /api/v1/trends/tags).
+    // Each carries whether the viewer already follows it. Runs synchronously on
+    // the worker thread. Empty for platforms without trends (Bluesky).
+    virtual std::vector<FollowedTag> trending_hashtags() { return {}; }
 
     // --- Server-side keyword filters (optional; Mastodon /api/v2/filters) ---
     // Whether this platform exposes managed server filters at all (Mastodon yes,

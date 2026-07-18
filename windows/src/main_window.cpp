@@ -93,6 +93,7 @@ enum {
     ID_VIEW_BLOCKS,
     ID_FOLLOW_REQUESTS,
     ID_FOLLOWED_HASHTAGS,
+    ID_TRENDING_HASHTAGS,
     ID_USER_ANALYSIS,
     ID_STOP_MEDIA,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
@@ -216,6 +217,7 @@ HMENU build_menu() {
     AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
     AppendMenuW(me, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
     AppendMenuW(me, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
+    AppendMenuW(me, MF_STRING, ID_TRENDING_HASHTAGS, L"&Trending Hashtags…");
     AppendMenuW(me, MF_STRING, ID_USER_ANALYSIS, L"User A&nalysis…");
     AppendMenuW(me, MF_STRING, ID_MANAGE_ALIASES, L"User A&liases…");
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(me), L"&Me");
@@ -1745,6 +1747,9 @@ void MainWindow::handle_command(int id) {
     case ID_FOLLOWED_HASHTAGS:
         dispatch_cmd({{"cmd", "list_followed_hashtags"}}); // core replies -> manager dialog
         break;
+    case ID_TRENDING_HASHTAGS:
+        dispatch_cmd({{"cmd", "list_trending_hashtags"}}); // core replies -> manager dialog
+        break;
     case ID_USER_ANALYSIS:
         if (auto category = fastsmui::show_user_analysis_dialog(hwnd_, inst_))
             dispatch_cmd({{"cmd", "analyze_users"}, {"category", *category}});
@@ -1976,6 +1981,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_hashtag_prompt(e);
     else if (ev == "followed_hashtags")
         ev_followed_hashtags(e);
+    else if (ev == "trending_hashtags")
+        ev_trending_hashtags(e);
     else if (ev == "alias_prompt")
         ev_alias_prompt(e);
     else if (ev == "aliases_list")
@@ -2384,6 +2391,17 @@ void MainWindow::ev_followed_hashtags(const json& e) {
     dlg.run(hwnd_, e);
     leave_modal(guard);
     followed_tags_mgr_ = nullptr;
+}
+
+void MainWindow::ev_trending_hashtags(const json& e) {
+    if (!e.value("supported", false)) {
+        announce("Trending hashtags are only available for Mastodon accounts.");
+        return;
+    }
+    TrendingHashtagsDialog dlg(inst_, [this](const json& cmd) { dispatch_cmd(cmd); });
+    auto guard = enter_modal();
+    dlg.run(hwnd_, e);
+    leave_modal(guard);
 }
 
 void MainWindow::ev_alias_prompt(const json& e) {

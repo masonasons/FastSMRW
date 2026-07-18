@@ -165,6 +165,137 @@ final class HashtagsWindowController: NSWindowController, NSTableViewDataSource,
     }
 }
 
+/// Trending hashtags: the instance's currently trending tags. Open one as a
+/// timeline, or follow it (the Follow button is disabled for tags you already
+/// follow). Mirrors HashtagsWindowController but without unfollow/add.
+@MainActor
+final class TrendingHashtagsWindowController: NSWindowController, NSTableViewDataSource,
+    NSTableViewDelegate {
+    private let state: AppState
+    private var tags: [FollowedTag]
+    private let tableView = NSTableView()
+    private let followButton = NSButton()
+    private let cellIdentifier = NSUserInterfaceItemIdentifier("TrendCell")
+
+    init(state: AppState, hashtags: FollowedHashtags) {
+        self.state = state
+        self.tags = hashtags.tags
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 360),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        super.init(window: window)
+        window.title = "Trending Hashtags"
+        buildUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func beginSheet(for parent: NSWindow, completion: @escaping () -> Void) {
+        parent.beginSheet(window!) { _ in completion() }
+        window?.makeFirstResponder(tableView)
+    }
+
+    func update(_ hashtags: FollowedHashtags) {
+        tags = hashtags.tags
+        tableView.reloadData()
+        updateFollowEnabled()
+    }
+
+    private func dismiss() {
+        guard let window, let parent = window.sheetParent else { return }
+        parent.endSheet(window)
+    }
+
+    private func buildUI() {
+        guard let content = window?.contentView else { return }
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("tag"))
+        column.resizingMask = .autoresizingMask
+        tableView.addTableColumn(column)
+        tableView.headerView = nil
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.doubleAction = #selector(openSelected)
+        tableView.target = self
+        tableView.setAccessibilityLabel("Trending hashtags")
+
+        let scroll = NSScrollView()
+        scroll.documentView = tableView
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+
+        let open = NSButton(title: "Open", target: self, action: #selector(openSelected))
+        open.bezelStyle = .rounded
+        followButton.title = "Follow"
+        followButton.target = self
+        followButton.action = #selector(followSelected)
+        followButton.bezelStyle = .rounded
+        let rowButtons = NSStackView(views: [open, followButton])
+        rowButtons.spacing = 8
+
+        let close = NSButton(title: "Close", target: self, action: #selector(closeSheet))
+        close.bezelStyle = .rounded
+        close.keyEquivalent = "\u{1b}"
+        let bottom = NSStackView(views: [NSView(), close])
+
+        let stack = NSStackView(views: [scroll, rowButtons, bottom])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: content.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            scroll.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 14),
+            scroll.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -14),
+        ])
+        updateFollowEnabled()
+    }
+
+    private var selected: FollowedTag? {
+        tags.indices.contains(tableView.selectedRow) ? tags[tableView.selectedRow] : nil
+    }
+
+    // The Follow button greys out for a tag you already follow — the spoken cue
+    // that following would be a no-op.
+    private func updateFollowEnabled() {
+        followButton.isEnabled = (selected?.following == false)
+    }
+
+    @objc private func openSelected() {
+        guard let tag = selected else { return }
+        state.spawnTimeline(kind: "hashtag", value: tag.name)
+        dismiss()
+    }
+    @objc private func followSelected() {
+        let row = tableView.selectedRow
+        guard tags.indices.contains(row), !tags[row].following else { return }
+        state.followHashtag(name: tags[row].name) // core follows + announces the result
+        tags[row].following = true // optimistic: grey out Follow for this tag
+        tableView.reloadData()
+        updateFollowEnabled()
+    }
+    @objc private func closeSheet() { dismiss() }
+
+    func numberOfRows(in tableView: NSTableView) -> Int { tags.count }
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?,
+                   row: Int) -> NSView? {
+        let cell = reuseCell(tableView, cellIdentifier)
+        if tags.indices.contains(row) {
+            let text = "#\(tags[row].name)"
+            cell.textField?.stringValue = text
+            cell.setAccessibilityLabel(text)
+        }
+        return cell
+    }
+    func tableViewSelectionDidChange(_ notification: Notification) { updateFollowEnabled() }
+}
+
 /// Follow a hashtag mentioned in a post (or type one).
 @MainActor
 final class FollowHashtagPromptWindowController: NSWindowController {

@@ -278,3 +278,10 @@
 // timeline of the result.
 #define IDD_USER_ANALYSIS     600
 #define IDC_UA_LIST           601
+
+// Trending Hashtags manager (Me menu): a list of the instance's trending tags
+// with Follow / Open-timeline actions.
+#define IDD_TRENDING_HASHTAGS 610
+#define IDC_THM_LIST          611
+#define IDC_THM_FOLLOW        612
+#define IDC_THM_OPEN          613
