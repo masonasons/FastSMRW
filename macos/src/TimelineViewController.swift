@@ -334,7 +334,7 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         let nearEdge = state.currentReversed ? (row <= 9) : (row >= count - 10)
         if count > 0, nearEdge, state.autoLoadOlder {
             loadPending = true
-            state.loadOlder()
+            state.loadOlder(automatic: true)
         }
     }
 }

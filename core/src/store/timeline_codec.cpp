@@ -9,7 +9,8 @@ namespace {
 // Bump this whenever the on-disk layout changes so older caches are rejected
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url. v6 added Notification group_key + notifications_count.
-constexpr char kMagic[4] = {'F', 'S', 'C', '6'};
+// v7 added Status::filtered + tags.
+constexpr char kMagic[4] = {'F', 'S', 'C', '7'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -270,6 +271,17 @@ void write_status(Writer& w, const Status& s) {
     w.opt_str(s.like_uri);
     w.opt_str(s.repost_uri);
     w.str(s.url);
+    // Server-side filter matches. Without these a "hide" filtered post comes back
+    // visible on every launch (a refresh never corrects a row it already has), and
+    // a "warn" one loses its "Filtered: <title>" label.
+    w.u32(static_cast<std::uint32_t>(s.filtered.size()));
+    for (const auto& f : s.filtered) {
+        w.str(f.title);
+        w.boolean(f.hide);
+    }
+    w.u32(static_cast<std::uint32_t>(s.tags.size()));
+    for (const auto& t : s.tags)
+        w.str(t); // else "Follow hashtag" pre-fills blank for cached posts
 }
 
 Status read_status(Reader& r, int depth = 0) {
@@ -324,6 +336,16 @@ Status read_status(Reader& r, int depth = 0) {
     s.like_uri = r.opt_str();
     s.repost_uri = r.opt_str();
     s.url = r.str();
+    const std::uint32_t filter_n = r.u32();
+    for (std::uint32_t i = 0; i < filter_n && r.ok; ++i) {
+        StatusFilterMatch f;
+        f.title = r.str();
+        f.hide = r.boolean();
+        s.filtered.push_back(std::move(f));
+    }
+    const std::uint32_t tag_n = r.u32();
+    for (std::uint32_t i = 0; i < tag_n && r.ok; ++i)
+        s.tags.push_back(r.str());
     return s;
 }
 

@@ -29,6 +29,10 @@ static Status sample_inner() {
     s.cid = "bafyabc";
     s.like_uri = "at://like/1";
     s.platform = Platform::Mastodon;
+    s.tags.push_back("cats");
+    s.tags.push_back("welcome");
+    s.filtered.push_back({"Spoilers", true}); // a "hide" filter match
+    s.filtered.push_back({"Politics", false}); // a "warn" filter match
 
     MediaAttachment m;
     m.id = "m1";
@@ -72,6 +76,15 @@ void test_status_roundtrip() {
     CHECK_EQ(back.reblog->text, std::string("hello & welcome"));
     CHECK(back.reblog->spoiler_text.has_value());
     CHECK_EQ(back.reblog->spoiler_text.value(), std::string("cw"));
+    // Filter matches must survive the cache: a refresh never revisits a row it
+    // already has, so a "hide" filter lost here means the post is visible all
+    // session. (Both boost and quote nest through the same writer.)
+    CHECK_EQ(back.reblog->filtered.size(), size_t(2));
+    CHECK(back.reblog->any_filter_hides());
+    CHECK_EQ(back.reblog->filtered[0].title, std::string("Spoilers"));
+    CHECK(back.reblog->filtered[1].hide == false);
+    CHECK_EQ(back.reblog->tags.size(), size_t(2));
+    CHECK_EQ(back.reblog->tags[1], std::string("welcome"));
     CHECK(back.reblog->visibility.value() == Visibility::Unlisted);
     CHECK_EQ(back.reblog->media_attachments.size(), size_t(1));
     CHECK(back.reblog->media_attachments[0].type == MediaAttachment::Kind::Image);
@@ -124,4 +137,44 @@ void test_codec_corrupt_is_miss() {
     std::string blob = store::encode_items({TimelineItem{sample_inner()}});
     blob.resize(blob.size() - 5);
     CHECK_EQ(store::decode_items(blob).size(), size_t(0));
+}
+
+// A row's id must name the ROW, not the newest thing inside it. Two producers
+// describe the same grouped notification with different notification ids, and a
+// conversation's latest message id changes with every reply — if either leaked into
+// the row id, a routine refresh would rename the row the user is parked on and throw
+// their reading position to the top of the timeline.
+void test_row_identity_is_stable() {
+    // Same group, streamed (numeric notification id) vs. fetched (paginated id).
+    Notification streamed;
+    streamed.id = "196014";
+    streamed.group_key = "favourite-100";
+    Notification fetched;
+    fetched.id = "195980";
+    fetched.group_key = "favourite-100";
+    fetched.notifications_count = 5;
+    CHECK_EQ(TimelineItem{streamed}.id(), TimelineItem{fetched}.id());
+    CHECK_EQ(TimelineItem{fetched}.id(), std::string("n:favourite-100"));
+    // Each still paginates by its own real notification id.
+    CHECK_EQ(TimelineItem{fetched}.pagination_id(), std::string("195980"));
+
+    // An ungrouped notification keeps using its own id.
+    Notification plain;
+    plain.id = "42";
+    CHECK_EQ(TimelineItem{plain}.id(), std::string("n:42"));
+
+    // One conversation, two different "latest message" statuses -> one row id.
+    Status first;
+    first.id = "900";
+    first.conversation_id = "c7";
+    Status reply;
+    reply.id = "901";
+    reply.conversation_id = "c7";
+    CHECK_EQ(TimelineItem{first}.id(), TimelineItem{reply}.id());
+    CHECK_EQ(TimelineItem{reply}.id(), std::string("c:c7"));
+
+    // A post outside a conversation feed is still keyed by its own id.
+    Status ordinary;
+    ordinary.id = "900";
+    CHECK_EQ(TimelineItem{ordinary}.id(), std::string("s:900"));
 }

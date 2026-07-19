@@ -70,6 +70,11 @@ void TimelineController::set_reversed(bool reversed) {
 }
 
 void TimelineController::rebuild_visible() {
+    // Where the reading position sits *before* the rebuild. If that row doesn't
+    // survive — someone deleted the post, a filter started hiding it — we re-anchor
+    // to whatever now occupies the same slot instead of letting the front ends fall
+    // back to "row 0", which threw the user to the top of the timeline.
+    const int prev_index = visible_index_of(selected_id_);
     visible_.clear();
     visible_.reserve(raw_.size());
     // Guarantee the visible list holds each id at most once. Navigation tracks
@@ -93,6 +98,15 @@ void TimelineController::rebuild_visible() {
                                  [](const TimelineItem& it) { return !it.is_pinned(); });
         std::reverse(tail, visible_.end());
     }
+    // Re-anchor a lost reading position to the same slot (clamped), so a vanished
+    // row costs the user one row of drift rather than their whole place in the feed.
+    if (prev_index >= 0 && !visible_.empty() && visible_index_of(selected_id_) < 0) {
+        const int last = static_cast<int>(visible_.size()) - 1;
+        selected_id_ = visible_[static_cast<size_t>(prev_index > last ? last : prev_index)].id();
+    }
+    // First time rows exist after a restart, settle a remembered position whose row
+    // didn't survive to this session. Self-clearing, so it costs nothing after that.
+    resolve_position_hint();
 }
 
 TimelineItem* TimelineController::find_raw(const std::string& id) {
@@ -263,7 +277,7 @@ void TimelineController::persist() {
     // cursor rides along so loading older posts resumes after a cache load.
     const int cap = cache_->max_entries();
     if (cap <= 0) { // caching disabled: don't write, and drop any existing file
-        cache_->remove(source_.cache_key());
+        cache_->remove(cache_key()); // account-prefixed, like every other cache call
         return;
     }
     std::vector<TimelineItem> snapshot;
@@ -321,6 +335,40 @@ void TimelineController::seed_users(std::vector<User> users) {
         on_change();
 }
 
+void TimelineController::set_position_hint(const std::string& id, std::int64_t sort_date) {
+    selected_id_ = id;
+    restore_date_hint_ = sort_date;
+}
+
+void TimelineController::resolve_position_hint() {
+    if (restore_date_hint_ == 0 || visible_.empty())
+        return;
+    if (visible_index_of(selected_id_) >= 0) { // the remembered row is right here
+        restore_date_hint_ = 0;
+        return;
+    }
+    // It isn't loaded (past the cache cap, or deleted). Land on the row posted
+    // closest to it in time — the user resumes roughly where they left off, and
+    // scrolling down from there continues into the posts they hadn't read.
+    // Order-independent so it works for reversed feeds too.
+    std::size_t best = visible_.size();
+    std::int64_t best_delta = 0;
+    for (std::size_t i = 0; i < visible_.size(); ++i) {
+        const std::int64_t d = visible_[i].sort_date();
+        if (d == 0)
+            continue; // not time-ordered (user rows) — nothing to compare
+        const std::int64_t delta = d > restore_date_hint_ ? d - restore_date_hint_
+                                                          : restore_date_hint_ - d;
+        if (best == visible_.size() || delta < best_delta) {
+            best = i;
+            best_delta = delta;
+        }
+    }
+    if (best < visible_.size())
+        selected_id_ = visible_[best].id();
+    restore_date_hint_ = 0;
+}
+
 void TimelineController::load_cached() {
     if (source_.is_static()) // seeded in memory; nothing on disk to load
         return;
@@ -358,7 +406,7 @@ void TimelineController::load_cached() {
     gaps_ = std::move(cached.gaps);
     for (const auto& m : cached.marks)
         page_marks_[m.after_id] = m.cursor;
-    rebuild_visible();
+    rebuild_visible(); // also settles the remembered position (see resolve_position_hint)
     if (on_change)
         on_change();
 }
@@ -452,13 +500,18 @@ void TimelineController::refresh() {
     });
 }
 
-void TimelineController::load_older() {
+void TimelineController::load_older(bool automatic) {
     if (loading_ || !scrollback_cursor_)
+        return;
+    // A sparse feed keeps handing back pages we already have. Don't let navigation
+    // re-trigger that walk on every keypress — wait until the list actually changes.
+    if (automatic && auto_load_dry_ && raw_.size() == auto_load_mark_)
         return;
     loading_ = true;
     const PageCursor start = *scrollback_cursor_;
     const int pages = max_refresh_pages_;
-    worker_->post([this, start, pages] {
+    const std::size_t before = raw_.size();
+    worker_->post([this, start, pages, automatic, before] {
         std::vector<TimelineItem> older;
         std::vector<std::pair<std::string, PageCursor>> marks;
         std::optional<PageCursor> next = start;
@@ -476,7 +529,8 @@ void TimelineController::load_older() {
             if (!next || static_cast<int>(page_size) < fetch_limit_)
                 break;
         }
-        main_->post([this, older = std::move(older), next, marks = std::move(marks)]() mutable {
+        main_->post([this, older = std::move(older), next, marks = std::move(marks), automatic,
+                     before]() mutable {
             std::unordered_set<std::string> existing;
             for (const auto& it : raw_)
                 existing.insert(it.id());
@@ -485,6 +539,11 @@ void TimelineController::load_older() {
                     raw_.push_back(std::move(it));
             for (auto& m : marks)
                 page_marks_[m.first] = m.second;
+            if (automatic) {
+                // Nothing new came back: stop auto-paging until the list changes.
+                auto_load_dry_ = raw_.size() == before;
+                auto_load_mark_ = raw_.size();
+            }
             scrollback_cursor_ = next;
             rebuild_visible();
             persist();
@@ -723,12 +782,17 @@ void TimelineController::remove_status(const std::string& id) {
     if (id.empty())
         return;
     const size_t before = raw_.size();
+    // `id` is a bare status id from the server, so compare against the row's own
+    // status id — never TimelineItem::id(), which is kind-prefixed and so could
+    // never match. (Missing this meant an unboost, which Mastodon reports as a
+    // delete of the *wrapper*, left the boost row on screen until restart.)
     raw_.erase(std::remove_if(raw_.begin(), raw_.end(),
                               [&](const TimelineItem& it) {
-                                  if (it.id() == id)
-                                      return true;
+                                  if (const Status* outer = it.status();
+                                      outer && outer->id == id)
+                                      return true; // the post itself, or a boost of it
                                   const Status* s = it.actionable_status();
-                                  return s && s->id == id;
+                                  return s && s->id == id; // boosts / notifications
                               }),
                raw_.end());
     if (raw_.size() == before)
@@ -743,7 +807,21 @@ void TimelineController::update_status(const Status& updated) {
     bool changed = false;
     auto try_replace = [&](Status* s) {
         if (s && s->id == updated.id) {
+            // A streamed edit carries no conversation fields (they come from the
+            // conversations feed / its own stream event). Carry them across, or the
+            // row loses the key that identifies it and both the reading position and
+            // one-row-per-conversation merging break.
+            const std::string convo = s->conversation_id;
+            const bool unread = s->conversation_unread;
+            const bool was_pinned = s->pinned;
             *s = updated;
+            if (s->conversation_id.empty()) {
+                s->conversation_id = convo;
+                s->conversation_unread = unread;
+            }
+            // A streamed/edited payload doesn't say whether the post is pinned; keep
+            // what we knew, or an edit silently drops it out of the pinned block.
+            s->pinned = s->pinned || was_pinned;
             changed = true;
         }
     };
@@ -777,18 +855,11 @@ void TimelineController::edit_post(const std::string& id, const PostDraft& draft
         std::optional<Status> updated = account_->edit_post(id, draft);
         main_->post([this, updated = std::move(updated), done]() mutable {
             const bool ok = updated.has_value();
-            if (ok) {
-                for (auto& item : raw_) {
-                    if (Status* s = item.mutable_status()) {
-                        if (s->id == updated->id)
-                            *s = *updated;
-                    }
-                }
-                rebuild_visible();
-                persist();
-                if (on_change)
-                    on_change();
-            }
+            if (ok)
+                // Same replacement rules as a streamed edit: carry the conversation
+                // identity across (a bare edited Status has none, and losing it costs
+                // the row its id) and refresh any boost wrapper showing this post.
+                update_status(*updated);
             if (done)
                 done(ok);
         });

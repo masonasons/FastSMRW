@@ -1,6 +1,18 @@
 FastSMRW changelog
 ==================
 
+0.4.2
+-----
+
+- Fixed: the Mentions timeline no longer keeps dragging in older and older mentions every time it refreshes while you're reading it.
+- Fixed: replying to a post that's no longer loaded now tells you so, instead of quietly sending your reply as a normal post with nothing attached to it.
+- Fixed: your place in a timeline is no longer lost when a notification group or conversation you're sitting on updates; if the post you're on does disappear, you now stay where you were instead of being thrown to the top.
+- Fixed: reopening the app now puts you back where you were reading even when the post you left off on is too old to still be saved, instead of starting you at the top.
+- Fixed: posts hidden by one of your server's filters no longer reappear after a restart and stay for the rest of the session.
+- Fixed: unboosting a post now removes the boost from your timelines right away instead of leaving it there until you restart.
+- Fixed: editing a pinned post no longer drops it out of your pinned posts.
+- Fixed: sounds now come back on their own if the Windows audio service restarts or your audio device changes, instead of staying silent until you restart the app.
+
 0.4.1
 -----
 

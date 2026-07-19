@@ -101,13 +101,17 @@ void test_mastodon_notification_mapping() {
 void test_mastodon_notification_group_mapping() {
     // One entry of /api/v2/notifications' notification_groups, with side-loaded
     // accounts + statuses resolved by id.
-    // most_recent_notification_id is a JSON *number* in the real API — the row id
-    // must come from group_key (a string), or every group collapses to one row.
+    // most_recent_notification_id is a JSON *number* in the real API, so the string
+    // helper yields nothing for it — the row identity must come from group_key, or
+    // every group collapses onto one row. `id` instead carries page_min_id, a real
+    // notification id, because that's the id space this feed paginates in.
     const char* kGroup = R"JSON({
       "group_key": "favourite-100",
       "notifications_count": 5,
       "type": "favourite",
       "most_recent_notification_id": 196014,
+      "page_min_id": "195980",
+      "page_max_id": "196014",
       "latest_page_notification_at": "2024-06-28T12:10:00.000Z",
       "sample_account_ids": ["300", "301"],
       "status_id": "100"
@@ -124,8 +128,13 @@ void test_mastodon_notification_group_mapping() {
         smap[s.value("id", std::string{})] = &s;
 
     const Notification n = mastodon::map_notification_group(json::parse(kGroup), amap, smap);
-    CHECK_EQ(n.id, std::string("favourite-100")); // stable group_key, not the numeric recent id
+    CHECK_EQ(n.id, std::string("195980")); // page_min_id: pages below this group
     CHECK_EQ(n.group_key, std::string("favourite-100"));
+    // The row's identity is the group key, so a refresh (or a streamed notification,
+    // which numbers the same group differently) updates the row in place instead of
+    // renaming it out from under the reading position.
+    CHECK_EQ(TimelineItem{n}.id(), std::string("n:favourite-100"));
+    CHECK_EQ(TimelineItem{n}.pagination_id(), std::string("195980"));
     CHECK(n.type == Notification::Kind::Favourite);
     CHECK_EQ(n.notifications_count, 5);
     CHECK_EQ(n.account.display_name, std::string("Alice")); // first sample = most recent actor

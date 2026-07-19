@@ -366,7 +366,7 @@ void CoreSession::handle(const json& cmd) {
     else if (c == "refresh_all")
         cmd_refresh_all();
     else if (c == "load_older")
-        cmd_load_older();
+        cmd_load_older(cmd);
     else if (c == "load_gap")
         cmd_load_gap(cmd);
     else if (c == "note_selection")
@@ -824,9 +824,11 @@ void CoreSession::cmd_load_gap(const json& cmd) {
         tc->load_gap(cmd.value("id", std::string{}));
 }
 
-void CoreSession::cmd_load_older() {
+void CoreSession::cmd_load_older(const json& cmd) {
+    // "automatic" marks a load the UI triggered from navigation rather than the
+    // user asking; those get gated so a sparse feed isn't paged back forever.
     if (TimelineController* tc = current())
-        tc->load_older();
+        tc->load_older(cmd.value("automatic", false));
 }
 
 void CoreSession::cmd_note_selection(const json& cmd) {
@@ -844,10 +846,21 @@ void CoreSession::cmd_note_selection(const json& cmd) {
 // so keyboard / invisible-interface / Go-Back navigation is remembered too, not
 // just mouse/arrow selection in the visible window.
 void CoreSession::remember_position(const TimelineController* tc, const std::string& id) {
-    if (tc && !id.empty() && positions_[tc->cache_key()] != id) {
-        positions_[tc->cache_key()] = id;
-        save_positions();
-    }
+    if (!tc || id.empty())
+        return;
+    Position& slot = positions_[tc->cache_key()];
+    if (slot.id == id)
+        return;
+    slot.id = id;
+    // Store when that row was posted too, so a later launch can land nearby even if
+    // the row itself is no longer cached.
+    slot.date = 0;
+    for (const auto& item : tc->items())
+        if (item.id() == id) {
+            slot.date = item.sort_date();
+            break;
+        }
+    save_positions();
 }
 
 // Tell the UI to select a row after a core-driven navigation, remembering it as
@@ -1073,7 +1086,7 @@ void CoreSession::spawn_source(const TimelineSource& src) {
     p->set_origin_key(origin);
     // Restore this timeline's remembered position (works for spawned kinds too).
     if (auto it = positions_.find(p->cache_key()); it != positions_.end())
-        p->note_selection(it->second);
+        p->set_position_hint(it->second.id, it->second.date);
     emit_timelines();
     p->load_cached();
     p->refresh();
@@ -2302,6 +2315,17 @@ void CoreSession::cmd_compose_context(const json& cmd) {
                 booster = &wrapper->account;
         }
 
+    // A reply/quote/edit without a resolvable target used to fall through to the
+    // plain "New Post" branch below — so the compose box opened with no
+    // reply_to_id and the user's reply went out as a standalone post. Refuse
+    // instead: losing the thread silently is worse than not opening the box.
+    if ((mode == "reply" || mode == "quote" || mode == "edit") && !target) {
+        emit_announce(mode == "reply"   ? "Can't reply — that post is no longer loaded."
+                      : mode == "quote" ? "Can't quote — that post is no longer loaded."
+                                        : "Can't edit — that post is no longer loaded.");
+        return;
+    }
+
     if (mode == "reply" && target) {
         ctx["title"] = "Reply";
         ctx["context_label"] = "Replying to " + target->account.best_name() + ": " + target->text;
@@ -2885,8 +2909,8 @@ void CoreSession::invisible_autoload(TimelineController* tc, int visible_index) 
     }
     // Near the scrollback edge (the bottom normally, the top when reversed) -> load older.
     const bool near_edge = tc->reversed() ? (visible_index <= 9) : (visible_index >= count - 10);
-    if (near_edge)
-        tc->load_older();
+    if (near_edge) // automatic: won't keep re-paging a feed that has nothing more to give
+        tc->load_older(/*automatic=*/true);
 }
 
 void CoreSession::cmd_set_window_shown(const json& cmd) {
@@ -3134,7 +3158,7 @@ CoreSession::build_timelines_for(SocialAccount* account, const std::vector<Timel
         // Restore the remembered reading position before the cache load emits, so
         // the UI lands where the user left off (kept across the following refresh).
         if (auto it = positions_.find(tc->cache_key()); it != positions_.end())
-            tc->note_selection(it->second);
+            tc->set_position_hint(it->second.id, it->second.date);
         tc->load_cached();
         tc->refresh();
     }
@@ -3569,9 +3593,13 @@ void CoreSession::load_positions() {
         json root;
         in >> root;
         if (root.is_object())
-            for (const auto& [key, id] : root.items())
-                if (id.is_string())
-                    positions_[key] = id.get<std::string>();
+            for (const auto& [key, val] : root.items()) {
+                if (val.is_string()) // pre-0.4.2 shape: just the id
+                    positions_[key] = {val.get<std::string>(), 0};
+                else if (val.is_object() && val.contains("id"))
+                    positions_[key] = {val.value("id", std::string{}),
+                                       val.value("date", std::int64_t{0})};
+            }
     } catch (...) {
     }
 }
@@ -3580,8 +3608,8 @@ void CoreSession::save_positions() const {
     // Tiny file (a handful of entries), written from the core-loop thread; separate
     // from the item cache so it never races the (worker-thread) cache writes.
     json root = json::object();
-    for (const auto& [key, id] : positions_)
-        root[key] = id;
+    for (const auto& [key, pos] : positions_)
+        root[key] = {{"id", pos.id}, {"date", pos.date}};
     const std::string blob = root.dump();
     const std::filesystem::path path = positions_path();
     const std::filesystem::path tmp = path.string() + ".tmp";

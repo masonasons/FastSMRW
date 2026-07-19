@@ -184,7 +184,7 @@ fun HomeScreen(
                 rows = rowsByTab[pageIndex] ?: emptyList(),
                 isCurrent = pageIndex == pagerState.currentPage,
                 selectedId = selectedIdByTab[pageIndex].orEmpty(),
-                onLoadOlder = viewModel::loadOlder,
+                onLoadOlder = { viewModel.loadOlder(automatic = true) },
                 onNoteSelection = viewModel::noteSelection,
                 onOpenThread = viewModel::openThread,
                 onOpenAuthor = viewModel::openUserTimeline,

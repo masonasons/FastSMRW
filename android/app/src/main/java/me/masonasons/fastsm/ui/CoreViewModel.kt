@@ -690,8 +690,13 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             param?.let { put("param", it) }
         }
 
-    /** Fetch older posts at the end of the current timeline. */
-    fun loadOlder() = core.dispatch("load_older")
+    /**
+     * Fetch older posts at the end of the current timeline. Scroll-triggered loads
+     * pass [automatic] so the core can stop paging a sparse feed (mentions) that
+     * keeps returning posts we already have.
+     */
+    fun loadOlder(automatic: Boolean = false) =
+        core.dispatch("load_older") { put("automatic", automatic) }
 
     /** Report the reading position on the current timeline (persists it). */
     fun noteSelection(id: String) = core.dispatch("note_selection") { put("id", id) }

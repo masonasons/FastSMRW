@@ -64,7 +64,7 @@ private:
     void cmd_select_account(const nlohmann::json& cmd);
     void cmd_refresh();
     void cmd_refresh_all();
-    void cmd_load_older();
+    void cmd_load_older(const nlohmann::json& cmd);
     void cmd_load_gap(const nlohmann::json& cmd);
     void cmd_note_selection(const nlohmann::json& cmd);
     // Persist a timeline's reading position (single writer of positions_), and the
@@ -288,7 +288,14 @@ private:
 
     std::filesystem::path config_path_;
     std::filesystem::path bundled_keymaps_dir_; // read-only keymaps shipped with the app
-    std::map<std::string, std::string> positions_; // cache_key -> remembered selected id
+    // cache_key -> remembered reading position. The timestamp is a fallback anchor
+    // for when the id itself is gone by the next launch (the cache keeps only the
+    // newest N rows, so a position in a busy feed regularly falls off the end).
+    struct Position {
+        std::string id;
+        std::int64_t date = 0;
+    };
+    std::map<std::string, Position> positions_;
     std::map<std::string, ClientFilter> client_filters_; // cache_key -> per-timeline client filter
     std::map<std::string, present::AliasEntry> aliases_; // canonical key -> user alias (global)
     // account_key -> the account's timeline lists, refreshed in the background so

@@ -697,7 +697,9 @@ void MainWindow::maybe_load_older(int row) {
     const bool near_edge = tc->reversed ? (row <= 9) : (row >= count - 10);
     if (count > 0 && near_edge && settings_.value("auto_load_older", true)) {
         load_pending_ = true;
-        dispatch_cmd({{"cmd", "load_older"}});
+        // Automatic: the core gates these so a sparse feed (mentions) isn't paged
+        // further and further back every time we brush the bottom of the list.
+        dispatch_cmd({{"cmd", "load_older"}, {"automatic", true}});
     }
 }
 
@@ -2143,8 +2145,15 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.group_actors = r.value("group_actors", std::string{});
         tl.rows.push_back(std::move(row));
     }
-    if (tl.selected_id.empty()) // first load: adopt the core's remembered position
-        tl.selected_id = e.value("selected_id", std::string{});
+    // Adopt the core's remembered position on the first load, and again whenever the
+    // row we were tracking is no longer in the list — the core re-anchors a vanished
+    // row to its old slot, so following it keeps the reading position instead of
+    // dropping us at the top.
+    if (tl.selected_id.empty() || index_of_id(tl, tl.selected_id) < 0) {
+        const std::string core_id = e.value("selected_id", std::string{});
+        if (!core_id.empty() && index_of_id(tl, core_id) >= 0)
+            tl.selected_id = core_id;
+    }
     if (index == current_) {
         load_pending_ = false; // rows changed -> a queued page can load next
         bind_current_to_view();

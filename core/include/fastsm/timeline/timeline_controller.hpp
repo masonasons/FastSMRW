@@ -89,9 +89,23 @@ public:
     // is preserved if it still exists.
     void seed_users(std::vector<User> users);
 
+    // Restore a reading position remembered from a previous run: the row id, plus
+    // when that row was posted. The id alone isn't enough — the cache keeps only the
+    // newest N rows, so a position deep in a busy feed routinely falls off the end
+    // between sessions (and the post may simply have been deleted). The timestamp
+    // lets the cache load resume at the nearest surviving row instead of the top.
+    void set_position_hint(const std::string& id, std::int64_t sort_date);
+
     void load_cached();
     void refresh();
-    void load_older();
+    // Fetch the next page(s) of older posts. `automatic` marks a load triggered by
+    // navigation/rendering rather than by the user asking for it: a sparse feed
+    // (Mentions especially) can return a whole multi-page fetch of nothing new, and
+    // without a gate every keypress near the bottom would fire another one, dragging
+    // ever-older posts into the list. Once an automatic load lands nothing, further
+    // automatic loads are suppressed until the row count actually changes. A manual
+    // load (the Load Older command) is never suppressed.
+    void load_older(bool automatic = false);
     // Fill a tracked middle gap (after the row with after_id) by fetching its
     // cursor's pages, stitching them in, and closing/advancing the gap.
     void load_gap(const std::string& after_id);
@@ -187,6 +201,13 @@ private:
     std::function<bool(const TimelineItem&)> filter_;
     int max_refresh_pages_ = 5;
     bool loading_ = false;
+    // Automatic-paging gate (see load_older): set when an automatic load landed no
+    // new rows, cleared as soon as raw_ changes size by any other means.
+    bool auto_load_dry_ = false;
+    std::size_t auto_load_mark_ = 0;
+    // When the remembered row was posted; 0 once the position has been resolved.
+    std::int64_t restore_date_hint_ = 0;
+    void resolve_position_hint();
 };
 
 } // namespace fastsm

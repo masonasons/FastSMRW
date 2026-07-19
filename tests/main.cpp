@@ -12,6 +12,7 @@
 void test_status_roundtrip();
 void test_timeline_item_roundtrip();
 void test_codec_corrupt_is_miss();
+void test_row_identity_is_stable();
 
 // From test_util.cpp
 void test_html_stripping();
@@ -98,6 +99,8 @@ void test_server_filter_metadata();
 void test_refresh_fills_gap_below_streamed_top();
 void test_refresh_steady_state_stops_early();
 void test_refresh_fills_multipage_gap();
+void test_lost_row_keeps_reading_position();
+void test_position_hint_falls_back_to_nearest();
 
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
@@ -122,6 +125,7 @@ int main() {
     test_status_roundtrip();
     test_timeline_item_roundtrip();
     test_codec_corrupt_is_miss();
+    test_row_identity_is_stable();
     test_html_stripping();
     test_strip_quote_url();
     test_entity_decoding();
@@ -180,6 +184,8 @@ int main() {
     test_refresh_fills_gap_below_streamed_top();
     test_refresh_steady_state_stops_early();
     test_refresh_fills_multipage_gap();
+    test_lost_row_keeps_reading_position();
+    test_position_hint_falls_back_to_nearest();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

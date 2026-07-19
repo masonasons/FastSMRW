@@ -189,13 +189,18 @@ struct TimelineSource {
     }
     // Mastodon paginates these by item id (max_id), so scrollback can be re-seeded
     // from the oldest loaded row after a cache load.
+    //
+    // Deliberately NOT listed: Notifications and Mentions. Both page by *notification*
+    // id, but their rows carry a group key (Notifications) or the mention's own post
+    // (Mentions) — different id spaces entirely, and a status id is orders of magnitude
+    // larger than a notification id, so re-seeding from a row would ask the server for
+    // the *newest* notifications and then quietly backfill the timeline with ancient
+    // ones. Better to leave scrollback unseeded until a real cursor arrives.
     bool paginates_by_item_id() const {
         switch (kind) {
         case Kind::Home:
         case Kind::Local:
         case Kind::Federated:
-        case Kind::Notifications:
-        case Kind::Mentions:
         case Kind::UserPosts:
         case Kind::Hashtag:
         case Kind::RemoteLocal:

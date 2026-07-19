@@ -4,6 +4,7 @@
 #include "fastsm/sound/sound_manager.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -89,6 +90,30 @@ struct SoundManager::Impl {
                 ma_audio_buffer_ref_uninit(&v->ref);
         }
         voices.clear();
+    }
+
+    // Whether the engine still has a running output device. Restarting the Windows
+    // audio service (or pulling the output device) stops the device out from under
+    // us: the engine keeps accepting sounds and reports success, but nothing is
+    // audible ever again. There's no callback we get on the core loop, so check
+    // before playing.
+    bool device_running() {
+        if (!ok)
+            return false;
+        ma_device* dev = ma_engine_get_device(&engine);
+        return dev != nullptr && ma_device_get_state(dev) == ma_device_state_started;
+    }
+
+    // Don't hammer ma_engine_init when there's genuinely no output device (nothing
+    // plugged in, service still coming back up) — each attempt is slow.
+    std::chrono::steady_clock::time_point last_revive{};
+    bool revive_due() {
+        const auto now = std::chrono::steady_clock::now();
+        if (last_revive.time_since_epoch().count() != 0 &&
+            now - last_revive < std::chrono::seconds(2))
+            return false;
+        last_revive = now;
+        return true;
     }
 };
 
@@ -189,8 +214,17 @@ void SoundManager::play(Earcon e, const std::string& pack) {
 }
 
 void SoundManager::play_named(const std::string& base, const std::string& pack) {
-    if (!enabled_ || !impl_->ok)
+    if (!enabled_)
         return;
+    // Self-heal a dead output device (audio service restarted, device unplugged or
+    // re-routed) rather than going silent until the app is restarted.
+    if (!impl_->device_running()) {
+        if (!impl_->revive_due())
+            return;
+        reinitialize();
+        if (!impl_->ok)
+            return;
+    }
     // Empty pack means "use whatever set_soundpack selected".
     const std::filesystem::path path = resolve(base, pack.empty() ? active_pack_ : pack);
     if (path.empty())

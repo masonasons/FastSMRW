@@ -222,7 +222,11 @@ final class AppState {
     func selectTimeline(number: Int) { client.send("select_timeline", ["number": number]) }
     func selectTimeline(index: Int) { client.send("select_timeline", ["index": index]) }
     func noteSelection(id: String) { client.send("note_selection", ["id": id]) }
-    func loadOlder() { client.send("load_older") }
+    /// `automatic` marks a scroll/navigation-triggered load: the core gates those so
+    /// a sparse feed (mentions) isn't paged further back every time we touch the end.
+    func loadOlder(automatic: Bool = false) {
+        client.send("load_older", ["automatic": automatic])
+    }
     func loadGap(id: String) { client.send("load_gap", ["id": id]) }
     var autoLoadOlder: Bool { settingsRaw["auto_load_older"] as? Bool ?? true }
     var confirmDeletePost: Bool { settingsRaw["confirm_delete_post"] as? Bool ?? true }

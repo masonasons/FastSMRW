@@ -245,10 +245,14 @@ Notification map_notification_group(const json& group,
     Notification n;
     n.platform = Platform::Mastodon;
     n.group_key = str(group, "group_key");
-    // The group_key is a stable, unique string per group — use it as the row id.
-    // (most_recent_notification_id is a JSON *number* and changes as actors arrive,
-    // so it makes a poor id; pagination uses the Link header / page_min_id instead.)
-    n.id = n.group_key;
+    // The row's identity comes from group_key (TimelineItem::id prefers it), so `id`
+    // is free to hold a real notification id — which is what this feed paginates by.
+    // page_min_id is the oldest notification in the group on this page, i.e. exactly
+    // the max_id to page below it. (most_recent_notification_id is a JSON *number*,
+    // so the string helper returns nothing for it; don't reach for that one.)
+    n.id = str(group, "page_min_id");
+    if (n.id.empty())
+        n.id = n.group_key; // pre-4.3-shaped payload: better than an empty id
     n.type = notif_kind(str(group, "type"));
     n.notifications_count = num(group, "notifications_count", 1);
     n.created_at = date(group, "latest_page_notification_at");
