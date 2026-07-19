@@ -330,6 +330,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func editSelection(_ sender: Any?) { postsViewController.editSelection(sender) }
     @objc func deleteSelection(_ sender: Any?) { postsViewController.deleteSelection(sender) }
     @objc func pinPostSelection(_ sender: Any?) { postsViewController.pinPostSelection(sender) }
+    @objc func muteConversationSelection(_ sender: Any?) { postsViewController.muteConversationSelection(sender) }
     @objc func speakUserForSelection(_ sender: Any?) { postsViewController.speakUserForSelection(sender) }
     @objc func speakReplyForSelection(_ sender: Any?) { postsViewController.speakReplyForSelection(sender) }
     @objc func viewThread(_ sender: Any?) { postsViewController.viewThread(sender) }

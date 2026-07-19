@@ -8,8 +8,8 @@ namespace {
 
 // Bump this whenever the on-disk layout changes so older caches are rejected
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
-// reader. v2 added Status::url.
-constexpr char kMagic[4] = {'F', 'S', 'C', '5'};
+// reader. v2 added Status::url. v6 added Notification group_key + notifications_count.
+constexpr char kMagic[4] = {'F', 'S', 'C', '6'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -260,6 +260,9 @@ void write_status(Writer& w, const Status& s) {
     w.boolean(s.pinned);
     w.boolean(s.favourited);
     w.boolean(s.boosted);
+    w.boolean(s.muted);
+    w.str(s.conversation_id);
+    w.boolean(s.conversation_unread);
     w.opt_str(s.application_name);
     w.opt_str(s.instance_url);
     w.u8(static_cast<std::uint8_t>(s.platform));
@@ -311,6 +314,9 @@ Status read_status(Reader& r, int depth = 0) {
     s.pinned = r.boolean();
     s.favourited = r.boolean();
     s.boosted = r.boolean();
+    s.muted = r.boolean();
+    s.conversation_id = r.str();
+    s.conversation_unread = r.boolean();
     s.application_name = r.opt_str();
     s.instance_url = r.opt_str();
     s.platform = static_cast<Platform>(r.u8());
@@ -330,6 +336,8 @@ void write_notification(Writer& w, const Notification& n) {
     if (n.status)
         write_status(w, *n.status);
     w.u8(static_cast<std::uint8_t>(n.platform));
+    w.str(n.group_key);
+    w.i32(n.notifications_count);
 }
 
 Notification read_notification(Reader& r) {
@@ -341,6 +349,8 @@ Notification read_notification(Reader& r) {
     if (r.boolean())
         n.status = std::make_shared<Status>(read_status(r));
     n.platform = static_cast<Platform>(r.u8());
+    n.group_key = r.str();
+    n.notifications_count = r.i32();
     return n;
 }
 

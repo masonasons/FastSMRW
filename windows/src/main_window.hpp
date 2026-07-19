@@ -53,11 +53,14 @@ private:
         std::wstring text;
         bool favorited = false;
         bool boosted = false;
+        bool muted = false;          // conversation muted (Status menu shows a check)
         bool is_mine = false;        // your own post (can be deleted)
         bool gap_after = false;      // unloaded posts follow this row (auto-fill)
         bool follow_request = false; // a follow-request notification (Enter accepts/rejects)
         std::string account_id;      // requester's account id (follow-request rows)
         std::string acct;            // requester's handle (follow-request rows)
+        std::string group_actors;    // grouped like/boost notif: "favorited_by"/"reblogged_by"
+                                     // -> Enter opens the list of everyone in the group
     };
     struct Timeline {
         std::wstring title;
@@ -66,6 +69,7 @@ private:
         bool pinned = false;    // user pinned this tab (locked from dismissal)
         bool muted = false;     // user muted this tab's new-item earcon
         bool user_list = false; // rows are users: multi-select + batch actions
+        bool enter_opens_thread = false; // Enter always opens the thread (Conversations)
         bool reversed = false;  // oldest at top, newest at bottom (load older from the top)
         std::vector<Row> rows;
         std::string selected_id; // UI-authoritative remembered position
@@ -122,6 +126,7 @@ private:
     void compose(const char* mode); // dispatch compose_context for the selection
     void do_post_info();
     void show_user_actions(); // batch follow/mute/block on a user list
+    void show_status_context_menu(LPARAM lp); // Status menu via right-click / Shift+F10 / Apps key
     void do_follow_request_action(const Row& r); // accept/reject a follow request (Enter)
     void do_enter_post_action();                 // Enter on a post (configurable)
     void do_enter_user_action();                 // Enter on a user (configurable)
@@ -177,7 +182,9 @@ private:
     // keymap for hotkey mode, or tear the global hotkeys down when off.
     void apply_invisible();
     // Install the driver for the current invisible mode from invisible_bindings_.
-    void install_active_driver();
+    // Skips work when the mode+bindings are already installed, unless `force` (the
+    // layer overlay clears the base driver, so restoring it must always reinstall).
+    void install_active_driver(bool force = false);
     // Leave the layer (e.g. a dialog opened); restores the base driver if the
     // layer was called up on demand as an overlay from hotkey/keyhook mode.
     void leave_layer();
@@ -218,6 +225,11 @@ private:
     std::map<std::string, std::string> layer_bindings_;     // cached bare-key layer map
     std::string layer_activation_ = "control+win+space";    // cached layer toggle combo
     bool overlay_layer_ = false; // the layer was called up on demand (EnterLayer)
+    // Idempotency guards: apply_invisible() re-fetches keymaps only when one of these
+    // changed (otherwise every unrelated settings broadcast would thrash the driver),
+    // and install_active_driver() skips a redundant (re)install of the same signature.
+    std::string applied_mode_, applied_keymap_, applied_layer_key_;
+    std::string installed_sig_; // mode + bindings currently installed in a driver
 
     std::vector<Timeline> timelines_;
     std::string current_account_; // which account timelines_ belongs to (per event)

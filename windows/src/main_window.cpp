@@ -60,6 +60,7 @@ enum {
     ID_SPEAK_USER,
     ID_SPEAK_REPLY,
     ID_FOLLOW_TOGGLE,
+    ID_MUTE_CONVERSATION,
     ID_ADD_ALIAS,
     ID_MANAGE_ALIASES,
     ID_OPEN_BROWSER,
@@ -231,6 +232,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tQ");
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
     AppendMenuW(status, MF_STRING, ID_VIEW_THREAD, L"View &Thread");
+    AppendMenuW(status, MF_STRING, ID_MUTE_CONVERSATION, L"M&ute Conversation");
     AppendMenuW(status, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(status, MF_STRING, ID_USER_TIMELINE, L"Open &User Timeline");
     AppendMenuW(status, MF_STRING, ID_USER_PROFILE, L"Open User &Profile\tCtrl+U");
@@ -379,6 +381,12 @@ LRESULT CALLBACK MainWindow::ViewProcStatic(HWND hwnd, UINT msg, WPARAM wp, LPAR
         // reply moved the position before the dialog even opened).
         return 0;
     }
+    if (msg == WM_CONTEXTMENU && self && reinterpret_cast<HWND>(wp) == self->timeline_view_) {
+        // Right-click, Shift+F10, and the Applications key all raise WM_CONTEXTMENU;
+        // pop the Status menu on the focused post from any of them.
+        self->show_status_context_menu(lp);
+        return 0;
+    }
     if (msg == WM_SETFOCUS && self) {
         // When focus returns to the posts list (e.g. a modal dialog just closed),
         // make sure it lands on the remembered row rather than wherever the control
@@ -459,23 +467,12 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             dispatch_cmd({{"cmd", "play_earcon"}, {"name", "close"}});
             if (overlay_layer_) { // an on-demand overlay closed: restore the base driver
                 overlay_layer_ = false;
-                install_active_driver();
+                install_active_driver(/*force=*/true); // overlay cleared it; force past the sig guard
             }
             return 0;
         }
         fastsm::log::write("invisible: perform action '" + *action + "'");
         dispatch_cmd({{"cmd", "perform_action"}, {"action", *action}});
-        // The keyhook swallowed the combo's non-modifier key, so the foreground
-        // app saw Alt/Win pressed with no real key -> it drops into menu / Start
-        // mode ("stuck Alt"). Inject an inert Ctrl tap to mask that, matching
-        // AutoHotkey's menu-mask. Injected -> our hook ignores it.
-        INPUT mask[2] = {};
-        mask[0].type = INPUT_KEYBOARD;
-        mask[0].ki.wVk = VK_LCONTROL;
-        mask[1].type = INPUT_KEYBOARD;
-        mask[1].ki.wVk = VK_LCONTROL;
-        mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, mask, sizeof(INPUT));
         return 0;
     }
 
@@ -894,8 +891,30 @@ void MainWindow::on_view_keydown(int vk) {
 }
 
 void MainWindow::do_enter_post_action() {
-    const std::string a = settings_.value("enter_post_action", std::string("post_info"));
     const std::string id = selected_id();
+    // A grouped like/boost notification: Enter opens the list of everyone in it.
+    if (Timeline* t = current(); t) {
+        const int fr = selected_row();
+        if (fr >= 0 && fr < static_cast<int>(t->rows.size())) {
+            const std::string& ga = t->rows[static_cast<size_t>(fr)].group_actors;
+            if (ga == "favorited_by" && !id.empty()) {
+                dispatch_cmd({{"cmd", "open_favorited_by"}, {"id", id}});
+                return;
+            }
+            if (ga == "reblogged_by" && !id.empty()) {
+                dispatch_cmd({{"cmd", "open_reblogged_by"}, {"id", id}});
+                return;
+            }
+        }
+    }
+    // The Conversations feed is a list of threads: Enter always opens the thread,
+    // whatever the general post-Enter setting is.
+    if (Timeline* t = current(); t && t->enter_opens_thread) {
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
+        return;
+    }
+    const std::string a = settings_.value("enter_post_action", std::string("post_info"));
     if (a == "thread") {
         if (!id.empty())
             dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
@@ -940,6 +959,35 @@ void MainWindow::do_enter_user_action() {
     }
 }
 
+void MainWindow::show_status_context_menu(LPARAM lp) {
+    const int frow = selected_row();
+    if (frow < 0)
+        return; // no focused post -> nothing to act on
+    // Reuse the menu bar's Status submenu (index 2: Application, Me, Status, ...) so
+    // the items, labels, and existing WM_COMMAND handlers stay in one place.
+    HMENU bar = GetMenu(hwnd_);
+    HMENU status = bar ? GetSubMenu(bar, 2) : nullptr;
+    if (!status)
+        return;
+    int x = static_cast<int>(static_cast<short>(LOWORD(lp)));
+    int y = static_cast<int>(static_cast<short>(HIWORD(lp)));
+    if (x == -1 && y == -1) { // keyboard (Shift+F10 / Apps key): anchor to the focused row
+        POINT pt{0, 0};
+        RECT rc;
+        if (ListView_GetItemRect(timeline_view_, frow, &rc, LVIR_BOUNDS)) {
+            pt.x = rc.left;
+            pt.y = rc.bottom;
+            ClientToScreen(timeline_view_, &pt);
+        } else {
+            GetCursorPos(&pt);
+        }
+        x = pt.x;
+        y = pt.y;
+    }
+    // No TPM_RETURNCMD: let the menu post WM_COMMAND like the menu bar does.
+    TrackPopupMenu(status, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON, x, y, 0, hwnd_, nullptr);
+}
+
 void MainWindow::do_follow_request_action(const Row& r) {
     HMENU menu = CreatePopupMenu();
     if (!menu)
@@ -973,15 +1021,19 @@ void MainWindow::update_menu_checks(HMENU menu) {
     // No-op unless this popup is the Status menu (which owns these items).
     if (GetMenuState(menu, ID_BOOST, MF_BYCOMMAND) == static_cast<UINT>(-1))
         return;
-    bool boosted = false, favorited = false;
+    bool boosted = false, favorited = false, muted = false;
     Timeline* tc = current();
     const int row = selected_row();
     if (tc && row >= 0 && row < static_cast<int>(tc->rows.size())) {
         boosted = tc->rows[static_cast<size_t>(row)].boosted;
         favorited = tc->rows[static_cast<size_t>(row)].favorited;
+        muted = tc->rows[static_cast<size_t>(row)].muted;
     }
     CheckMenuItem(menu, ID_BOOST, MF_BYCOMMAND | (boosted ? MF_CHECKED : MF_UNCHECKED));
     CheckMenuItem(menu, ID_FAVORITE, MF_BYCOMMAND | (favorited ? MF_CHECKED : MF_UNCHECKED));
+    // Reflect the muted state in the label so it reads as a toggle.
+    ModifyMenuW(menu, ID_MUTE_CONVERSATION, MF_BYCOMMAND | MF_STRING, ID_MUTE_CONVERSATION,
+                muted ? L"Unm&ute Conversation" : L"M&ute Conversation");
 }
 
 void MainWindow::do_boost() {
@@ -1050,6 +1102,10 @@ void MainWindow::ev_post_info(const json& e) {
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
     const bool browser_ok = e.value("has_url", false);
     const bool is_mine = e.value("is_mine", false);
+    const bool mute_ok = e.contains("features") && e["features"].value("mute_conversations", false);
+    const bool muted = e.value("muted", false);
+    const int fav_count = e.value("favorites_count", 0);
+    const int boost_count = e.value("boosts_count", 0);
     PollInfo poll;
     if (e.contains("poll") && e["poll"].is_object()) {
         poll.present = true;
@@ -1059,8 +1115,8 @@ void MainWindow::ev_post_info(const json& e) {
     }
     const std::string keep_id = selected_id();
     auto guard = enter_modal();
-    PostInfoResult res =
-        show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, is_mine, poll);
+    PostInfoResult res = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, is_mine,
+                                               mute_ok, muted, fav_count, boost_count, poll);
     restore_selection(keep_id);
     leave_modal(guard);
     if (!res.action)
@@ -1101,6 +1157,15 @@ void MainWindow::ev_post_info(const json& e) {
         if (!settings_.value("confirm_delete_post", true) ||
             confirm(hwnd_, L"Delete this post? This can't be undone.", L"Delete Post"))
             dispatch_cmd({{"cmd", "delete_post"}, {"id", id}});
+        break;
+    case PostInfoAction::MuteConversation:
+        dispatch_cmd({{"cmd", "toggle_mute_conversation"}, {"id", id}});
+        break;
+    case PostInfoAction::ViewFavoritedBy:
+        dispatch_cmd({{"cmd", "open_favorited_by"}, {"id", id}});
+        break;
+    case PostInfoAction::ViewBoostedBy:
+        dispatch_cmd({{"cmd", "open_reblogged_by"}, {"id", id}});
         break;
     case PostInfoAction::Vote:
         break; // handled above
@@ -1410,8 +1475,14 @@ void MainWindow::do_settings() {
                                          ? std::vector<std::string>{"Default"}
                                          : soundpacks_;
     auto open_mgr = [this](HWND parent) { open_keymap_manager(parent); };
-    if (auto result = show_settings_dialog(hwnd_, inst_, s, packs, open_mgr))
+    if (auto result = show_settings_dialog(hwnd_, inst_, s, packs, open_mgr)) {
+        // The Keyboard Manager (reachable from a button inside this dialog) switches
+        // the active keymap directly in the core while the dialog is open. The dialog
+        // has no control for it, so its snapshot still holds the old name — carry the
+        // live value forward so OK doesn't clobber the switch the user just made.
+        result->invisible_keymap = settings_.value("invisible_keymap", result->invisible_keymap);
         dispatch_cmd({{"cmd", "update_settings"}, {"settings", store::settings_to_json(*result)}});
+    }
 }
 
 void MainWindow::ev_account_settings(const json& e) {
@@ -1800,6 +1871,12 @@ void MainWindow::handle_command(int id) {
     case ID_POST_INFO:
         do_post_info();
         break;
+    case ID_MUTE_CONVERSATION: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "toggle_mute_conversation"}, {"id", id}});
+        break;
+    }
     case ID_OPEN_BROWSER: {
         const std::string id = selected_id();
         if (!id.empty())
@@ -2017,6 +2094,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.pinned = t.value("pinned", false);
         tl.muted = t.value("muted", false);
         tl.user_list = t.value("user_list", false);
+        tl.enter_opens_thread = t.value("enter_opens_thread", false);
         if (same_account)
             for (const auto& old : timelines_) // carry rows/position for the same timeline
                 if (old.kind == tl.kind) {
@@ -2056,11 +2134,13 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.text = to_wide(r.value("text", std::string{}));
         row.favorited = r.value("favorited", false);
         row.boosted = r.value("boosted", false);
+        row.muted = r.value("muted", false);
         row.is_mine = r.value("is_mine", false);
         row.gap_after = r.value("gap_after", false);
         row.follow_request = r.value("follow_request", false);
         row.account_id = r.value("account_id", std::string{});
         row.acct = r.value("acct", std::string{});
+        row.group_actors = r.value("group_actors", std::string{});
         tl.rows.push_back(std::move(row));
     }
     if (tl.selected_id.empty()) // first load: adopt the core's remembered position
@@ -2198,7 +2278,21 @@ void MainWindow::ev_update_ready(const json& e) {
 }
 
 void MainWindow::apply_invisible() {
-    invisible_mode_ = settings_.value("invisible_mode", std::string("off"));
+    const std::string mode = settings_.value("invisible_mode", std::string("off"));
+    const std::string keymap = settings_.value("invisible_keymap", std::string("default"));
+    const std::string layer_key =
+        settings_.value("invisible_layer_key", std::string("control+win+space"));
+    // Only react when something invisible-related actually changed. ev_settings runs
+    // this on every settings broadcast (update checks, sound toggles, etc.); without
+    // this gate each one would tear down and reinstall every global hotkey. A change
+    // to the active keymap's *contents* (Save) still rebinds — that arrives as its own
+    // keymap event through ev_keymap, independent of this fetch.
+    if (mode == applied_mode_ && keymap == applied_keymap_ && layer_key == applied_layer_key_)
+        return;
+    applied_mode_ = mode;
+    applied_keymap_ = keymap;
+    applied_layer_key_ = layer_key;
+    invisible_mode_ = mode;
     overlay_layer_ = false;
     if (invisible_mode_ == "hotkey" || invisible_mode_ == "keyhook") {
         dispatch_cmd({{"cmd", "get_keymap"}}); // ev_keymap installs the active driver
@@ -2208,6 +2302,7 @@ void MainWindow::apply_invisible() {
     } else {
         hotkey_driver_.clear();
         keyhook_driver_.disable();
+        installed_sig_.clear();
     }
 }
 
@@ -2230,7 +2325,19 @@ void MainWindow::ev_keymap(const json& e) {
 }
 
 // Install whichever driver the active mode calls for; keep the other idle.
-void MainWindow::install_active_driver() {
+void MainWindow::install_active_driver(bool force) {
+    // Signature of what we're about to install. Redundant keymap events (a single
+    // switch fans out into settings + keymap broadcasts) would otherwise re-register
+    // every hotkey each time — and RegisterHotKey on an already-registered id fails,
+    // so the churn looked like collisions in the log.
+    std::string sig = invisible_mode_;
+    for (const auto& [key, action] : invisible_bindings_)
+        sig += '\x1f' + key + '=' + action;
+    if (!force && sig == installed_sig_) {
+        fastsm::log::write("invisible: driver unchanged, skipping reinstall");
+        return;
+    }
+    installed_sig_ = sig;
     fastsm::log::write("invisible: install driver for mode '" + invisible_mode_ + "', " +
                        std::to_string(invisible_bindings_.size()) + " binding(s)");
     if (invisible_mode_ == "hotkey") {
@@ -2250,7 +2357,7 @@ void MainWindow::leave_layer() {
     keyhook_driver_.exit_layer();
     if (overlay_layer_) { // the layer was an on-demand overlay: restore the base driver
         overlay_layer_ = false;
-        install_active_driver();
+        install_active_driver(/*force=*/true); // the overlay cleared it; unchanged sig would skip
     }
 }
 

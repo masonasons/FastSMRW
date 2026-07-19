@@ -114,11 +114,35 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
     seen.reserve(raw_.size() + fresh.size());
     for (const auto& it : raw_)
         seen.insert(it.id());
+    // Two kinds of row have a stable identity distinct from their id(): a grouped
+    // notification (its id = most-recent notification, which changes as actors
+    // arrive) and a DM conversation row (its id = latest message, which changes as
+    // messages arrive). Map each on-screen one to its row and update it in place, so
+    // a refresh/stream doesn't show the same group/conversation twice.
+    std::unordered_map<std::string, size_t> group_row, convo_row;
+    for (size_t i = 0; i < raw_.size(); ++i) {
+        if (const Notification* nn = raw_[i].notification(); nn && !nn->group_key.empty())
+            group_row[nn->group_key] = i;
+        else if (const Status* ss = raw_[i].status(); ss && !ss->conversation_id.empty())
+            convo_row[ss->conversation_id] = i;
+    }
     std::vector<TimelineItem> added;
     added.reserve(fresh.size());
-    for (auto& it : fresh)
+    for (auto& it : fresh) {
+        if (const Notification* nn = it.notification(); nn && !nn->group_key.empty()) {
+            if (auto g = group_row.find(nn->group_key); g != group_row.end()) {
+                raw_[g->second] = std::move(it); // authoritative server group -> replace in place
+                continue;
+            }
+        } else if (const Status* ss = it.status(); ss && !ss->conversation_id.empty()) {
+            if (auto c = convo_row.find(ss->conversation_id); c != convo_row.end()) {
+                raw_[c->second] = std::move(it); // same conversation -> replace with its latest msg
+                continue;
+            }
+        }
         if (seen.insert(it.id()).second)
             added.push_back(std::move(it));
+    }
 
     if (raw_.empty()) {
         raw_ = std::move(added);
@@ -481,6 +505,42 @@ void TimelineController::ingest_realtime(TimelineItem item) {
         on_change();
 }
 
+void TimelineController::ingest_notification(Notification n) {
+    // If the server grouped this and the group is already on screen, fold the new
+    // actor into that row: bump the count, adopt the newest actor/time/id (the id
+    // advances so a later refresh dedupes against it), re-sort, and chime once.
+    if (!n.group_key.empty()) {
+        for (auto& item : raw_) {
+            const Notification* existing = item.notification();
+            if (!existing || existing->group_key != n.group_key)
+                continue;
+            Notification merged = *existing;
+            merged.notifications_count += 1;
+            merged.account = n.account;    // newest actor is the named "A"
+            merged.created_at = n.created_at;
+            // Keep the existing row id (the stable group_key) so selection/scroll
+            // survive and a later refresh dedupes against the same group.
+            const bool visible = !filter_ || filter_(TimelineItem{merged});
+            item.value = std::move(merged);
+            if (source_.is_time_ordered())
+                std::stable_sort(raw_.begin(), raw_.end(),
+                                 [](const TimelineItem& a, const TimelineItem& b) {
+                                     if (a.is_pinned() != b.is_pinned())
+                                         return a.is_pinned();
+                                     return a.sort_date() > b.sort_date();
+                                 });
+            rebuild_visible();
+            persist();
+            if (visible && on_received_new)
+                on_received_new(1, false); // notifications use the notification chime
+            if (on_change)
+                on_change();
+            return;
+        }
+    }
+    ingest_realtime(TimelineItem{std::move(n)});
+}
+
 void TimelineController::clear() {
     raw_.clear();
     visible_.clear();
@@ -491,6 +551,46 @@ void TimelineController::clear() {
     }
     if (on_change)
         on_change();
+}
+
+bool TimelineController::toggle_mute_conversation(int visible_index,
+                                                  std::function<void(bool, bool)> done) {
+    if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
+        return false;
+    const std::string id = visible_[static_cast<size_t>(visible_index)].id();
+    TimelineItem* raw = find_raw(id);
+    if (!raw)
+        return false;
+    Status* s = raw->mutable_actionable_status();
+    if (!s)
+        return false;
+
+    const bool want = !s->muted;
+    s->muted = want; // optimistic; reverted below if the server rejects it
+    rebuild_visible();
+    if (on_change)
+        on_change();
+
+    const Status target = *s;
+    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+        const bool ok =
+            want ? account_->mute_conversation(target) : account_->unmute_conversation(target);
+        main_->post([this, id, want, ok, done = std::move(done)] {
+            if (!ok) {
+                if (TimelineItem* r = find_raw(id))
+                    if (Status* st = r->mutable_actionable_status())
+                        st->muted = !want;
+                rebuild_visible();
+                if (on_change)
+                    on_change();
+                if (on_error)
+                    on_error(want ? "Mute conversation failed" : "Unmute conversation failed");
+            }
+            if (done)
+                done(ok, want);
+        });
+    });
+    return want;
 }
 
 bool TimelineController::toggle_favorite(int visible_index,

@@ -1,6 +1,24 @@
 FastSMRW changelog
 ==================
 
+0.4.1
+-----
+
+- New: your notifications now group, so several people liking or boosting the same post read as "A and 4 others favorited your post" instead of one row each (Mastodon 4.3+), and the count ticks up live as more arrive.
+- New: a Conversations timeline you can add and pin lists your Mastodon direct-message threads (one row per conversation); Enter opens the thread and it updates live as messages arrive.
+- New: mute or unmute a conversation from the Status menu and the post info window, so a busy thread stops notifying you (Mastodon).
+- New: see who favorited or boosted a post — "View Favorited" / "View Reposters" (with counts) in the post info window and post menu open a list of those people.
+- New: pressing Enter on (or tapping) a grouped like/boost notification opens the full list of everyone who favorited or boosted that post.
+- New: movement units now include jumps of 20, 50 and 100 items alongside same user, thread and time gaps.
+- Changed: in the invisible interface, Ctrl+Win+Page Up/Down now jumps by your selected movement unit, and Alt+Win+Comma/Period picks the movement unit (Ctrl+Win+Comma/Period on the Windows 8.1 keymap).
+- Changed: in the invisible interface, previous/next account moved to Win+Alt+Shift+Left/Right (Ctrl+Win+Shift+Left/Right on the Windows 8.1 keymap).
+- Changed: in the layer, Comma/Period pick the movement unit and Page Up/Down jump by it.
+- New: the compose window has an "Autocomplete @mention" button, so the Alt+A handle completion is discoverable instead of hidden.
+- New: right-click, Shift+F10, or the Applications key on a post now opens the Status menu for it.
+- Fixed: keys pressed in the invisible layer no longer trigger other apps' shortcuts (such as launching Microsoft 365 Copilot).
+- Fixed: switching the active keymap in the Keyboard Manager now sticks after you close Settings with OK, instead of silently reverting to the previous keymap.
+- Fixed: the invisible interface no longer rebinds its shortcuts on every unrelated settings change, which made global hotkeys and keyhook mode unreliable after switching keymaps.
+
 0.4.0
 -----
 

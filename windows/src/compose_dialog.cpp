@@ -305,36 +305,44 @@ std::int64_t systemtime_to_unix(const SYSTEMTIME& local) {
     return static_cast<std::int64_t>(u.QuadPart / 10000000ULL) - 11644473600LL;
 }
 
+// @-mention autocomplete: search from the handle word under the caret and replace
+// it with the chosen @handle. Shared by Alt+A (in the edit) and the Autocomplete
+// button. `edit` is the post-body edit control.
+void run_mention_autocomplete(HWND edit, Ctx* ctx) {
+    if (!ctx || !ctx->pick_mention)
+        return;
+    DWORD sel_start = 0, sel_end = 0;
+    SendMessageW(edit, EM_GETSEL, reinterpret_cast<WPARAM>(&sel_start),
+                 reinterpret_cast<LPARAM>(&sel_end));
+    const int len = GetWindowTextLengthW(edit);
+    std::wstring text(static_cast<size_t>(len) + 1, L'\0');
+    GetWindowTextW(edit, text.data(), len + 1);
+    text.resize(static_cast<size_t>(len));
+    int caret = static_cast<int>(sel_end);
+    if (caret > len)
+        caret = len;
+    int start = caret;
+    while (start > 0 && is_handle_char(text[static_cast<size_t>(start - 1)]))
+        --start;
+    std::wstring word = text.substr(static_cast<size_t>(start), static_cast<size_t>(caret - start));
+    if (!word.empty() && word.front() == L'@')
+        word.erase(word.begin()); // the query is the handle without '@'
+    auto chosen = ctx->pick_mention(GetParent(edit), to_utf8(word));
+    if (chosen && !chosen->empty()) {
+        std::wstring ins = L"@" + to_wide(*chosen) + L" ";
+        SendMessageW(edit, EM_SETSEL, start, caret); // replace the partial handle
+        SendMessageW(edit, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(ins.c_str()));
+    }
+    SetFocus(edit);
+}
+
 // Subclass the multiline edit to honor the enter-to-send preference.
 LRESULT CALLBACK EditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR ref) {
     Ctx* ctx = reinterpret_cast<Ctx*>(ref);
-    // Alt+A: @-mention autocomplete. Search from the handle word under the caret
-    // and replace it with the chosen @handle. (Ctrl+Alt is AltGr — leave it be.)
+    // Alt+A: @-mention autocomplete. (Ctrl+Alt is AltGr — leave it be.)
     if (msg == WM_SYSKEYDOWN && wp == 'A' && ctx && ctx->pick_mention &&
         !(GetKeyState(VK_CONTROL) & 0x8000)) {
-        DWORD sel_start = 0, sel_end = 0;
-        SendMessageW(h, EM_GETSEL, reinterpret_cast<WPARAM>(&sel_start),
-                     reinterpret_cast<LPARAM>(&sel_end));
-        const int len = GetWindowTextLengthW(h);
-        std::wstring text(static_cast<size_t>(len) + 1, L'\0');
-        GetWindowTextW(h, text.data(), len + 1);
-        text.resize(static_cast<size_t>(len));
-        int caret = static_cast<int>(sel_end);
-        if (caret > len)
-            caret = len;
-        int start = caret;
-        while (start > 0 && is_handle_char(text[static_cast<size_t>(start - 1)]))
-            --start;
-        std::wstring word = text.substr(static_cast<size_t>(start), static_cast<size_t>(caret - start));
-        if (!word.empty() && word.front() == L'@')
-            word.erase(word.begin()); // the query is the handle without '@'
-        auto chosen = ctx->pick_mention(GetParent(h), to_utf8(word));
-        if (chosen && !chosen->empty()) {
-            std::wstring ins = L"@" + to_wide(*chosen) + L" ";
-            SendMessageW(h, EM_SETSEL, start, caret); // replace the partial handle
-            SendMessageW(h, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(ins.c_str()));
-        }
-        SetFocus(h);
+        run_mention_autocomplete(h, ctx);
         return 0; // swallow Alt+A (no menu-mnemonic beep)
     }
     if (msg == WM_KEYDOWN && wp == VK_RETURN) {
@@ -481,6 +489,10 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         if (media)
             update_media_status(dlg, ctx);
 
+        // The Autocomplete button mirrors the Alt+A shortcut so it's discoverable;
+        // hide it when this account has no handle lookup to offer.
+        show(dlg, IDC_COMPOSE_MENTION, static_cast<bool>(ctx->pick_mention));
+
         // Prefill + post button label.
         SetDlgItemTextW(dlg, IDC_COMPOSE_EDIT, to_wide(req.prefill_text).c_str());
         SetDlgItemTextW(dlg, IDOK, editing ? L"&Save" : L"&Post");
@@ -508,6 +520,10 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 update_media_status(dlg, ctx);
                 update_counter(dlg, ctx); // media-only posts can now enable Post
             }
+            return TRUE;
+        }
+        if (id == IDC_COMPOSE_MENTION) { // same @-mention autocomplete as Alt+A
+            run_mention_autocomplete(GetDlgItem(dlg, IDC_COMPOSE_EDIT), ctx);
             return TRUE;
         }
         if (id == IDC_COMPOSE_SCHEDULE) {

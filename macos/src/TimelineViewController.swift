@@ -228,6 +228,10 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         guard let id = selectedRowId else { return }
         state.togglePinPost(id: id)
     }
+    @objc func muteConversationSelection(_ sender: Any?) {
+        guard let id = selectedRowId else { return }
+        state.toggleMuteConversation(id: id)
+    }
     @objc func speakUserForSelection(_ sender: Any?) {
         guard let id = selectedRowId else { return }
         state.speakUser(id: id)

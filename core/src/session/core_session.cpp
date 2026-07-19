@@ -217,7 +217,7 @@ json features_json(const PlatformFeatures& f) {
     return {{"visibility", f.visibility},     {"content_warning", f.content_warning},
             {"quote_posts", f.quote_posts},   {"polls", f.polls},
             {"editing", f.editing},           {"scheduling", f.scheduling},
-            {"media", f.media}};
+            {"media", f.media},               {"mute_conversations", f.mute_conversations}};
 }
 
 // Stable name for a timeline kind, for persisting the set of open timelines.
@@ -245,6 +245,9 @@ const char* kind_name(TimelineSource::Kind k) {
     case K::Blocks: return "blocks";
     case K::FollowRequests: return "followRequests";
     case K::Trends: return "trends";
+    case K::Conversations: return "conversations";
+    case K::FavoritedBy: return "favoritedBy";
+    case K::BoostedBy: return "boostedBy";
     }
     return "home";
 }
@@ -272,6 +275,9 @@ std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
     if (s == "blocks") return K::Blocks;
     if (s == "followRequests") return K::FollowRequests;
     if (s == "trends") return K::Trends;
+    if (s == "conversations") return K::Conversations;
+    if (s == "favoritedBy") return K::FavoritedBy;
+    if (s == "boostedBy") return K::BoostedBy;
     return std::nullopt;
 }
 
@@ -371,6 +377,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_toggle_favorite(cmd);
     else if (c == "toggle_pin_post")
         cmd_toggle_pin_post(cmd);
+    else if (c == "toggle_mute_conversation")
+        cmd_toggle_mute_conversation(cmd);
     else if (c == "delete_post")
         cmd_delete_post(cmd);
     else if (c == "post")
@@ -399,6 +407,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_spawn_timeline(cmd);
     else if (c == "open_thread")
         cmd_open_thread(cmd);
+    else if (c == "open_favorited_by")
+        cmd_open_status_actors(cmd, /*boosted=*/false);
+    else if (c == "open_reblogged_by")
+        cmd_open_status_actors(cmd, /*boosted=*/true);
     else if (c == "open_user_timeline")
         cmd_open_user_timeline(cmd);
     else if (c == "open_user_profile")
@@ -1275,6 +1287,24 @@ void CoreSession::cmd_open_thread(const json& cmd) {
     spawn_source(TimelineSource::thread(status_id, title));
 }
 
+void CoreSession::cmd_open_status_actors(const json& cmd, bool boosted) {
+    TimelineController* tc = current();
+    if (!tc || !accounts_.selected())
+        return;
+    if (accounts_.selected()->platform() != Platform::Mastodon) {
+        emit_announce("Seeing who favorited or boosted a post isn't available on this account.");
+        return;
+    }
+    const TimelineItem* item = find_item(tc, cmd.value("id", std::string{}));
+    if (!item)
+        return;
+    const Status* s = item->actionable_status();
+    if (!s)
+        return;
+    spawn_source(boosted ? TimelineSource::boosted_by(s->id, "Boosted by")
+                         : TimelineSource::favorited_by(s->id, "Favorited by"));
+}
+
 std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
     std::vector<User> users;
     if (const User* row_user = item.user()) { // a user-list row is just that user
@@ -2135,6 +2165,28 @@ void CoreSession::cmd_toggle_favorite(const json& cmd) {
     });
 }
 
+void CoreSession::cmd_toggle_mute_conversation(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc || !tc->account())
+        return;
+    if (!tc->account()->features().mute_conversations) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("Muting conversations isn't supported on this account.");
+        return;
+    }
+    const int idx = tc->visible_index_of(cmd.value("id", std::string{}));
+    if (idx < 0)
+        return;
+    tc->toggle_mute_conversation(idx, [this](bool ok, bool active) {
+        if (!ok) {
+            sound_.play(sound::Earcon::Error);
+            return;
+        }
+        sound_.play(active ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+        emit_announce(active ? "Conversation muted" : "Conversation unmuted");
+    });
+}
+
 void CoreSession::cmd_toggle_pin_post(const json& cmd) {
     TimelineController* tc = current();
     if (!tc)
@@ -2352,7 +2404,10 @@ void CoreSession::cmd_post_info(const json& cmd) {
                {"text", present::post_info(*s, util::now_unix())},
                {"features", features_json(tc->account()->features())},
                {"has_url", !s->url.empty()},
-               {"is_mine", s->account.id == tc->account()->me().id}};
+               {"is_mine", s->account.id == tc->account()->me().id},
+               {"muted", s->muted},
+               {"favorites_count", s->favourites_count},
+               {"boosts_count", s->boosts_count}};
     // A poll the viewer can still vote in (not yet voted, not closed): let the UI
     // offer the voting controls. Otherwise the results are already in the text.
     if (s->poll && !s->poll->voted && !s->poll->expired) {
@@ -2759,6 +2814,33 @@ void CoreSession::invisible_step(int delta) {
     invisible_speak_index(dest);
 }
 
+void CoreSession::invisible_move_unit(bool down) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const auto& items = tc->items();
+    if (items.empty() || movement_units_.empty()) {
+        sound_.play(sound::Earcon::Boundary);
+        return;
+    }
+    if (movement_unit_ < 0 || movement_unit_ >= static_cast<int>(movement_units_.size()))
+        movement_unit_ = 0;
+    int idx = tc->visible_index_of(tc->selected_id());
+    if (idx < 0)
+        idx = 0;
+    const int dest = movement::destination(
+        items, idx, movement_units_[static_cast<size_t>(movement_unit_)], down);
+    if (dest < 0) {
+        sound_.play(sound::Earcon::Boundary); // nowhere to jump for this unit
+        return;
+    }
+    const std::string id = items[static_cast<size_t>(dest)].id();
+    tc->note_selection(id);
+    emit_select_row(tc, id);
+    invisible_speak_index(dest);
+    invisible_autoload(tc, dest); // may land on a gap / scrollback boundary
+}
+
 void CoreSession::invisible_goto_edge(bool top) {
     TimelineController* tc = current();
     if (!tc)
@@ -2897,9 +2979,13 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     if (a == "prev_item")
         return invisible_step(-1);
     if (a == "next_item_jump")
-        return invisible_step(20);
+        return invisible_move_unit(true);
     if (a == "prev_item_jump")
-        return invisible_step(-20);
+        return invisible_move_unit(false);
+    if (a == "next_movement")
+        return cmd_cycle_movement({{"dir", "next"}});
+    if (a == "prev_movement")
+        return cmd_cycle_movement({{"dir", "prev"}});
     if (a == "top_item")
         return invisible_goto_edge(true);
     if (a == "bottom_item")
@@ -2940,6 +3026,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_favorite({{"id", row}});
     if (a == "PinPost")
         return cmd_toggle_pin_post({{"id", row}});
+    if (a == "MuteConversation")
+        return cmd_toggle_mute_conversation({{"id", row}});
     if (a == "DeletePost")
         return cmd_delete_post({{"id", row}});
     if (a == "FollowHashtag")
@@ -2959,6 +3047,15 @@ void CoreSession::cmd_perform_action(const json& cmd) {
             emit({{"event", "invisible_ui_action"}, {"action", "UserActions"}}); // the batch menu
             return;
         }
+        // A grouped like/boost notification: Enter opens the list of everyone in the
+        // group (all the people who favorited / boosted the post).
+        if (const Notification* n = it->notification();
+            n && n->notifications_count > 1 && n->status &&
+            (n->type == Notification::Kind::Favourite || n->type == Notification::Kind::Reblog))
+            return cmd_open_status_actors({{"id", row}}, n->type == Notification::Kind::Reblog);
+        // The Conversations feed is a list of threads: Enter always opens the thread.
+        if (tc->source().enter_opens_thread())
+            return cmd_open_thread({{"id", row}});
         const std::string& pa = settings_.enter_post_action;
         if (pa == "thread")
             return cmd_open_thread({{"id", row}});
@@ -3607,9 +3704,13 @@ void CoreSession::update_streaming() {
             if (client)
                 continue; // already streaming
             // The source whose "update" events this connection carries. The user
-            // stream (home+notifications) feeds Home; notifications route themselves.
+            // stream (home + notifications + conversations) feeds Home; notification
+            // and conversation events self-route in parse_stream_event.
             TimelineSource route =
-                src.kind == TimelineSource::Kind::Notifications ? TimelineSource::home() : src;
+                (src.kind == TimelineSource::Kind::Notifications ||
+                 src.kind == TimelineSource::Kind::Conversations)
+                    ? TimelineSource::home()
+                    : src;
             log::write("update_streaming: starting stream " + skey);
             client = std::make_unique<StreamingClient>(http_.get(), &loop_);
             client->start(account, *spec, route, [this, key](StreamItem item) {
@@ -3643,9 +3744,14 @@ void CoreSession::update_streaming() {
                 const Status* posted = item.item.status();
                 for (auto& tc : *dest) {
                     const TimelineSource& s = tc->source();
-                    if (s.cache_key() == target)
-                        tc->ingest_realtime(TimelineItem{item.item});
-                    else if (is_mention && s.kind == TimelineSource::Kind::Mentions)
+                    if (s.cache_key() == target) {
+                        // Notifications fold into their server-side group ("A and N
+                        // others"); everything else prepends as its own row.
+                        if (n)
+                            tc->ingest_notification(*n);
+                        else
+                            tc->ingest_realtime(TimelineItem{item.item});
+                    } else if (is_mention && s.kind == TimelineSource::Kind::Mentions)
                         tc->ingest_realtime(TimelineItem{*n->status});
                     else if (posted && s.kind == TimelineSource::Kind::UserPosts &&
                              s.param == posted->account.id)
@@ -3709,6 +3815,8 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::follow_requests();
     if (kind == "trends")
         return TimelineSource::trends();
+    if (kind == "conversations")
+        return TimelineSource::conversations();
     return std::nullopt;
 }
 
@@ -3762,7 +3870,8 @@ void CoreSession::emit_timelines() {
                        {"dismissable", s.is_dismissable() && !tc->pinned()},
                        {"pinned", tc->pinned()},
                        {"muted", tc->muted()},
-                       {"user_list", s.is_user_list()}});
+                       {"user_list", s.is_user_list()},
+                       {"enter_opens_thread", s.enter_opens_thread()}});
     }
     emit({{"event", "timelines_changed"},
           {"timelines", tls},
@@ -3808,6 +3917,12 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
     if (const Status* s = item.actionable_status()) {
         r["favorited"] = s->favourited;
         r["boosted"] = s->boosted;
+        if (s->favourites_count > 0)
+            r["favorites_count"] = s->favourites_count; // gates "See who favorited"
+        if (s->boosts_count > 0)
+            r["boosts_count"] = s->boosts_count; // gates "See who boosted"
+        if (s->muted)
+            r["muted"] = true; // conversation muted -> Status menu shows a check
         if (!s->media_attachments.empty())
             r["has_media"] = true; // gates the "View media" action
         if (s->in_reply_to_id && !s->in_reply_to_id->empty())
@@ -3815,6 +3930,11 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
         if (SocialAccount* me = accounts_.selected())
             r["is_mine"] = s->account.id == me->me().id; // your own post -> deletable
     }
+    // A grouped like/boost notification: Enter opens the list of everyone in it.
+    if (const Notification* n = item.notification();
+        n && n->notifications_count > 1 && n->status &&
+        (n->type == Notification::Kind::Favourite || n->type == Notification::Kind::Reblog))
+        r["group_actors"] = n->type == Notification::Kind::Reblog ? "reblogged_by" : "favorited_by";
     // A follow-request notification: surface the requester so Enter can accept/reject.
     if (const Notification* n = item.notification();
         n && n->type == Notification::Kind::FollowRequest) {

@@ -125,13 +125,18 @@ struct PostInfo: Decodable {
     let text: String
     var hasUrl = false
     var isMine = false
+    var muted = false
+    var favoritesCount = 0
+    var boostsCount = 0
     var features: [String: Bool]?
     var poll: PostInfoPoll?
 
     enum CodingKeys: String, CodingKey {
-        case id, text, features, poll
+        case id, text, features, poll, muted
         case hasUrl = "has_url"
         case isMine = "is_mine"
+        case favoritesCount = "favorites_count"
+        case boostsCount = "boosts_count"
     }
 }
 

@@ -79,6 +79,7 @@ enum MainMenu {
                                         keyEquivalent: "\u{8}")
         delete.keyEquivalentModifierMask = [.command]
         add("Pin to Profile", #selector(MainWindowController.pinPostSelection(_:)), "")
+        add("Mute Conversation", #selector(MainWindowController.muteConversationSelection(_:)), "")
         statusMenu.addItem(.separator())
         add("Speak User", #selector(MainWindowController.speakUserForSelection(_:)), ";", [.command])
         add("Speak Referenced Reply", #selector(MainWindowController.speakReplyForSelection(_:)), ";", [.command, .shift])

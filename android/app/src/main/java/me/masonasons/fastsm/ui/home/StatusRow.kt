@@ -41,6 +41,9 @@ fun StatusRow(
     onViewMedia: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onToggleBoost: (String) -> Unit,
+    onToggleMuteConversation: (String) -> Unit,
+    onOpenFavoritedBy: (String) -> Unit,
+    onOpenRebloggedBy: (String) -> Unit,
     onReply: (String) -> Unit,
     onQuote: (String) -> Unit,
     onEdit: (String) -> Unit,
@@ -60,6 +63,11 @@ fun StatusRow(
         add(MenuAction("Quote") { onQuote(row.id) })
         if (row.hasMedia) add(MenuAction("View media") { onViewMedia(row.id) })
         add(MenuAction("View conversation") { onOpenThread(row.id) })
+        add(MenuAction(if (row.muted) "Unmute conversation" else "Mute conversation") {
+            onToggleMuteConversation(row.id)
+        })
+        if (row.favoritesCount > 0) add(MenuAction("See who favorited") { onOpenFavoritedBy(row.id) })
+        if (row.boostsCount > 0) add(MenuAction("See who boosted") { onOpenRebloggedBy(row.id) })
         add(MenuAction("View author's posts") { onOpenAuthor(row.id) })
         add(MenuAction("View author's profile") { onOpenProfile(row.id) })
         add(MenuAction("Speak user info") { onSpeakUser(row.id) })
@@ -75,15 +83,23 @@ fun StatusRow(
     }
     val actions = menuActions.toAccessibilityActions()
 
+    // Primary open: a grouped like/boost notification opens the list of everyone in
+    // the group; every other row opens its thread.
+    val primaryOpen: () -> Unit = when (row.groupActors) {
+        "favorited_by" -> ({ onOpenFavoritedBy(row.id) })
+        "reblogged_by" -> ({ onOpenRebloggedBy(row.id) })
+        else -> ({ onOpenThread(row.id) })
+    }
+
     val base = Modifier
         .combinedClickable(
-            onClick = { onOpenThread(row.id) },
+            onClick = { primaryOpen() },
             onLongClick = { menuOpen = true },
         )
         .clearAndSetSemantics {
             contentDescription = row.text
             customActions = actions
-            onClick { onOpenThread(row.id); true }
+            onClick { primaryOpen(); true }
         }
         .padding(horizontal = 16.dp, vertical = 12.dp)
 

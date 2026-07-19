@@ -24,3 +24,7 @@ control+win+'=CloseTimeline
 control+win+delete=DeletePost
 control+win+o=Options
 control+shift+win+q=Exit
+control+shift+win+left=PrevAccount
+control+shift+win+right=NextAccount
+control+win+,=prev_movement
+control+win+.=next_movement

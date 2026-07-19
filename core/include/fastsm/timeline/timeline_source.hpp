@@ -36,6 +36,10 @@ struct TimelineSource {
                        // analysis category id.
         Trends,        // the instance's trending posts (Mastodon /trends/statuses),
                        // ordered by trend score rather than time.
+        Conversations, // the account's direct-message conversations (Mastodon
+                       // /api/v1/conversations); one row per conversation, newest first.
+        FavoritedBy,   // accounts that favorited a post (param = status id); rows are users.
+        BoostedBy,     // accounts that boosted a post (param = status id); rows are users.
     };
 
     Kind kind = Kind::Home;
@@ -90,6 +94,12 @@ struct TimelineSource {
             return title_text.empty() ? "User Analysis" : title_text;
         case Kind::Trends:
             return "Trending Posts";
+        case Kind::Conversations:
+            return "Conversations";
+        case Kind::FavoritedBy:
+            return title_text.empty() ? "Favorited by" : title_text;
+        case Kind::BoostedBy:
+            return title_text.empty() ? "Boosted by" : title_text;
         }
         return "Timeline";
     }
@@ -143,6 +153,12 @@ struct TimelineSource {
             return "analyzedUsers:" + param;
         case Kind::Trends:
             return "trends";
+        case Kind::Conversations:
+            return "conversations";
+        case Kind::FavoritedBy:
+            return "favoritedBy:" + param;
+        case Kind::BoostedBy:
+            return "boostedBy:" + param;
         }
         return "timeline";
     }
@@ -168,7 +184,8 @@ struct TimelineSource {
     bool is_user_list() const {
         return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople ||
                kind == Kind::Mutes || kind == Kind::Blocks || kind == Kind::FollowRequests ||
-               kind == Kind::PostUsers || kind == Kind::AnalyzedUsers;
+               kind == Kind::PostUsers || kind == Kind::AnalyzedUsers ||
+               kind == Kind::FavoritedBy || kind == Kind::BoostedBy;
     }
     // Mastodon paginates these by item id (max_id), so scrollback can be re-seeded
     // from the oldest loaded row after a cache load.
@@ -192,6 +209,9 @@ struct TimelineSource {
     bool is_notification_timeline() const {
         return kind == Kind::Notifications || kind == Kind::Mentions;
     }
+    // Enter on a row here opens its thread regardless of the general post-Enter
+    // setting (the Conversations feed is a list of threads to open into).
+    bool enter_opens_thread() const { return kind == Kind::Conversations; }
     // Standing feeds (home/notifications) can't be closed; spawned ones
     // (local/federated/mentions/bookmarks/favorites/...) can (Delete key).
     bool is_dismissable() const {
@@ -230,6 +250,11 @@ struct TimelineSource {
         case Kind::AnalyzedUsers:
         case Kind::Trends:
             return std::nullopt; // not a streaming feed; no new-items chime
+        case Kind::Conversations:
+            return "messages"; // DM chime when a conversation updates
+        case Kind::FavoritedBy:
+        case Kind::BoostedBy:
+            return std::nullopt; // a seeded user list; not a streaming feed
         }
         return std::nullopt;
     }
@@ -283,6 +308,15 @@ struct TimelineSource {
     }
     // The instance's trending posts (Mastodon only).
     static TimelineSource trends() { return {Kind::Trends}; }
+    // The account's direct-message conversations (Mastodon only).
+    static TimelineSource conversations() { return {Kind::Conversations}; }
+    // Accounts that favorited / boosted a post (Mastodon; param = status id).
+    static TimelineSource favorited_by(std::string status_id, std::string title = {}) {
+        return {Kind::FavoritedBy, std::move(status_id), std::move(title)};
+    }
+    static TimelineSource boosted_by(std::string status_id, std::string title = {}) {
+        return {Kind::BoostedBy, std::move(status_id), std::move(title)};
+    }
     static TimelineSource mutes() { return {Kind::Mutes}; }
     static TimelineSource blocks() { return {Kind::Blocks}; }
     static TimelineSource follow_requests() { return {Kind::FollowRequests}; }

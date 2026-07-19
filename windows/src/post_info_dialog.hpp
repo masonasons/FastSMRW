@@ -18,6 +18,9 @@ enum class PostInfoAction {
     ViewThread,
     ViewAuthor,
     Delete,
+    MuteConversation,
+    ViewFavoritedBy,
+    ViewBoostedBy,
     Vote,
 };
 
@@ -40,7 +43,8 @@ struct PostInfoResult {
 // buttons, and (when the poll is votable) a voting list + Vote button. The caller
 // performs the action (dispatches the matching command).
 PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
-                                     bool quote_ok, bool browser_ok, bool is_mine,
+                                     bool quote_ok, bool browser_ok, bool is_mine, bool mute_ok,
+                                     bool muted, int favorites_count, int boosts_count,
                                      const PollInfo& poll);
 
 } // namespace fastsmui

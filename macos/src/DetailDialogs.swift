@@ -114,6 +114,21 @@ final class PostInfoWindowController: DetailSheetController {
             }))
         }
         buttons.append(("View Thread", false, { [weak self] in self?.dismiss(); state.openThread(id: id) }))
+        if info.favoritesCount > 0 {
+            buttons.append(("View Favorited (\(info.favoritesCount))", false, { [weak self] in
+                self?.dismiss(); state.openFavoritedBy(id: id)
+            }))
+        }
+        if info.boostsCount > 0 {
+            buttons.append(("View Reposters (\(info.boostsCount))", false, { [weak self] in
+                self?.dismiss(); state.openRebloggedBy(id: id)
+            }))
+        }
+        if info.features?["mute_conversations"] == true {
+            buttons.append((info.muted ? "Unmute Conversation" : "Mute Conversation", false, {
+                state.toggleMuteConversation(id: id)
+            }))
+        }
         if info.hasUrl {
             buttons.append(("Open in Browser", false, { [weak self] in
                 self?.dismiss(); state.openStatus(id: id)

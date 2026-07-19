@@ -149,7 +149,8 @@ KeyBindings layer_keymap() {
         {"up", "prev_item"},         {"down", "next_item"},
         {"left", "prev_tl"},         {"right", "next_tl"},
         {"home", "top_item"},        {"end", "bottom_item"},
-        {"pageup", "prev_item_jump"}, {"pagedown", "next_item_jump"},
+        {",", "prev_movement"},      {".", "next_movement"}, // comma/period pick the movement unit
+        {"pageup", "prev_item_jump"}, {"pagedown", "next_item_jump"}, // jump by that unit
         {"space", "open_thread"},    {"return", "Enter"},
         {"shift+return", "SecondaryAction"},
         {"r", "Reply"},              {"b", "BoostToggle"},
@@ -175,8 +176,10 @@ std::string layer_help_text() {
            "Right arrow: Next timeline\n"
            "Home: Top of timeline\n"
            "End: Bottom of timeline\n"
-           "Page Up: Jump up\n"
-           "Page Down: Jump down\n"
+           "Comma: Previous movement unit\n"
+           "Period: Next movement unit\n"
+           "Page Up: Jump back by the movement unit\n"
+           "Page Down: Jump forward by the movement unit\n"
            "Space: Open thread\n"
            "Enter: Default action (view post, or your Behavior choice)\n"
            "Shift+Enter: Secondary action (play media, or your Behavior choice)\n"
@@ -281,14 +284,16 @@ const std::vector<ActionDef>& action_catalog() {
         // --- navigation ---
         {"next_item", "Next item", "control+alt+win+down"},
         {"prev_item", "Previous item", "control+alt+win+up"},
-        {"next_item_jump", "Jump forward (20 items)", "control+win+pagedown"},
-        {"prev_item_jump", "Jump back (20 items)", "control+win+pageup"},
+        {"next_item_jump", "Jump forward by movement unit", "control+win+pagedown"},
+        {"prev_item_jump", "Jump back by movement unit", "control+win+pageup"},
+        {"next_movement", "Next movement unit", "alt+win+."},
+        {"prev_movement", "Previous movement unit", "alt+win+,"},
         {"top_item", "Top of timeline", "alt+win+home"},
         {"bottom_item", "Bottom of timeline", "alt+win+end"},
         {"next_tl", "Next timeline", "control+alt+win+right"},
         {"prev_tl", "Previous timeline", "control+alt+win+left"},
-        {"NextAccount", "Next account", "control+shift+win+pagedown"},
-        {"PrevAccount", "Previous account", "control+shift+win+pageup"},
+        {"NextAccount", "Next account", "alt+shift+win+right"},
+        {"PrevAccount", "Previous account", "alt+shift+win+left"},
         {"speak_item", "Speak current item", "alt+win+space"},
         {"UndoNavigation", "Undo navigation (go back)", "alt+win+z"},
         {"refresh", "Refresh timeline", "control+alt+win+u"},
@@ -325,6 +330,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"TogglePin", "Pin / unpin timeline", ""},        // unbound (in-app Ctrl+P)
         {"MuteTimeline", "Mute / unmute timeline sounds", ""}, // unbound (in-app Ctrl+M)
         {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
+        {"MuteConversation", "Mute / unmute conversation", ""}, // unbound (Status menu / post info)
         {"DeletePost", "Delete your post", "alt+win+delete"}, // in-app Delete; Win8.1 overrides
         {"FollowHashtag", "Follow a hashtag", "alt+win+h"}, // in-app / layer H
         {"ManageHashtags", "Manage followed hashtags", ""}, // unbound by default

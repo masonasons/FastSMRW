@@ -302,9 +302,16 @@ const char* notification_action_phrase(Notification::Kind k) {
 std::optional<std::string> notification_field_string(NotificationSpeechField f, const Notification& n,
                                                      std::int64_t now) {
     switch (f) {
-    case NotificationSpeechField::Actor:
-        return n.account.best_name().empty() ? std::nullopt
-                                             : std::optional(display_name_for(n.account));
+    case NotificationSpeechField::Actor: {
+        if (n.account.best_name().empty())
+            return std::nullopt;
+        std::string actor = display_name_for(n.account);
+        if (n.notifications_count > 1) { // grouped: "A and N others"
+            const int others = n.notifications_count - 1;
+            actor += " and " + std::to_string(others) + (others == 1 ? " other" : " others");
+        }
+        return std::optional(actor);
+    }
     case NotificationSpeechField::Action:
         return std::optional<std::string>(notification_action_phrase(n.type));
     case NotificationSpeechField::Handle:

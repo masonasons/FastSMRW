@@ -45,6 +45,12 @@ struct Status {
     bool pinned = false;
     bool favourited = false;
     bool boosted = false;
+    bool muted = false; // conversation muted (you don't get notified about this thread)
+    // For the Conversations (DM) timeline: the stable Mastodon conversation id this
+    // post is the latest message of. Empty for ordinary posts. Lets the Conversations
+    // feed keep one row per conversation even as its latest message changes.
+    std::string conversation_id;
+    bool conversation_unread = false; // that conversation has unread messages
     std::optional<std::string> application_name; // posting client ("via ...")
     std::vector<StatusFilterMatch> filtered;     // server-side filters that matched (Mastodon)
     std::optional<std::string> instance_url;     // remote instance, if fetched abroad

@@ -44,6 +44,12 @@ data class RowUi(
     val isMine: Boolean,
     val hasMedia: Boolean,
     val isReply: Boolean,
+    val muted: Boolean, // conversation muted (thread notifications off)
+    // Grouped like/boost notification: "favorited_by"/"reblogged_by" (or "") — tap
+    // opens the list of everyone in the group instead of the thread.
+    val groupActors: String,
+    val favoritesCount: Int, // >0 -> "See who favorited" is offered
+    val boostsCount: Int,    // >0 -> "See who boosted" is offered
 )
 
 /** A media attachment to view (media_open, or an item in a media_picker). */
@@ -360,6 +366,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                 isMine = r.optBoolean("is_mine"),
                                 hasMedia = r.optBoolean("has_media"),
                                 isReply = r.optBoolean("is_reply"),
+                                muted = r.optBoolean("muted"),
+                                groupActors = r.optString("group_actors"),
+                                favoritesCount = r.optInt("favorites_count"),
+                                boostsCount = r.optInt("boosts_count"),
                             )
                         )
                     }
@@ -690,7 +700,16 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleBoost(id: String) = core.dispatch("toggle_boost") { put("id", id) }
 
+    /** Mute/unmute the conversation (thread) a post belongs to (Mastodon). */
+    fun toggleMuteConversation(id: String) =
+        core.dispatch("toggle_mute_conversation") { put("id", id) }
+
     fun openPostInfo(id: String) = core.dispatch("post_info") { put("id", id) }
+
+    /** Open a user list of everyone who favorited / boosted a post (Mastodon). */
+    fun openFavoritedBy(id: String) = core.dispatch("open_favorited_by") { put("id", id) }
+
+    fun openRebloggedBy(id: String) = core.dispatch("open_reblogged_by") { put("id", id) }
 
     // --- Media ------------------------------------------------------------
 

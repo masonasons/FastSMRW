@@ -74,6 +74,7 @@ private:
     void cmd_toggle_boost(const nlohmann::json& cmd);
     void cmd_toggle_favorite(const nlohmann::json& cmd);
     void cmd_toggle_pin_post(const nlohmann::json& cmd); // pin/unpin your own post to profile
+    void cmd_toggle_mute_conversation(const nlohmann::json& cmd); // mute/unmute a thread's notifs
     void cmd_delete_post(const nlohmann::json& cmd);     // delete your own post
     void cmd_post(const nlohmann::json& cmd);
     void cmd_compose_context(const nlohmann::json& cmd);
@@ -112,6 +113,7 @@ private:
     void emit_followed_hashtags();
     void cmd_list_trending_hashtags();                         // -> trending_hashtags event
     void cmd_open_thread(const nlohmann::json& cmd);
+    void cmd_open_status_actors(const nlohmann::json& cmd, bool boosted); // favorited/boosted-by list
     void cmd_open_user_timeline(const nlohmann::json& cmd);
     void cmd_open_user_profile(const nlohmann::json& cmd);
     // Ctrl+; : one user in the focused post -> speak their info (user template);
@@ -215,6 +217,7 @@ private:
     // Invisible navigation helpers: move the current timeline's position without a
     // visible list, emitting select_row (list follows if shown) + a spoken label.
     void invisible_step(int delta);
+    void invisible_move_unit(bool down);
     void invisible_goto_edge(bool top);
     // Fetch more posts (gap-fill / load-older) as invisible navigation nears an
     // edge, so it loads content the same way scrolling the window does.

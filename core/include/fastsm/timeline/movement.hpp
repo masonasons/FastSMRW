@@ -6,15 +6,16 @@
 #include "fastsm/models/timeline_item.hpp"
 
 // Movement units for fast keyboard navigation (Mac parity): jump by same user,
-// by conversation thread, or across a time gap. Ctrl+Left/Right pick the unit;
-// Ctrl+Up/Down jump by it.
+// by conversation thread, across a time gap, or a fixed number of items.
+// Ctrl+Left/Right pick the unit; Ctrl+Up/Down jump by it.
 
 namespace fastsm {
 
 struct MovementUnit {
-    enum class Kind { SameUser, Thread, Time };
+    enum class Kind { SameUser, Thread, Time, Count };
     Kind kind = Kind::SameUser;
     int seconds = 0; // gap for Kind::Time
+    int count = 0;   // number of items for Kind::Count
 
     std::string title() const;
 

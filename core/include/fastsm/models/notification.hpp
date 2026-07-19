@@ -26,10 +26,17 @@ struct Notification {
 
     std::string id;
     Kind type = Kind::Unknown;
-    User account; // the user who performed the action
+    User account; // the user who performed the action (the most recent, for a group)
     std::int64_t created_at = 0;
     std::shared_ptr<fastsm::Status> status; // referenced post, may be null
     Platform platform = Platform::Mastodon;
+
+    // Grouping (Mastodon 4.3+ grouped notifications). `group_key` identifies the
+    // server-side group a streamed notification belongs to (empty = ungrouped);
+    // `notifications_count` is how many actors it represents (1 = a lone
+    // notification). The UI composes "A and N others …" from account + this count.
+    std::string group_key;
+    int notifications_count = 1;
 };
 
 } // namespace fastsm

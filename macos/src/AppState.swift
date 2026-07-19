@@ -330,6 +330,9 @@ final class AppState {
     func toggleBoost(id: String) { client.send("toggle_boost", ["id": id]) }
     func toggleFavorite(id: String) { client.send("toggle_favorite", ["id": id]) }
     func togglePinPost(id: String) { client.send("toggle_pin_post", ["id": id]) }
+    func toggleMuteConversation(id: String) { client.send("toggle_mute_conversation", ["id": id]) }
+    func openFavoritedBy(id: String) { client.send("open_favorited_by", ["id": id]) }
+    func openRebloggedBy(id: String) { client.send("open_reblogged_by", ["id": id]) }
     func deletePost(id: String) { client.send("delete_post", ["id": id]) }
     func openStatus(id: String) { client.send("open_status", ["id": id]) }
     // These are invoked from menu items with ⌘/⌘⇧ key-equivalents. VoiceOver

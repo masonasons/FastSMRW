@@ -43,6 +43,7 @@
 #define IDC_COMPOSE_RECIPIENTS 252
 #define IDC_COMPOSE_MEDIA      253
 #define IDC_COMPOSE_MEDIA_STATUS 254
+#define IDC_COMPOSE_MENTION    255
 
 // Attachments dialog (add media + alt text) launched from the compose dialog.
 #define IDD_ATTACHMENTS        530
@@ -206,6 +207,9 @@
 #define IDC_POSTINFO_AUTHOR   368
 #define IDC_POSTINFO_LINKS    369
 #define IDC_POSTINFO_DELETE   705
+#define IDC_POSTINFO_MUTE     706
+#define IDC_POSTINFO_FAVBY    707
+#define IDC_POSTINFO_BOOSTBY  708
 
 #define IDD_USER_PROFILE      370
 #define IDC_PROFILE_TEXT      371

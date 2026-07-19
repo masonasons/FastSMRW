@@ -25,6 +25,7 @@ struct PlatformFeatures {
     bool hide_boosts = false; // can hide/show a followed account's boosts (Mastodon)
     bool media = false;       // attach media (with alt text) to posts
     bool follow_hashtags = false; // follow/unfollow hashtags (Mastodon)
+    bool mute_conversations = false; // mute/unmute a thread's notifications (Mastodon)
 };
 
 // A hashtag the viewer follows (Mastodon /api/v1/followed_tags): its name (no
@@ -188,6 +189,10 @@ public:
     virtual bool unpin_post(const Status&) { return false; }
     // Delete one of YOUR OWN posts. Returns success.
     virtual bool delete_post(const Status&) { return false; }
+    // Mute / unmute a conversation (stop / resume notifications about a thread).
+    // Optional: unsupported platforms (Bluesky) inherit these no-op stubs.
+    virtual bool mute_conversation(const Status&) { return false; }
+    virtual bool unmute_conversation(const Status&) { return false; }
     // Vote on a poll (choices = selected option indexes). Returns the updated poll,
     // or nullopt on failure / if unsupported.
     virtual std::optional<Poll> vote_poll(const std::string&, const std::vector<int>&) {

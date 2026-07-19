@@ -101,6 +101,12 @@ public:
     // Merge one real-time (streamed) item: prepend if new, re-sort, chime, cache.
     void ingest_realtime(TimelineItem item);
 
+    // Merge one streamed notification, collapsing it into an on-screen group (by
+    // group_key) when one exists — bumping its actor count and floating it to the
+    // top — instead of adding a duplicate row. Falls back to ingest_realtime for a
+    // brand-new group / ungrouped notification.
+    void ingest_notification(Notification n);
+
     // Max pages fetched per refresh (gap fill), from the fetch-pages setting.
     void set_max_refresh_pages(int n) { max_refresh_pages_ = n < 1 ? 1 : n; }
 
@@ -113,6 +119,10 @@ public:
     // if now unpinned, or -1 if the row isn't your own post (nothing changes).
     // `done(ok, active)` fires after the server responds (not for the -1 case).
     int toggle_pin_post(int visible_index, std::function<void(bool ok, bool active)> done = {});
+    // Mute/unmute the conversation a row's post belongs to. Returns true if now
+    // muted. `done(ok, active)` fires after the server responds.
+    bool toggle_mute_conversation(int visible_index,
+                                  std::function<void(bool ok, bool active)> done = {});
     // Replace the poll on a row's status (after voting) and refresh the view.
     void set_poll(const std::string& row_id, const Poll& poll);
     // Remove a row (e.g. a post you just deleted) and refresh + re-persist.

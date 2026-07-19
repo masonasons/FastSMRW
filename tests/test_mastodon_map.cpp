@@ -98,6 +98,41 @@ void test_mastodon_notification_mapping() {
     CHECK_EQ(n.status->text, std::string("hi"));
 }
 
+void test_mastodon_notification_group_mapping() {
+    // One entry of /api/v2/notifications' notification_groups, with side-loaded
+    // accounts + statuses resolved by id.
+    // most_recent_notification_id is a JSON *number* in the real API — the row id
+    // must come from group_key (a string), or every group collapses to one row.
+    const char* kGroup = R"JSON({
+      "group_key": "favourite-100",
+      "notifications_count": 5,
+      "type": "favourite",
+      "most_recent_notification_id": 196014,
+      "latest_page_notification_at": "2024-06-28T12:10:00.000Z",
+      "sample_account_ids": ["300", "301"],
+      "status_id": "100"
+    })JSON";
+    const json accts = json::parse(
+        R"JSON([{"id":"300","acct":"alice","username":"alice","display_name":"Alice"},
+                {"id":"301","acct":"bob","username":"bob","display_name":"Bob"}])JSON");
+    const json stats =
+        json::parse(R"JSON([{"id":"100","content":"<p>hi</p>","account":{"id":"1","acct":"me"}}])JSON");
+    std::unordered_map<std::string, const json*> amap, smap;
+    for (const auto& a : accts)
+        amap[a.value("id", std::string{})] = &a;
+    for (const auto& s : stats)
+        smap[s.value("id", std::string{})] = &s;
+
+    const Notification n = mastodon::map_notification_group(json::parse(kGroup), amap, smap);
+    CHECK_EQ(n.id, std::string("favourite-100")); // stable group_key, not the numeric recent id
+    CHECK_EQ(n.group_key, std::string("favourite-100"));
+    CHECK(n.type == Notification::Kind::Favourite);
+    CHECK_EQ(n.notifications_count, 5);
+    CHECK_EQ(n.account.display_name, std::string("Alice")); // first sample = most recent actor
+    CHECK(n.status != nullptr);
+    CHECK_EQ(n.status->text, std::string("hi"));
+}
+
 void test_mastodon_quote_mapping() {
     // Mastodon 4.4 wraps the quote as { state, quoted_status: Status }.
     const char* kQuote = R"JSON({

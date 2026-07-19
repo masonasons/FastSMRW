@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -66,6 +67,7 @@ PlatformFeatures MastodonAccount::features() const {
     f.hide_boosts = true;
     f.media = true;
     f.follow_hashtags = true;
+    f.mute_conversations = true;
     return f;
 }
 
@@ -76,7 +78,8 @@ std::vector<TimelineSource> MastodonAccount::default_timelines() const {
 std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
     return {TimelineSource::local(),     TimelineSource::federated(),
             TimelineSource::mentions(),  TimelineSource::bookmarks(),
-            TimelineSource::favorites(), TimelineSource::trends()};
+            TimelineSource::favorites(), TimelineSource::trends(),
+            TimelineSource::conversations()};
 }
 
 void MastodonAccount::load_configuration() {
@@ -308,6 +311,96 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         return page;
     }
 
+    // Grouped notifications (Mastodon 4.3+): one row per group so favourites/boosts
+    // collapse into "A and N others …". Mentions stays on v1 below (each mention is
+    // its own post row and shouldn't be grouped). Falls through to v1 if the instance
+    // is too old or the response isn't the grouped shape.
+    if (source.kind == TimelineSource::Kind::Notifications && !grouped_notifs_unsupported_) {
+        std::string url =
+            credentials_.instance_url + "/api/v2/notifications?limit=" + std::to_string(limit);
+        if (cursor.kind == CursorKind::MaxID)
+            url += "&max_id=" + cursor.value;
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = url;
+        req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+        const net::HttpResponse res = http_->send(req);
+        if (res.status == 404) {
+            grouped_notifs_unsupported_ = true; // pre-4.3 instance: use v1 from now on
+        } else if (res.ok()) {
+            try {
+                const json j = json::parse(res.body);
+                if (j.is_object() && j.contains("notification_groups")) {
+                    // Side-loaded accounts/statuses, indexed by id for the group mapper.
+                    std::unordered_map<std::string, const json*> accounts, statuses;
+                    if (auto a = j.find("accounts"); a != j.end() && a->is_array())
+                        for (const auto& e : *a)
+                            accounts[e.value("id", std::string{})] = &e;
+                    if (auto s = j.find("statuses"); s != j.end() && s->is_array())
+                        for (const auto& e : *s)
+                            statuses[e.value("id", std::string{})] = &e;
+                    std::string page_min; // oldest notification id on this page (a string)
+                    for (const auto& g : j["notification_groups"]) {
+                        if (auto it = g.find("page_min_id"); it != g.end() && it->is_string())
+                            page_min = it->get<std::string>();
+                        page.items.push_back(
+                            TimelineItem{mastodon::map_notification_group(g, accounts, statuses)});
+                    }
+                    // Page by the Link header's rel="next" max_id; fall back to the
+                    // oldest notification id on this page (NOT the group_key row id).
+                    if (auto link = res.header("Link"))
+                        if (auto next = parse_next_max_id(*link))
+                            page.next_cursor = PageCursor::max_id(*next);
+                    if (!page.next_cursor && !page_min.empty())
+                        page.next_cursor = PageCursor::max_id(page_min);
+                    return page;
+                }
+            } catch (...) {
+            }
+        }
+        // Otherwise fall through to the v1 notifications path below (best effort).
+    }
+
+    // Direct-message conversations: one row per conversation, showing its latest
+    // message. Each row's status carries the conversation id so the feed stays one
+    // row per conversation as new messages arrive (fetch + streaming both dedupe on it).
+    if (source.kind == TimelineSource::Kind::Conversations) {
+        std::string url =
+            credentials_.instance_url + "/api/v1/conversations?limit=" + std::to_string(limit);
+        if (cursor.kind == CursorKind::MaxID)
+            url += "&max_id=" + cursor.value;
+        net::HttpRequest req;
+        req.method = "GET";
+        req.url = url;
+        req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
+        const net::HttpResponse res = http_->send(req);
+        if (!res.ok())
+            return page;
+        try {
+            const json j = json::parse(res.body);
+            if (j.is_array()) {
+                std::string last_id;
+                for (const auto& conv : j) {
+                    last_id = conv.value("id", std::string{});
+                    auto ls = conv.find("last_status");
+                    if (ls == conv.end() || !ls->is_object())
+                        continue; // an empty conversation has no message to show
+                    Status s = mastodon::map_status(*ls);
+                    s.conversation_id = last_id;
+                    s.conversation_unread = conv.value("unread", false);
+                    page.items.push_back(TimelineItem{std::move(s)});
+                }
+                if (auto link = res.header("Link"))
+                    if (auto next = parse_next_max_id(*link))
+                        page.next_cursor = PageCursor::max_id(*next);
+                if (!page.next_cursor && !last_id.empty())
+                    page.next_cursor = PageCursor::max_id(last_id); // conversations page by their id
+            }
+        } catch (...) {
+        }
+        return page;
+    }
+
     std::string path;
     std::string extra;
     switch (source.kind) {
@@ -340,6 +433,12 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::Following:
         path = "/api/v1/accounts/" + source.param + "/following";
         break;
+    case TimelineSource::Kind::FavoritedBy:
+        path = "/api/v1/statuses/" + source.param + "/favourited_by"; // rows are users
+        break;
+    case TimelineSource::Kind::BoostedBy:
+        path = "/api/v1/statuses/" + source.param + "/reblogged_by"; // rows are users
+        break;
     case TimelineSource::Kind::Hashtag:
         path = "/api/v1/timelines/tag/" + util::percent_encode(source.param);
         break;
@@ -361,6 +460,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::RemoteLocal:
     case TimelineSource::Kind::RemoteUser:
     case TimelineSource::Kind::Trends:
+    case TimelineSource::Kind::Conversations:
         break; // handled above (early return)
     }
 
@@ -732,6 +832,12 @@ bool MastodonAccount::pin_post(const Status& status) {
 }
 bool MastodonAccount::unpin_post(const Status& status) {
     return status_action(action_status_id(status), "unpin");
+}
+bool MastodonAccount::mute_conversation(const Status& status) {
+    return status_action(action_status_id(status), "mute");
+}
+bool MastodonAccount::unmute_conversation(const Status& status) {
+    return status_action(action_status_id(status), "unmute");
 }
 
 std::optional<User> MastodonAccount::fetch_profile(const std::string& id) {
@@ -1225,6 +1331,7 @@ std::optional<StreamRequest> MastodonAccount::stream_request_for(const TimelineS
     switch (source.kind) {
     case TimelineSource::Kind::Home:
     case TimelineSource::Kind::Notifications:
+    case TimelineSource::Kind::Conversations: // `conversation` events ride the user stream
         path = "user";
         break;
     case TimelineSource::Kind::Local:
@@ -1276,6 +1383,19 @@ std::optional<StreamItem> MastodonAccount::parse_stream_event(const std::string&
             return StreamItem{StreamItem::Op::Add,
                               TimelineItem{mastodon::map_notification(json::parse(data))},
                               TimelineSource::notifications(), {}};
+        }
+        if (event == "conversation") {
+            // A DM conversation gained a message: its latest message, tagged with the
+            // conversation id so the Conversations feed replaces that one row.
+            const json conv = json::parse(data);
+            auto ls = conv.find("last_status");
+            if (ls == conv.end() || !ls->is_object())
+                return std::nullopt; // nothing to show
+            Status s = mastodon::map_status(*ls);
+            s.conversation_id = conv.value("id", std::string{});
+            s.conversation_unread = conv.value("unread", false);
+            return StreamItem{StreamItem::Op::Add, TimelineItem{std::move(s)},
+                              TimelineSource::conversations(), {}};
         }
     } catch (...) {
         // Malformed payload — ignore this event.

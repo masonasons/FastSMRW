@@ -37,6 +37,8 @@ public:
     bool pin_post(const Status& status) override;
     bool unpin_post(const Status& status) override;
     bool delete_post(const Status& status) override;
+    bool mute_conversation(const Status& status) override;
+    bool unmute_conversation(const Status& status) override;
     std::optional<Poll> vote_poll(const std::string& poll_id,
                                   const std::vector<int>& choices) override;
 
@@ -108,6 +110,9 @@ private:
     User me_;
     net::IHttpClient* http_;
     int max_chars_;
+    // Set once we learn this instance predates grouped notifications (/api/v2/
+    // notifications 404s) so we stop probing v2 and go straight to v1.
+    bool grouped_notifs_unsupported_ = false;
 };
 
 } // namespace fastsm

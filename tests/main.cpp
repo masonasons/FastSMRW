@@ -25,6 +25,7 @@ void test_truncate_mentions();
 // From test_mastodon_map.cpp
 void test_mastodon_status_mapping();
 void test_mastodon_notification_mapping();
+void test_mastodon_notification_group_mapping();
 void test_mastodon_quote_mapping();
 void test_mark_remote();
 void test_remote_timeline_source();
@@ -47,6 +48,7 @@ void test_presenter_compact();
 void test_presenter_boost_compact();
 void test_presenter_accessibility_all_fields();
 void test_presenter_accessibility_default_config();
+void test_presenter_grouped_notification();
 void test_presenter_cw_modes();
 void test_presenter_demojify_and_mentions();
 void test_presenter_wrap_and_separator();
@@ -130,6 +132,7 @@ int main() {
     test_mastodon_status_mapping();
     test_mastodon_quote_mapping();
     test_mastodon_notification_mapping();
+    test_mastodon_notification_group_mapping();
     test_mark_remote();
     test_remote_timeline_source();
     test_form_encode();
@@ -143,6 +146,7 @@ int main() {
     test_presenter_boost_compact();
     test_presenter_accessibility_all_fields();
     test_presenter_accessibility_default_config();
+    test_presenter_grouped_notification();
     test_presenter_cw_modes();
     test_presenter_demojify_and_mentions();
     test_presenter_wrap_and_separator();

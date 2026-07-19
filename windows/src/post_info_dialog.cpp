@@ -17,7 +17,11 @@ struct Ctx {
     const std::wstring* text;
     bool quote_ok;
     bool browser_ok;
-    bool is_mine; // your own post -> the Delete button is shown
+    bool is_mine;  // your own post -> the Delete button is shown
+    bool mute_ok;  // platform supports conversation muting -> the Mute button is shown
+    bool muted;    // conversation currently muted -> the button reads "Unmute"
+    int favorites_count; // >0 -> the "View Favorited" button is shown (with the count)
+    int boosts_count;    // >0 -> the "View Reposters" button is shown (with the count)
     const PollInfo* poll;
     HWND poll_list = nullptr; // LISTBOX (single) or checklist LISTVIEW (multi)
     PostInfoResult result;
@@ -128,6 +132,22 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         // Delete is only for your own posts; hide it entirely otherwise.
         if (!c->is_mine)
             ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_DELETE), SW_HIDE);
+        // Mute Conversation only on platforms that support it; label reflects state.
+        if (!c->mute_ok)
+            ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_MUTE), SW_HIDE);
+        else if (c->muted)
+            SetDlgItemTextW(dlg, IDC_POSTINFO_MUTE, L"Unm&ute Conversation");
+        // View Favorited / Reposters: shown with the count only when someone has.
+        if (c->favorites_count > 0)
+            SetDlgItemTextW(dlg, IDC_POSTINFO_FAVBY,
+                            (L"View Fa&vorited (" + std::to_wstring(c->favorites_count) + L")").c_str());
+        else
+            ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_FAVBY), SW_HIDE);
+        if (c->boosts_count > 0)
+            SetDlgItemTextW(dlg, IDC_POSTINFO_BOOSTBY,
+                            (L"View Re&posters (" + std::to_wstring(c->boosts_count) + L")").c_str());
+        else
+            ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_BOOSTBY), SW_HIDE);
         build_poll_controls(dlg, c);
         SetFocus(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // read the post immediately
         return FALSE;                                 // focus set explicitly
@@ -180,6 +200,15 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_POSTINFO_DELETE:
             finish(PostInfoAction::Delete);
             return TRUE;
+        case IDC_POSTINFO_MUTE:
+            finish(PostInfoAction::MuteConversation);
+            return TRUE;
+        case IDC_POSTINFO_FAVBY:
+            finish(PostInfoAction::ViewFavoritedBy);
+            return TRUE;
+        case IDC_POSTINFO_BOOSTBY:
+            finish(PostInfoAction::ViewBoostedBy);
+            return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);
             return TRUE;
@@ -193,9 +222,11 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
-                                     bool quote_ok, bool browser_ok, bool is_mine,
+                                     bool quote_ok, bool browser_ok, bool is_mine, bool mute_ok,
+                                     bool muted, int favorites_count, int boosts_count,
                                      const PollInfo& poll) {
-    Ctx ctx{&text, quote_ok, browser_ok, is_mine, &poll, nullptr, {}};
+    Ctx ctx{&text,  quote_ok, browser_ok,      is_mine,        mute_ok, muted,
+            favorites_count, boosts_count, &poll, nullptr, {}};
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_POST_INFO), parent, Proc,
                     reinterpret_cast<LPARAM>(&ctx));
     return ctx.result;

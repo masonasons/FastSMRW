@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "fastsm/util/date_parsing.hpp"
 #include "fastsm/util/html_stripper.hpp"
@@ -138,6 +139,7 @@ Status map_status(const json& j) {
     s.replies_count = num(j, "replies_count");
     s.favourited = boolean(j, "favourited");
     s.boosted = boolean(j, "reblogged");
+    s.muted = boolean(j, "muted"); // conversation muted for the viewer
     s.pinned = boolean(j, "pinned");
 
     if (std::string v = str(j, "in_reply_to_id"); !v.empty())
@@ -233,6 +235,35 @@ Notification map_notification(const json& j) {
     n.created_at = date(j, "created_at");
     if (auto it = j.find("status"); it != j.end() && it->is_object())
         n.status = std::make_shared<Status>(map_status(*it));
+    n.group_key = str(j, "group_key"); // 4.3+: lets a streamed one merge into its group
+    return n;
+}
+
+Notification map_notification_group(const json& group,
+                                    const std::unordered_map<std::string, const json*>& accounts,
+                                    const std::unordered_map<std::string, const json*>& statuses) {
+    Notification n;
+    n.platform = Platform::Mastodon;
+    n.group_key = str(group, "group_key");
+    // The group_key is a stable, unique string per group — use it as the row id.
+    // (most_recent_notification_id is a JSON *number* and changes as actors arrive,
+    // so it makes a poor id; pagination uses the Link header / page_min_id instead.)
+    n.id = n.group_key;
+    n.type = notif_kind(str(group, "type"));
+    n.notifications_count = num(group, "notifications_count", 1);
+    n.created_at = date(group, "latest_page_notification_at");
+    // sample_account_ids are newest-first; the first is the actor we name ("A").
+    if (auto it = group.find("sample_account_ids"); it != group.end() && it->is_array() &&
+                                                    !it->empty()) {
+        if (auto a = accounts.find(it->front().get<std::string>()); a != accounts.end())
+            n.account = map_user(*a->second);
+    }
+    if (auto it = group.find("status_id"); it != group.end() && it->is_string()) {
+        if (auto s = statuses.find(it->get<std::string>()); s != statuses.end())
+            n.status = std::make_shared<Status>(map_status(*s->second));
+    }
+    if (n.created_at == 0 && n.status) // no page timestamp -> at least not epoch 1970
+        n.created_at = n.status->display_status().created_at;
     return n;
 }
 

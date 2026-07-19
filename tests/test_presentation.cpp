@@ -92,6 +92,28 @@ void test_presenter_accessibility_default_config() {
     CHECK(!contains(label, "via "));       // source off by default
 }
 
+void test_presenter_grouped_notification() {
+    const std::int64_t now = 1000;
+    Notification n;
+    n.type = Notification::Kind::Favourite;
+    n.account.display_name = "Alice";
+    n.account.acct = "alice@x.social";
+    n.created_at = now - 60;
+
+    n.notifications_count = 5; // plural
+    const std::string many = present::accessibility_label(n, now);
+    CHECK(contains(many, "Alice and 4 others"));
+    CHECK(contains(many, "favorited your post"));
+
+    n.notifications_count = 2; // singular "other"
+    CHECK(contains(present::accessibility_label(n, now), "Alice and 1 other"));
+
+    n.notifications_count = 1; // ungrouped: just the actor, no "others"
+    const std::string solo = present::accessibility_label(n, now);
+    CHECK(contains(solo, "Alice"));
+    CHECK(!contains(solo, "other"));
+}
+
 // Content-warning modes: hide (body suppressed), show (both), ignore (body only).
 void test_presenter_cw_modes() {
     const std::int64_t now = 1000;

@@ -11,13 +11,16 @@ std::string MovementUnit::title() const {
         return "Same User";
     case Kind::Thread:
         return "Thread";
-    case Kind::Time:
+    case Kind::Time: {
         if (seconds % 86400 == 0) {
             const int d = seconds / 86400;
             return std::to_string(d) + (d == 1 ? " day" : " days");
         }
         const int h = seconds / 3600;
         return std::to_string(h) + (h == 1 ? " hour" : " hours");
+    }
+    case Kind::Count:
+        return std::to_string(count) + (count == 1 ? " item" : " items");
     }
     return {};
 }
@@ -27,6 +30,8 @@ std::vector<MovementUnit> MovementUnit::catalog() {
         {MovementUnit::Kind::SameUser, 0}, {MovementUnit::Kind::Thread, 0},
         {MovementUnit::Kind::Time, 3600},  {MovementUnit::Kind::Time, 2 * 3600},
         {MovementUnit::Kind::Time, 6 * 3600}, {MovementUnit::Kind::Time, 86400},
+        {MovementUnit::Kind::Count, 0, 20}, {MovementUnit::Kind::Count, 0, 50},
+        {MovementUnit::Kind::Count, 0, 100},
     };
 }
 
@@ -108,6 +113,14 @@ int destination(const std::vector<TimelineItem>& items, int index, const Movemen
             if (keys[static_cast<size_t>(i)] == key)
                 return i;
         return -1;
+    }
+    case MovementUnit::Kind::Count: {
+        int dest = index + step * unit.count;
+        if (dest < 0)
+            dest = 0;
+        if (dest > n - 1)
+            dest = n - 1;
+        return dest == index ? -1 : dest; // -1 = already at that edge
     }
     }
     return -1;
