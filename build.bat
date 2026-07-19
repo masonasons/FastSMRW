@@ -177,7 +177,7 @@ if defined ISCC (
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"

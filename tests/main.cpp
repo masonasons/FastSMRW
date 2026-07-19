@@ -92,6 +92,11 @@ void test_client_filter_media_and_me();
 void test_client_filter_text();
 void test_server_filter_metadata();
 
+// From test_timeline_refresh.cpp
+void test_refresh_fills_gap_below_streamed_top();
+void test_refresh_steady_state_stops_early();
+void test_refresh_fills_multipage_gap();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -168,6 +173,9 @@ int main() {
     test_client_filter_media_and_me();
     test_client_filter_text();
     test_server_filter_metadata();
+    test_refresh_fills_gap_below_streamed_top();
+    test_refresh_steady_state_stops_early();
+    test_refresh_fills_multipage_gap();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

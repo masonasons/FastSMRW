@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "fastsm/models/models.hpp"
@@ -43,6 +44,25 @@ public:
 
     // Client-side filter chokepoint: predicate returns true to KEEP a row.
     void set_filter(std::function<bool(const TimelineItem&)> predicate);
+
+    // --- Refresh page-scan (pure; exposed for testing) ---
+    // The decision logic behind refresh(): walk pages newest-first via
+    // `fetch(cursor)`, collecting items whose id isn't in `known`. Known items
+    // sitting ABOVE the first fresh one — a realtime-streamed post or a floated
+    // pinned post at the top — are skipped; the scan only stops once it reaches
+    // known content BELOW a fresh one (reconnected), runs out of pages, hits a
+    // short/empty page, or a full page brings nothing new. This is what lets a
+    // refresh fill the gap beneath a streamed top instead of short-circuiting on
+    // it. No threads or network, so it's unit-testable directly.
+    struct RefreshScan {
+        std::vector<TimelineItem> fresh;
+        std::vector<std::pair<std::string, PageCursor>> marks; // cold-load scrollback marks
+        std::optional<PageCursor> tail;                        // cursor past the fetched region
+        bool hit_known = false;                                // reconnected to known content
+    };
+    static RefreshScan scan_refresh(const std::unordered_set<std::string>& known, bool was_empty,
+                                    int max_pages, int fetch_limit,
+                                    const std::function<TimelinePage(const PageCursor&)>& fetch);
 
     // Global "reverse timelines" preference: when on, the visible list is flipped
     // (oldest at top, newest at bottom) for time-ordered feeds only. raw_ stays

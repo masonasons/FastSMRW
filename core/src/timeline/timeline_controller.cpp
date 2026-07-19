@@ -339,6 +339,52 @@ void TimelineController::load_cached() {
         on_change();
 }
 
+TimelineController::RefreshScan TimelineController::scan_refresh(
+    const std::unordered_set<std::string>& known, bool was_empty, int max_pages, int fetch_limit,
+    const std::function<TimelinePage(const PageCursor&)>& fetch) {
+    RefreshScan out;
+    PageCursor cursor = PageCursor::start();
+    bool seen_unknown = false; // have we collected any fresh post yet this scan?
+    for (int page = 0; page < max_pages; ++page) {
+        TimelinePage p = fetch(cursor);
+        const size_t page_size = p.items.size();
+        const std::string last_id = page_size ? p.items.back().id() : std::string{};
+        out.tail = p.next_cursor;
+        if (page_size == 0)
+            break;
+        bool page_had_unknown = false;
+        for (auto& it : p.items) {
+            if (known.find(it.id()) != known.end()) {
+                // A known id BELOW fresh posts means we've paged back to content we
+                // already have -> stop. A known id ABOVE any fresh one is a post
+                // sitting at the top that this scan didn't fetch — a realtime-
+                // streamed post or a floated pinned post — with a gap beneath it;
+                // skip past it and keep filling the gap rather than short-circuiting
+                // the whole refresh on it.
+                if (seen_unknown) {
+                    out.hit_known = true;
+                    break;
+                }
+                continue;
+            }
+            out.fresh.push_back(std::move(it));
+            seen_unknown = true;
+            page_had_unknown = true;
+        }
+        // On a cold load every page is a scrollback boundary; record its cursor.
+        if (was_empty && out.tail)
+            out.marks.push_back({last_id, *out.tail});
+        // Stop when we've reconnected to known content, run out of pages, hit a
+        // short (final) page, or a full page brought nothing new (steady state: the
+        // top is entirely known, so there's no gap to fill).
+        if (out.hit_known || !p.next_cursor || static_cast<int>(page_size) < fetch_limit ||
+            !page_had_unknown)
+            break;
+        cursor = *p.next_cursor;
+    }
+    return out;
+}
+
 void TimelineController::refresh() {
     if (source_.is_static()) // seeded rows never refresh from the network
         return;
@@ -358,34 +404,11 @@ void TimelineController::refresh() {
     const bool was_empty = raw_.empty();
 
     worker_->post([this, known = std::move(known), was_empty, kMaxRefreshPages]() mutable {
-        std::vector<TimelineItem> fresh;
-        std::vector<std::pair<std::string, PageCursor>> marks;
-        std::optional<PageCursor> tail; // cursor just past the fetched region
-        PageCursor cursor = PageCursor::start();
-        bool hit_known = false;
-        for (int page = 0; page < kMaxRefreshPages; ++page) {
-            TimelinePage p = account_->items(source_, fetch_limit_, cursor);
-            const size_t page_size = p.items.size();
-            const std::string last_id = page_size ? p.items.back().id() : std::string{};
-            tail = p.next_cursor;
-            if (page_size == 0)
-                break;
-            for (auto& it : p.items) {
-                if (known.find(it.id()) != known.end()) {
-                    hit_known = true; // reached posts we already have
-                    break;
-                }
-                fresh.push_back(std::move(it));
-            }
-            // On a cold load every page is a scrollback boundary; record its cursor.
-            if (was_empty && tail)
-                marks.push_back({last_id, *tail});
-            if (hit_known || !p.next_cursor || static_cast<int>(page_size) < fetch_limit_)
-                break;
-            cursor = *p.next_cursor;
-        }
-        main_->post([this, fresh = std::move(fresh), tail, was_empty, hit_known,
-                     marks = std::move(marks)]() mutable {
+        RefreshScan scan = scan_refresh(
+            known, was_empty, kMaxRefreshPages, fetch_limit_,
+            [this](const PageCursor& c) { return account_->items(source_, fetch_limit_, c); });
+        main_->post([this, fresh = std::move(scan.fresh), tail = scan.tail, was_empty,
+                     hit_known = scan.hit_known, marks = std::move(scan.marks)]() mutable {
             for (auto& m : marks)
                 page_marks_[m.first] = m.second;
             // The fresh posts didn't reach the cached posts -> there's a gap below

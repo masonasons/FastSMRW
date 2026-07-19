@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.4.0
+-----
+
+- Fixed: the Sent timeline now catches up on everything you posted or boosted while it wasn't updating, instead of leaving a gap that a refresh or reopen couldn't fill.
+
 0.3.9
 -----
 
