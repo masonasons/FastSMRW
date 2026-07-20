@@ -68,6 +68,7 @@ PlatformFeatures MastodonAccount::features() const {
     f.media = true;
     f.follow_hashtags = true;
     f.mute_conversations = true;
+    f.bookmarks = true;
     return f;
 }
 
@@ -806,6 +807,32 @@ bool MastodonAccount::favorite(const Status& status) {
 }
 bool MastodonAccount::unfavorite(const Status& status) {
     return status_action(action_status_id(status), "unfavourite");
+}
+bool MastodonAccount::bookmark(const Status& status) {
+    return status_action(action_status_id(status), "bookmark");
+}
+bool MastodonAccount::unbookmark(const Status& status) {
+    return status_action(action_status_id(status), "unbookmark");
+}
+bool MastodonAccount::report(const ReportDraft& r) {
+    if (r.account_id.empty())
+        return false;
+    std::vector<std::pair<std::string, std::string>> params;
+    params.push_back({"account_id", r.account_id});
+    params.push_back({"category", r.category.empty() ? "other" : r.category});
+    if (!r.comment.empty())
+        params.push_back({"comment", r.comment});
+    params.push_back({"forward", r.forward ? "true" : "false"});
+    for (const auto& sid : r.status_ids)
+        params.push_back({"status_ids[]", sid});
+    if (r.category == "violation")
+        for (const auto& rid : r.rule_ids)
+            params.push_back({"rule_ids[]", rid});
+    const std::string url = credentials_.instance_url + "/api/v1/reports";
+    std::string body;
+    long status = 0;
+    return request("POST", url, util::form_encode(params), "application/x-www-form-urlencoded", body,
+                   status);
 }
 std::optional<Poll> MastodonAccount::vote_poll(const std::string& poll_id,
                                                const std::vector<int>& choices) {

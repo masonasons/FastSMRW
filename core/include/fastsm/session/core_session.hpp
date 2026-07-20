@@ -70,9 +70,12 @@ private:
     // Persist a timeline's reading position (single writer of positions_), and the
     // core-navigation select_row emit that also remembers the position on the way out.
     void remember_position(const TimelineController* tc, const std::string& id);
+    void play_row_earcons(const TimelineController* tc, const TimelineItem& item);
     void emit_select_row(const TimelineController* tc, const std::string& id);
     void cmd_toggle_boost(const nlohmann::json& cmd);
     void cmd_toggle_favorite(const nlohmann::json& cmd);
+    void cmd_toggle_bookmark(const nlohmann::json& cmd);
+    void cmd_report(const nlohmann::json& cmd); // report a post/user to the server's moderators
     void cmd_toggle_pin_post(const nlohmann::json& cmd); // pin/unpin your own post to profile
     void cmd_toggle_mute_conversation(const nlohmann::json& cmd); // mute/unmute a thread's notifs
     void cmd_delete_post(const nlohmann::json& cmd);     // delete your own post

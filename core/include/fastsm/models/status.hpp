@@ -45,6 +45,7 @@ struct Status {
     bool pinned = false;
     bool favourited = false;
     bool boosted = false;
+    bool bookmarked = false; // saved to your bookmarks (Mastodon)
     bool muted = false; // conversation muted (you don't get notified about this thread)
     // For the Conversations (DM) timeline: the stable Mastodon conversation id this
     // post is the latest message of. Empty for ordinary posts. Lets the Conversations

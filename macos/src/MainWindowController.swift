@@ -265,6 +265,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func replyToSelection(_ sender: Any?) { postsViewController.replyToSelection(sender) }
     @objc func boostSelection(_ sender: Any?) { postsViewController.boostSelection(sender) }
     @objc func favoriteSelection(_ sender: Any?) { postsViewController.favoriteSelection(sender) }
+    @objc func bookmarkSelection(_ sender: Any?) { postsViewController.bookmarkSelection(sender) }
     @objc func quoteSelection(_ sender: Any?) { postsViewController.quoteSelection(sender) }
     @objc func openSelectionInBrowser(_ sender: Any?) {
         postsViewController.openSelectionInBrowser(sender)

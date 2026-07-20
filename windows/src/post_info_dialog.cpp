@@ -209,6 +209,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_POSTINFO_BOOSTBY:
             finish(PostInfoAction::ViewBoostedBy);
             return TRUE;
+        case IDC_POSTINFO_REPORT:
+            finish(PostInfoAction::Report);
+            return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);
             return TRUE;

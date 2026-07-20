@@ -59,19 +59,20 @@ std::string vk_to_base(DWORD vk) {
     case VK_APPS: return "apps";
     case VK_PAUSE: return "pause";
     case VK_SNAPSHOT: return "printscreen";
-    case VK_OEM_1: return ";";
-    case VK_OEM_2: return "/";
-    case VK_OEM_3: return "`";
-    case VK_OEM_4: return "[";
-    case VK_OEM_5: return "\\";
-    case VK_OEM_6: return "]";
-    case VK_OEM_7: return "'";
-    case VK_OEM_PLUS: return "=";
-    case VK_OEM_MINUS: return "-";
-    case VK_OEM_COMMA: return ",";
-    case VK_OEM_PERIOD: return ".";
-    default: return "";
+    default: break;
     }
+    // Punctuation lives on positional VK_OEM_* codes whose produced character
+    // changes by layout (US ';' is VK_OEM_1, but AZERTY and others put ';' on a
+    // different physical key). Assuming US positions here is exactly why non-US
+    // layouts failed to match ; , . ' / bindings. Resolve the character this key
+    // actually types under the FOREGROUND app's keyboard layout, then accept it if
+    // it's one of the punctuation base keys the keymap uses.
+    const HKL layout = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), nullptr));
+    const UINT ch = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, layout) & 0x7FFFFFFF; // top bit = dead key
+    if (ch < 128 && ch != 0 &&
+        std::string("/;[]\\'=,-.`").find(static_cast<char>(ch)) != std::string::npos)
+        return std::string(1, static_cast<char>(ch));
+    return "";
 }
 
 bool down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }

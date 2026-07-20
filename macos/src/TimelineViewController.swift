@@ -124,21 +124,32 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
 
     func reload() {
         loadPending = false // a fresh list arrived; allow loading again
-        // Prefer our own remembered position for this timeline (updated on every
-        // move, so it survives leaving/returning and streaming updates); fall back
-        // to the core's restored position the first time we show it.
-        let target = selectionByKey[currentKey]
-            ?? (state.currentSelectedId.isEmpty ? nil : state.currentSelectedId)
-        // Guard reloadData too: it can fire a selection change that would post a
-        // spurious note_selection for a stale row.
+        // Hold the programmatic-selection guard across this whole reload AND the next
+        // runloop turn. reloadData + selectRow trigger selection-change notifications
+        // that AppKit frequently delivers asynchronously — after this method returns
+        // and after a synchronous guard has already cleared. Without spanning the turn,
+        // that late notification reports whatever row got auto-selected (often row 0)
+        // and the core persists the top as the reading position.
         isUpdatingSelectionProgrammatically = true
         tableView.reloadData()
-        isUpdatingSelectionProgrammatically = false
         updateStatusLabel()
-        if let target, let index = rows.firstIndex(where: { $0.id == target }) {
+        // Prefer our own remembered row for this timeline (updated on every move, so it
+        // survives leaving/returning and streaming updates). If that row is gone, adopt
+        // the core's re-anchored position — it re-emits selected_id pointing at whatever
+        // now occupies the vanished row's old slot, never the top. Only fall to the edge
+        // when neither resolves (e.g. the remembered row hasn't loaded yet).
+        let tracked = selectionByKey[currentKey]
+        if let tracked, let index = rows.firstIndex(where: { $0.id == tracked }) {
+            selectRow(index)
+        } else if !state.currentSelectedId.isEmpty,
+                  let index = rows.firstIndex(where: { $0.id == state.currentSelectedId }) {
+            selectionByKey[currentKey] = state.currentSelectedId // follow the core re-anchor
             selectRow(index)
         } else if !rows.isEmpty {
             selectRow(state.currentReversed ? rows.count - 1 : 0)
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.isUpdatingSelectionProgrammatically = false
         }
     }
 
@@ -153,10 +164,14 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
     /// Purely visual selection; does not change the anchor.
     private func selectRow(_ index: Int) {
         guard rows.indices.contains(index) else { return }
+        // Save/restore rather than force false: when called from reload() the guard is
+        // already held for the runloop turn, and clearing it here would expose the
+        // coalesced post-reload selection notification.
+        let prev = isUpdatingSelectionProgrammatically
         isUpdatingSelectionProgrammatically = true
         tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         tableView.scrollRowToVisible(index)
-        isUpdatingSelectionProgrammatically = false
+        isUpdatingSelectionProgrammatically = prev
     }
 
     private func updateStatusLabel() {
@@ -183,6 +198,10 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
     @objc func favoriteSelection(_ sender: Any?) {
         guard let id = selectedRowId else { return }
         state.toggleFavorite(id: id)
+    }
+    @objc func bookmarkSelection(_ sender: Any?) {
+        guard let id = selectedRowId else { return }
+        state.toggleBookmark(id: id)
     }
     @objc func openSelectionInBrowser(_ sender: Any?) {
         guard let id = selectedRowId else { return }

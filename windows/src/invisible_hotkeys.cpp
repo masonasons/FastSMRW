@@ -55,15 +55,16 @@ bool parse_hotkey(const std::string& key, UINT& mods_out, UINT& vk_out) {
             mods |= MOD_WIN;
         else { // the single base key (keymap strings are already canonical)
             if (chunk.size() == 1) {
-                const char c = chunk[0];
-                if (c >= 'a' && c <= 'z')
-                    vk = static_cast<UINT>('A' + (c - 'a'));
-                else if (c >= '0' && c <= '9')
-                    vk = static_cast<UINT>(c);
-                else {
-                    const SHORT s = VkKeyScanW(static_cast<wchar_t>(c));
-                    if (s != -1)
-                        vk = static_cast<UINT>(s & 0xFF);
+                // Resolve the base character to a virtual-key under the ACTIVE
+                // keyboard layout instead of assuming US positions. On AZERTY and
+                // other non-US layouts the physical key that types 'w', ';', ',' etc.
+                // differs; VkKeyScanExW follows the character, not the US slot. The
+                // high byte carries the shift-state needed to type it on this layout.
+                const SHORT s = VkKeyScanExW(static_cast<wchar_t>(chunk[0]), GetKeyboardLayout(0));
+                if (s != -1) {
+                    vk = static_cast<UINT>(s & 0xFF);
+                    if (s & 0x100) // this character requires Shift on this layout
+                        mods |= MOD_SHIFT;
                 }
             } else {
                 vk = vk_for_name(chunk);

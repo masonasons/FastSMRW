@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.ProfileUi
+import me.masonasons.fastsm.ui.ReportDialog
 
 /**
  * A user's profile, driven by the core's user_profile event. [profile.text] is
@@ -47,6 +48,7 @@ fun ProfileScreen(
 ) {
     var following by remember(profile.accountId) { mutableStateOf(profile.following) }
     var requested by remember(profile.accountId) { mutableStateOf(profile.requested) }
+    var showReport by remember(profile.accountId) { mutableStateOf(false) }
 
     BackHandler(enabled = true) { onClose() }
 
@@ -96,10 +98,22 @@ fun ProfileScreen(
 
                 Button(onClick = onViewPosts) { Text("View posts") }
 
+                TextButton(onClick = { showReport = true }) { Text("Report") }
+
                 if (profile.url.isNotBlank()) {
                     TextButton(onClick = { onOpenUrl(profile.url) }) { Text("Open in browser") }
                 }
             }
         }
+    }
+
+    if (showReport) {
+        ReportDialog(
+            remote = profile.acct.contains("@"),
+            onSubmit = { category, comment, forward ->
+                viewModel.reportUser(profile.accountId, profile.acct, category, comment, forward)
+            },
+            onDismiss = { showReport = false },
+        )
     }
 }

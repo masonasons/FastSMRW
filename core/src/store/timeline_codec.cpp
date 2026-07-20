@@ -10,7 +10,7 @@ namespace {
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url. v6 added Notification group_key + notifications_count.
 // v7 added Status::filtered + tags.
-constexpr char kMagic[4] = {'F', 'S', 'C', '7'};
+constexpr char kMagic[4] = {'F', 'S', 'C', '8'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -261,6 +261,7 @@ void write_status(Writer& w, const Status& s) {
     w.boolean(s.pinned);
     w.boolean(s.favourited);
     w.boolean(s.boosted);
+    w.boolean(s.bookmarked);
     w.boolean(s.muted);
     w.str(s.conversation_id);
     w.boolean(s.conversation_unread);
@@ -326,6 +327,7 @@ Status read_status(Reader& r, int depth = 0) {
     s.pinned = r.boolean();
     s.favourited = r.boolean();
     s.boosted = r.boolean();
+    s.bookmarked = r.boolean();
     s.muted = r.boolean();
     s.conversation_id = r.str();
     s.conversation_unread = r.boolean();

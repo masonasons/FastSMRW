@@ -156,6 +156,7 @@ KeyBindings layer_keymap() {
         {"r", "Reply"},              {"b", "BoostToggle"},
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
+        {"m", "BookmarkToggle"},      // M bookmarks / unbookmarks the post
         {"p", "PinPost"},            {"t", "NewTimeline"},
         {"u", "UserTimeline"},        {"h", "FollowHashtag"},
         {"l", "FollowToggle"},        // L follows/unfollows the post author
@@ -189,6 +190,7 @@ std::string layer_help_text() {
            "N: New post\n"
            "B: Boost or unboost\n"
            "F: Like or unlike\n"
+           "M: Bookmark or remove bookmark\n"
            "P: Pin or unpin your post to your profile\n"
            "T: New timeline\n"
            "U: User's timeline\n"
@@ -308,9 +310,10 @@ const std::vector<ActionDef>& action_catalog() {
         {"BoostToggle", "Boost / Unboost", "control+shift+win+r"},
         {"LikeToggle", "Like / Unlike", "alt+win+i"},
         {"View", "Post info", "alt+win+v"},
+        {"BookmarkToggle", "Bookmark / Unbookmark", ""}, // in-app / layer M; unbound as a global hotkey
         {"Enter", "Default action (like Enter)", "alt+win+return"},
         {"SecondaryAction", "Secondary action (like Shift+Enter)", "alt+shift+win+return"},
-        {"Url", "Open link in post", ""}, // unbound by default (was alt+win+return)
+        {"Url", "Open link in post", "control+alt+win+o"},
         {"open_thread", "View thread", "alt+win+c"}, // Win8.1 keymap rebinds to control+win+t
         // --- user actions ---
         {"UserTimeline", "Open user timeline", "alt+win+u"},
@@ -327,7 +330,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"NewTimeline", "New timeline", "control+alt+win+t"}, // opens the dialog (in-app Ctrl+T)
         {"MoveTimelineUp", "Move timeline up", ""},       // unbound (in-app Shift+Up)
         {"MoveTimelineDown", "Move timeline down", ""},   // unbound (in-app Shift+Down)
-        {"TogglePin", "Pin / unpin timeline", ""},        // unbound (in-app Ctrl+P)
+        {"TogglePin", "Pin / unpin timeline", "control+alt+win+p"}, // also in-app Ctrl+P
         {"MuteTimeline", "Mute / unmute timeline sounds", ""}, // unbound (in-app Ctrl+M)
         {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
         {"MuteConversation", "Mute / unmute conversation", ""}, // unbound (Status menu / post info)

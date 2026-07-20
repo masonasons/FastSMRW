@@ -12,6 +12,10 @@ constexpr UINT WM_APP_EVENT = WM_APP + 1;
 // and deletes it after dispatching perform_action.
 constexpr UINT WM_APP_INV_ACTION = WM_APP + 2;
 
+// WM_APP_TRAYICON is the notification-area (system tray) icon's callback message;
+// the mouse event is in the low word of lParam.
+constexpr UINT WM_APP_TRAYICON = WM_APP + 3;
+
 // Single-instance activation. A second launch posts this message to the already-
 // running instance's window so it surfaces itself. RegisterWindowMessageW returns
 // the same system-wide-unique value in every process for the same string, so the

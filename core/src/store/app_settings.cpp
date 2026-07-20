@@ -51,6 +51,11 @@ AppSettings settings_from_json(const json& root) {
     settings.sounds_enabled = root.value("sounds_enabled", true);
     settings.sound_volume = root.value("sound_volume", 100);
     settings.boundary_sound = root.value("boundary_sound", true);
+    settings.earcon_image = root.value("earcon_image", true);
+    settings.earcon_media = root.value("earcon_media", true);
+    settings.earcon_mention = root.value("earcon_mention", true);
+    settings.earcon_pinned = root.value("earcon_pinned", true);
+    settings.earcon_poll = root.value("earcon_poll", true);
     settings.enter_to_send = root.value("enter_to_send", false);
     settings.soundpack = root.value("soundpack", std::string("Default"));
     if (auto it = root.find("account_soundpacks"); it != root.end() && it->is_object())
@@ -116,6 +121,11 @@ json settings_to_json(const AppSettings& settings) {
     root["sounds_enabled"] = settings.sounds_enabled;
     root["sound_volume"] = settings.sound_volume;
     root["boundary_sound"] = settings.boundary_sound;
+    root["earcon_image"] = settings.earcon_image;
+    root["earcon_media"] = settings.earcon_media;
+    root["earcon_mention"] = settings.earcon_mention;
+    root["earcon_pinned"] = settings.earcon_pinned;
+    root["earcon_poll"] = settings.earcon_poll;
     root["enter_to_send"] = settings.enter_to_send;
     root["soundpack"] = settings.soundpack;
     root["account_soundpacks"] = json::object();

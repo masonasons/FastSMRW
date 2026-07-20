@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.unit.dp
+import me.masonasons.fastsm.ui.ReportDialog
 import me.masonasons.fastsm.ui.RowUi
 
 /**
@@ -41,6 +42,7 @@ fun StatusRow(
     onViewMedia: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onToggleBoost: (String) -> Unit,
+    onToggleBookmark: (String) -> Unit,
     onToggleMuteConversation: (String) -> Unit,
     onOpenFavoritedBy: (String) -> Unit,
     onOpenRebloggedBy: (String) -> Unit,
@@ -52,14 +54,17 @@ fun StatusRow(
     onSpeakReply: (String) -> Unit,
     onJumpToReply: (String) -> Unit,
     onAddAlias: (String) -> Unit,
+    onReport: (id: String, category: String, comment: String, forward: Boolean) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showReport by remember { mutableStateOf(false) }
 
     val menuActions = buildList {
         add(MenuAction("Reply") { onReply(row.id) })
         add(MenuAction(if (row.favorited) "Unfavourite" else "Favourite") { onToggleFavorite(row.id) })
         add(MenuAction(if (row.boosted) "Unboost" else "Boost") { onToggleBoost(row.id) })
+        add(MenuAction(if (row.bookmarked) "Remove bookmark" else "Bookmark") { onToggleBookmark(row.id) })
         add(MenuAction("Quote") { onQuote(row.id) })
         if (row.hasMedia) add(MenuAction("View media") { onViewMedia(row.id) })
         add(MenuAction("View conversation") { onOpenThread(row.id) })
@@ -68,6 +73,7 @@ fun StatusRow(
         })
         if (row.favoritesCount > 0) add(MenuAction("See who favorited") { onOpenFavoritedBy(row.id) })
         if (row.boostsCount > 0) add(MenuAction("See who boosted") { onOpenRebloggedBy(row.id) })
+        add(MenuAction("Report post") { showReport = true })
         add(MenuAction("View author's posts") { onOpenAuthor(row.id) })
         add(MenuAction("View author's profile") { onOpenProfile(row.id) })
         add(MenuAction("Speak user info") { onSpeakUser(row.id) })
@@ -127,6 +133,16 @@ fun StatusRow(
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
             },
+        )
+    }
+
+    if (showReport) {
+        ReportDialog(
+            remote = false,
+            onSubmit = { category, comment, forward ->
+                onReport(row.id, category, comment, forward)
+            },
+            onDismiss = { showReport = false },
         )
     }
 }

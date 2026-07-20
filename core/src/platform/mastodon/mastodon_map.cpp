@@ -139,6 +139,7 @@ Status map_status(const json& j) {
     s.replies_count = num(j, "replies_count");
     s.favourited = boolean(j, "favourited");
     s.boosted = boolean(j, "reblogged");
+    s.bookmarked = boolean(j, "bookmarked");
     s.muted = boolean(j, "muted"); // conversation muted for the viewer
     s.pinned = boolean(j, "pinned");
 

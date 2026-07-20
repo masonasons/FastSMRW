@@ -41,6 +41,7 @@ data class RowUi(
     val text: String,
     val favorited: Boolean,
     val boosted: Boolean,
+    val bookmarked: Boolean,
     val isMine: Boolean,
     val hasMedia: Boolean,
     val isReply: Boolean,
@@ -363,6 +364,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                 text = r.optString("text"),
                                 favorited = r.optBoolean("favorited"),
                                 boosted = r.optBoolean("boosted"),
+                                bookmarked = r.optBoolean("bookmarked"),
                                 isMine = r.optBoolean("is_mine"),
                                 hasMedia = r.optBoolean("has_media"),
                                 isReply = r.optBoolean("is_reply"),
@@ -704,6 +706,27 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleFavorite(id: String) = core.dispatch("toggle_favorite") { put("id", id) }
 
     fun toggleBoost(id: String) = core.dispatch("toggle_boost") { put("id", id) }
+
+    fun toggleBookmark(id: String) = core.dispatch("toggle_bookmark") { put("id", id) }
+
+    /** Report a post to the server's moderators. */
+    fun reportPost(id: String, category: String, comment: String, forward: Boolean) =
+        core.dispatch("report") {
+            put("id", id)
+            put("category", category)
+            put("forward", forward)
+            if (comment.isNotBlank()) put("comment", comment)
+        }
+
+    /** Report a user to the server's moderators. */
+    fun reportUser(accountId: String, acct: String, category: String, comment: String, forward: Boolean) =
+        core.dispatch("report") {
+            put("account_id", accountId)
+            put("acct", acct)
+            put("category", category)
+            put("forward", forward)
+            if (comment.isNotBlank()) put("comment", comment)
+        }
 
     /** Mute/unmute the conversation (thread) a post belongs to (Mastodon). */
     fun toggleMuteConversation(id: String) =

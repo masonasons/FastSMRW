@@ -89,6 +89,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_PROFILE_LISTS:
             finish(UserProfileAction::Lists);
             return TRUE;
+        case IDC_PROFILE_REPORT:
+            finish(UserProfileAction::Report);
+            return TRUE;
         case IDCANCEL:
             EndDialog(dlg, 0);
             return TRUE;

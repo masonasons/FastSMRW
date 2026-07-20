@@ -22,6 +22,7 @@
 #include "server_filters_dialog.hpp"
 #include "media_player_window.hpp"
 #include "post_info_dialog.hpp"
+#include "report_dialog.hpp"
 #include "user_analysis_dialog.hpp"
 #include "user_profile_dialog.hpp"
 #include "settings_dialog.hpp"
@@ -47,11 +48,14 @@ enum {
     ID_ABOUT = 40010,
     ID_SETTINGS,
     ID_QUIT,
+    ID_TRAY_SHOW,
+    ID_TRAY_EXIT,
     ID_NEW_POST,
     ID_REFRESH,
     ID_REPLY,
     ID_BOOST,
     ID_FAVORITE,
+    ID_BOOKMARK,
     ID_QUOTE,
     ID_POST_INFO,
     ID_VIEW_THREAD,
@@ -229,6 +233,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_REPLY, L"&Reply\tR");
     AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tB");
     AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tF");
+    AppendMenuW(status, MF_STRING, ID_BOOKMARK, L"Book&mark\tM");
     AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tQ");
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
     AppendMenuW(status, MF_STRING, ID_VIEW_THREAD, L"View &Thread");
@@ -429,6 +434,14 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
         create_children();
+        add_tray_icon(); // notification-area icon: unhide the window / exit
+        return 0;
+
+    case WM_APP_TRAYICON:
+        if (LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU)
+            show_tray_menu();
+        else if (LOWORD(lp) == WM_LBUTTONDBLCLK)
+            surface_window();
         return 0;
 
     case WM_SIZE:
@@ -567,6 +580,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         // being torn down mid-keypress at process exit.
         keyhook_driver_.disable();
         hotkey_driver_.clear();
+        remove_tray_icon();
         PostQuitMessage(0);
         return 0;
     }
@@ -834,6 +848,9 @@ void MainWindow::on_view_keydown(int vk) {
     case 'F':
         do_favorite();
         break;
+    case 'M':
+        do_bookmark();
+        break;
     case 'P': { // pin/unpin your own post to your profile (core rejects others' posts)
         const std::string id = selected_id();
         if (!id.empty())
@@ -1023,16 +1040,18 @@ void MainWindow::update_menu_checks(HMENU menu) {
     // No-op unless this popup is the Status menu (which owns these items).
     if (GetMenuState(menu, ID_BOOST, MF_BYCOMMAND) == static_cast<UINT>(-1))
         return;
-    bool boosted = false, favorited = false, muted = false;
+    bool boosted = false, favorited = false, bookmarked = false, muted = false;
     Timeline* tc = current();
     const int row = selected_row();
     if (tc && row >= 0 && row < static_cast<int>(tc->rows.size())) {
         boosted = tc->rows[static_cast<size_t>(row)].boosted;
         favorited = tc->rows[static_cast<size_t>(row)].favorited;
+        bookmarked = tc->rows[static_cast<size_t>(row)].bookmarked;
         muted = tc->rows[static_cast<size_t>(row)].muted;
     }
     CheckMenuItem(menu, ID_BOOST, MF_BYCOMMAND | (boosted ? MF_CHECKED : MF_UNCHECKED));
     CheckMenuItem(menu, ID_FAVORITE, MF_BYCOMMAND | (favorited ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(menu, ID_BOOKMARK, MF_BYCOMMAND | (bookmarked ? MF_CHECKED : MF_UNCHECKED));
     // Reflect the muted state in the label so it reads as a toggle.
     ModifyMenuW(menu, ID_MUTE_CONVERSATION, MF_BYCOMMAND | MF_STRING, ID_MUTE_CONVERSATION,
                 muted ? L"Unm&ute Conversation" : L"M&ute Conversation");
@@ -1068,6 +1087,15 @@ void MainWindow::do_favorite() {
         !confirm(hwnd_, L"Unfavorite this post?", L"Unfavorite"))
         return;
     dispatch_cmd({{"cmd", "toggle_favorite"}, {"id", r.id}});
+}
+
+void MainWindow::do_bookmark() {
+    Timeline* tc = current();
+    const int row = selected_row();
+    if (!tc || row < 0 || row >= static_cast<int>(tc->rows.size()))
+        return;
+    const Row& r = tc->rows[static_cast<size_t>(row)];
+    dispatch_cmd({{"cmd", "toggle_bookmark"}, {"id", r.id}});
 }
 
 void MainWindow::do_delete_post() {
@@ -1169,6 +1197,19 @@ void MainWindow::ev_post_info(const json& e) {
     case PostInfoAction::ViewBoostedBy:
         dispatch_cmd({{"cmd", "open_reblogged_by"}, {"id", id}});
         break;
+    case PostInfoAction::Report: {
+        auto g2 = enter_modal();
+        auto r = show_report_dialog(hwnd_, inst_, /*remote=*/false);
+        leave_modal(g2);
+        if (r) {
+            json cmd = {{"cmd", "report"}, {"id", id},
+                        {"category", r->category}, {"forward", r->forward}};
+            if (!r->comment.empty())
+                cmd["comment"] = r->comment;
+            dispatch_cmd(cmd);
+        }
+        break;
+    }
     case PostInfoAction::Vote:
         break; // handled above
     }
@@ -1238,6 +1279,20 @@ void MainWindow::ev_user_profile(const json& e) {
         // the checklist when they arrive.
         dispatch_cmd({{"cmd", "get_user_lists"}, {"account_id", account_id}, {"acct", acct}});
         break;
+    case UserProfileAction::Report: {
+        const bool remote = acct.find('@') != std::string::npos;
+        auto g2 = enter_modal();
+        auto r = show_report_dialog(hwnd_, inst_, remote);
+        leave_modal(g2);
+        if (r) {
+            json cmd = {{"cmd", "report"}, {"account_id", account_id}, {"acct", acct},
+                        {"category", r->category}, {"forward", r->forward}};
+            if (!r->comment.empty())
+                cmd["comment"] = r->comment;
+            dispatch_cmd(cmd);
+        }
+        break;
+    }
     }
 }
 
@@ -1852,6 +1907,17 @@ void MainWindow::handle_command(int id) {
     case ID_QUIT:
         DestroyWindow(hwnd_);
         break;
+    case ID_TRAY_SHOW:
+        if (IsWindowVisible(hwnd_)) {
+            ShowWindow(hwnd_, SW_HIDE);
+            dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", false}});
+        } else {
+            surface_window();
+        }
+        break;
+    case ID_TRAY_EXIT:
+        DestroyWindow(hwnd_);
+        break;
     case ID_NEW_POST:
         compose("new");
         break;
@@ -1866,6 +1932,9 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_FAVORITE:
         do_favorite();
+        break;
+    case ID_BOOKMARK:
+        do_bookmark();
         break;
     case ID_QUOTE:
         compose("quote");
@@ -2136,6 +2205,7 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.text = to_wide(r.value("text", std::string{}));
         row.favorited = r.value("favorited", false);
         row.boosted = r.value("boosted", false);
+        row.bookmarked = r.value("bookmarked", false);
         row.muted = r.value("muted", false);
         row.is_mine = r.value("is_mine", false);
         row.gap_after = r.value("gap_after", false);
@@ -2611,6 +2681,41 @@ void MainWindow::surface_window() {
     ShowWindow(hwnd_, IsIconic(hwnd_) ? SW_RESTORE : SW_SHOW);
     SetForegroundWindow(hwnd_);
     dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", true}});
+}
+
+void MainWindow::add_tray_icon() {
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd_;
+    nid.uID = 1;
+    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    nid.uCallbackMessage = WM_APP_TRAYICON;
+    nid.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    wcscpy_s(nid.szTip, L"FastSMRW");
+    Shell_NotifyIconW(NIM_ADD, &nid);
+}
+
+void MainWindow::remove_tray_icon() {
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd_;
+    nid.uID = 1;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+}
+
+void MainWindow::show_tray_menu() {
+    HMENU menu = CreatePopupMenu();
+    const bool visible = IsWindowVisible(hwnd_);
+    AppendMenuW(menu, MF_STRING, ID_TRAY_SHOW, visible ? L"&Hide FastSMRW" : L"&Show FastSMRW");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, L"E&xit");
+    POINT pt;
+    GetCursorPos(&pt);
+    // Foreground the window first, per the documented TrackPopupMenu quirk, so the
+    // menu dismisses when the user clicks elsewhere.
+    SetForegroundWindow(hwnd_);
+    TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, nullptr);
+    DestroyMenu(menu);
 }
 
 void MainWindow::ev_media_open(const json& e) {

@@ -53,6 +53,7 @@ private:
         std::wstring text;
         bool favorited = false;
         bool boosted = false;
+        bool bookmarked = false;     // saved to bookmarks (Status menu shows a check)
         bool muted = false;          // conversation muted (Status menu shows a check)
         bool is_mine = false;        // your own post (can be deleted)
         bool gap_after = false;      // unloaded posts follow this row (auto-fill)
@@ -121,6 +122,7 @@ private:
     void dispatch_cmd(const nlohmann::json& cmd);
     void do_boost();
     void do_favorite();
+    void do_bookmark();
     void do_delete_post(); // delete the focused post if it's yours (confirms first)
     void update_menu_checks(HMENU menu); // check Boost/Favorite for the focused post
     void compose(const char* mode); // dispatch compose_context for the selection
@@ -134,6 +136,9 @@ private:
     void play_media_background(const std::wstring& url, const std::wstring& title);
     void stop_media(); // stop windowless background audio
     void surface_window(); // show + foreground + sync state (second-launch hand-off)
+    void add_tray_icon();    // notification-area icon (show/hide window, exit)
+    void remove_tray_icon();
+    void show_tray_menu();   // right-click tray menu
     void do_new_timeline();
     void do_add_account();
     void do_settings();

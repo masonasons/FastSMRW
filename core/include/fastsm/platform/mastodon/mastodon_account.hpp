@@ -39,6 +39,9 @@ public:
     bool delete_post(const Status& status) override;
     bool mute_conversation(const Status& status) override;
     bool unmute_conversation(const Status& status) override;
+    bool bookmark(const Status& status) override;
+    bool unbookmark(const Status& status) override;
+    bool report(const ReportDraft& draft) override;
     std::optional<Poll> vote_poll(const std::string& poll_id,
                                   const std::vector<int>& choices) override;
 

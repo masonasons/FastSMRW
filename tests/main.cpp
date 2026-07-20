@@ -99,6 +99,7 @@ void test_server_filter_metadata();
 void test_refresh_fills_gap_below_streamed_top();
 void test_refresh_steady_state_stops_early();
 void test_refresh_fills_multipage_gap();
+void test_refresh_keeps_updated_conversation();
 void test_lost_row_keeps_reading_position();
 void test_position_hint_falls_back_to_nearest();
 
@@ -184,6 +185,7 @@ int main() {
     test_refresh_fills_gap_below_streamed_top();
     test_refresh_steady_state_stops_early();
     test_refresh_fills_multipage_gap();
+    test_refresh_keeps_updated_conversation();
     test_lost_row_keeps_reading_position();
     test_position_hint_falls_back_to_nearest();
 

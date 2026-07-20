@@ -129,6 +129,7 @@ public:
     // caller can chime only on success (ok) — active = the resulting state.
     bool toggle_favorite(int visible_index, std::function<void(bool ok, bool active)> done = {});
     bool toggle_boost(int visible_index, std::function<void(bool ok, bool active)> done = {});
+    bool toggle_bookmark(int visible_index, std::function<void(bool ok, bool active)> done = {});
     // Pin/unpin one of your own posts to your profile. Returns 1 if now pinned, 0
     // if now unpinned, or -1 if the row isn't your own post (nothing changes).
     // `done(ok, active)` fires after the server responds (not for the -1 case).

@@ -1,6 +1,20 @@
 FastSMRW changelog
 ==================
 
+0.4.3
+-----
+
+- New: bookmark a post, or remove the bookmark, from the Status menu, the post menu, or the M key (Windows, Mac and Android).
+- New: short sounds now play as you move onto a post that has an image, other media, a mention of you, a poll, or that's pinned — each one can be turned off in the new Earcons settings.
+- New: report a post or a person to your server's moderators, from the post info window and the profile view (Mastodon).
+- New: a Windows notification-area (system tray) icon lets you show or hide the window and exit.
+- Changed: in the invisible interface, Ctrl+Win+Alt+O opens a post's links and Ctrl+Win+Alt+P pins or unpins the current timeline.
+- Fixed: the Conversations timeline now updates, and plays the messages sound, when an ongoing conversation gets a new message — not only when a brand-new conversation arrives.
+- Fixed: threads now follow your newest-first or oldest-first order setting, like the rest of your timelines.
+- Fixed: invisible-interface shortcuts now work on non-US keyboard layouts such as French/AZERTY.
+- Fixed: on Mac, your reading position is no longer lost almost every time a timeline refreshes or updates.
+- Fixed: accepting or declining a follow request now tells you when it can't be carried out, instead of appearing to do nothing.
+
 0.4.2
 -----
 

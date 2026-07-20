@@ -22,6 +22,7 @@ enum class PostInfoAction {
     ViewFavoritedBy,
     ViewBoostedBy,
     Vote,
+    Report,
 };
 
 // A votable poll to surface in the dialog (only sent while the viewer can still

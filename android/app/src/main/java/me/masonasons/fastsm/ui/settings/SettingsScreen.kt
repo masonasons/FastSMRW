@@ -123,6 +123,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         speechList == "notification" -> "Notifications"
         panel == "timelines" -> "Timelines"
         panel == "audio" -> "Audio"
+        panel == "earcons" -> "Earcons"
         panel == "speech" -> "Speech"
         panel == "advanced" -> "Advanced"
         panel == "confirmation" -> "Confirmation"
@@ -156,6 +157,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
                 speechList != null -> SpeechFieldEditor(s, speechList!!, viewModel)
                 panel == "timelines" -> TimelinesPanel(s, viewModel)
                 panel == "audio" -> AudioPanel(s, soundpacks, viewModel)
+                panel == "earcons" -> EarconsPanel(s, viewModel)
                 panel == "speech" -> SpeechPanel(s, viewModel) { speechList = it }
                 panel == "advanced" -> AdvancedPanel(s, viewModel)
                 panel == "confirmation" -> ConfirmationPanel(s, viewModel)
@@ -172,6 +174,7 @@ private fun RootList(onOpen: (String) -> Unit) {
     listOf(
         "timelines" to "Timelines",
         "audio" to "Audio",
+        "earcons" to "Earcons",
         "speech" to "Speech",
         "advanced" to "Advanced",
         "confirmation" to "Confirmation",
@@ -231,6 +234,26 @@ private fun AudioPanel(s: JSONObject, soundpacks: List<String>, vm: CoreViewMode
     }
     SwitchRow("Play a sound at the top or bottom of a timeline (in the window)", s.optBoolean("boundary_sound")) {
         vm.updateSetting { put("boundary_sound", it) }
+    }
+}
+
+@Composable
+private fun EarconsPanel(s: JSONObject, vm: CoreViewModel) {
+    HelpText("A short sound plays as you move onto a post that has each of these. Turn off any you don't want.")
+    SwitchRow("Image (post has an image)", s.optBoolean("earcon_image", true)) {
+        vm.updateSetting { put("earcon_image", it) }
+    }
+    SwitchRow("Media (post has video, audio, or a GIF)", s.optBoolean("earcon_media", true)) {
+        vm.updateSetting { put("earcon_media", it) }
+    }
+    SwitchRow("Mention (post mentions you)", s.optBoolean("earcon_mention", true)) {
+        vm.updateSetting { put("earcon_mention", it) }
+    }
+    SwitchRow("Pinned (post is pinned to a profile)", s.optBoolean("earcon_pinned", true)) {
+        vm.updateSetting { put("earcon_pinned", it) }
+    }
+    SwitchRow("Poll (post has a poll)", s.optBoolean("earcon_poll", true)) {
+        vm.updateSetting { put("earcon_poll", it) }
     }
 }
 

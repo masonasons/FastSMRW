@@ -145,6 +145,20 @@ BEGIN
                  IDC_SET_BOUNDARY, 10, 138, 224, 12
 END
 
+IDD_SET_EARCONS DIALOGEX 0, 0, 240, 180
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "Earcons"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "A short sound plays as you move onto a post that has each of these. Turn off any you don't want.",
+               -1, 10, 8, 224, 18
+    AUTOCHECKBOX "&Image (post has an image)", IDC_SET_EARCON_IMAGE, 10, 32, 224, 12
+    AUTOCHECKBOX "&Media (post has video, audio, or a GIF)", IDC_SET_EARCON_MEDIA, 10, 48, 224, 12
+    AUTOCHECKBOX "M&ention (post mentions you)", IDC_SET_EARCON_MENTION, 10, 64, 224, 12
+    AUTOCHECKBOX "&Pinned (post is pinned to a profile)", IDC_SET_EARCON_PINNED, 10, 80, 224, 12
+    AUTOCHECKBOX "P&oll (post has a poll)", IDC_SET_EARCON_POLL, 10, 96, 224, 12
+END
+
 IDD_SET_SPEECH DIALOGEX 0, 0, 240, 264
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Speech"
@@ -352,6 +366,7 @@ BEGIN
     PUSHBUTTON    "M&ute Conversation", IDC_POSTINFO_MUTE, 208, 172, 104, 14
     PUSHBUTTON    "View Fa&vorited", IDC_POSTINFO_FAVBY, 8, 192, 150, 14
     PUSHBUTTON    "View Re&posters", IDC_POSTINFO_BOOSTBY, 162, 192, 150, 14
+    PUSHBUTTON    "Re&port", IDC_POSTINFO_REPORT, 8, 214, 96, 14
     DEFPUSHBUTTON "Close", IDCANCEL, 256, 214, 56, 14
 END
 
@@ -371,7 +386,23 @@ BEGIN
     PUSHBUTTON    "&Block", IDC_PROFILE_BLOCK, 162, 150, 62, 14
     PUSHBUTTON    "Hide Boos&ts", IDC_PROFILE_BOOSTS, 228, 150, 84, 14
     PUSHBUTTON    "&Lists...", IDC_PROFILE_LISTS, 8, 176, 66, 14
+    PUSHBUTTON    "Re&port", IDC_PROFILE_REPORT, 78, 176, 66, 14
     DEFPUSHBUTTON "Close", IDCANCEL, 256, 176, 56, 14
+END
+
+IDD_REPORT DIALOGEX 0, 0, 260, 172
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Report"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT        "&Reason:", -1, 8, 8, 244, 9
+    COMBOBOX     IDC_REPORT_CATEGORY, 8, 20, 160, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT        "&Additional details (optional):", -1, 8, 42, 244, 9
+    EDITTEXT     IDC_REPORT_COMMENT, 8, 54, 244, 72,
+                 ES_MULTILINE | ES_WANTRETURN | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "&Forward this report to the user's home server", IDC_REPORT_FORWARD, 8, 132, 244, 12
+    DEFPUSHBUTTON "&Submit", IDOK, 144, 152, 52, 14
+    PUSHBUTTON   "Cancel", IDCANCEL, 200, 152, 52, 14
 END
 
 IDD_LIST_MEMBERSHIP DIALOGEX 0, 0, 240, 200

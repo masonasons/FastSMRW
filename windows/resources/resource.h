@@ -289,3 +289,19 @@
 #define IDC_THM_LIST          611
 #define IDC_THM_FOLLOW        612
 #define IDC_THM_OPEN          613
+
+// Earcons settings page (per-post navigation sounds).
+#define IDD_SET_EARCONS        620
+#define IDC_SET_EARCON_IMAGE   621
+#define IDC_SET_EARCON_MEDIA   622
+#define IDC_SET_EARCON_MENTION 623
+#define IDC_SET_EARCON_PINNED  624
+#define IDC_SET_EARCON_POLL    625
+
+// Report a post / user dialog + the Report buttons on Post Info and Profile.
+#define IDD_REPORT             626
+#define IDC_REPORT_CATEGORY    627
+#define IDC_REPORT_COMMENT     628
+#define IDC_REPORT_FORWARD     629
+#define IDC_POSTINFO_REPORT    630
+#define IDC_PROFILE_REPORT     631

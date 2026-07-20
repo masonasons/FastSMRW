@@ -63,6 +63,14 @@ final class SettingsWindowController: NSWindowController {
             }
         }
 
+        tab("Earcons", "waveform") { p in
+            p.checkbox("Image (post has an image)", key: "earcon_image", default: true)
+            p.checkbox("Media (post has video, audio, or a GIF)", key: "earcon_media", default: true)
+            p.checkbox("Mention (post mentions you)", key: "earcon_mention", default: true)
+            p.checkbox("Pinned (post is pinned to a profile)", key: "earcon_pinned", default: true)
+            p.checkbox("Poll (post has a poll)", key: "earcon_poll", default: true)
+        }
+
         tab("Speech", "text.bubble") { p in
             p.popup("Content warnings:", options: [("Hide post text", "hide"),
                                                    ("Show warning, then text", "show"),

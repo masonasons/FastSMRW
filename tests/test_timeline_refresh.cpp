@@ -15,6 +15,14 @@ TimelineItem mkitem(const std::string& id) {
     s.id = id;
     return TimelineItem{std::move(s)};
 }
+// A conversation row: a status whose conversation_id is set (its id() is stable
+// "c:<convo>", but refresh_key folds in the latest message id).
+TimelineItem mkconvo(const std::string& convo, const std::string& msg) {
+    Status s;
+    s.id = msg;
+    s.conversation_id = convo;
+    return TimelineItem{std::move(s)};
+}
 // A page of statuses (newest-first) with an explicit next cursor.
 TimelinePage mkpage(std::vector<std::string> ids, std::optional<PageCursor> next) {
     TimelinePage p;
@@ -80,6 +88,31 @@ void test_refresh_fills_multipage_gap() {
     CHECK_EQ(scan.fresh.size(), size_t(10)); // g1..g10
     CHECK(scan.hit_known);
     CHECK_EQ(fetches, 2);
+}
+
+// A conversation that gained a new message must NOT be dropped by the refresh
+// dedup. Its row id ("c:k1") is stable across messages, so an id-only dedup treats
+// the updated conversation as "already have it" and leaves the buffer stale — the
+// exact "Conversations doesn't update" bug. refresh_key folds in the latest message
+// id, so the updated row reads as fresh and flows through to merge_fresh.
+void test_refresh_keeps_updated_conversation() {
+    const std::unordered_set<std::string> known = {mkconvo("k1", "m1").refresh_key(),
+                                                    mkconvo("k2", "n1").refresh_key()};
+    int fetches = 0;
+    auto fetch = [&](const PageCursor&) {
+        ++fetches;
+        TimelinePage p;
+        p.items.push_back(mkconvo("k1", "m2")); // k1 gained a newer message
+        p.items.push_back(mkconvo("k2", "n1")); // k2 unchanged -> reconnects to known
+        p.next_cursor = PageCursor::max_id("n1");
+        return p;
+    };
+    const auto scan = TimelineController::scan_refresh(known, /*was_empty=*/false,
+                                                       /*max_pages=*/5, /*fetch_limit=*/6, fetch);
+    CHECK_EQ(scan.fresh.size(), size_t(1)); // the updated conversation came through
+    if (scan.fresh.size() == 1)
+        CHECK_EQ(scan.fresh[0].refresh_key(), std::string("c:k1:m2"));
+    CHECK(scan.hit_known); // and the unchanged conversation stopped the scan
 }
 
 // Losing the row you're reading must not lose your place in the timeline. A post

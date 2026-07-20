@@ -16,7 +16,8 @@ enum class UserProfileAction {
     ToggleMute,
     ToggleBlock,
     ToggleBoosts,
-    Lists
+    Lists,
+    Report,
 };
 
 // The viewer's relationship to the user (for relationship-aware button labels).

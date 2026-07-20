@@ -87,6 +87,36 @@ class DetailSheetController: NSWindowController {
     }
 }
 
+/// Present the moderation "Report" dialog (app-modal), then submit via the core.
+/// Pass a post `id` to report a post, or `accountId`/`acct` to report a user.
+@MainActor
+func presentReport(state: AppState, id: String?, accountId: String?, acct: String, remote: Bool) {
+    let alert = NSAlert()
+    alert.messageText = "Report"
+    alert.informativeText = "This report is sent to your server's moderators."
+    let categoryTokens = ["spam", "violation", "legal", "other"]
+    let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 25))
+    popup.addItems(withTitles: ["It's spam", "It breaks a server rule",
+                                "It's illegal content", "Something else"])
+    let comment = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 22))
+    comment.placeholderString = "Additional details (optional)"
+    let forward = NSButton(checkboxWithTitle: "Forward to the user's home server",
+                           target: nil, action: nil)
+    forward.state = remote ? .on : .off
+    let stack = NSStackView(views: [popup, comment, forward])
+    stack.orientation = .vertical
+    stack.alignment = .leading
+    stack.spacing = 8
+    stack.frame = NSRect(x: 0, y: 0, width: 300, height: 92)
+    alert.accessoryView = stack
+    alert.addButton(withTitle: "Submit")
+    alert.addButton(withTitle: "Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    let category = categoryTokens[max(0, min(popup.indexOfSelectedItem, categoryTokens.count - 1))]
+    state.report(id: id, accountId: accountId, acct: acct,
+                 category: category, comment: comment.stringValue, forward: forward.state == .on)
+}
+
 /// Post Info — review a post and act on it.
 @MainActor
 final class PostInfoWindowController: DetailSheetController {
@@ -134,6 +164,10 @@ final class PostInfoWindowController: DetailSheetController {
                 self?.dismiss(); state.openStatus(id: id)
             }))
         }
+        buttons.append(("Report", false, { [weak self] in
+            self?.dismiss()
+            presentReport(state: state, id: id, accountId: nil, acct: "", remote: false)
+        }))
         buttons.append(("Close", true, { [weak self] in self?.dismiss() }))
         configure(title: "Post Info", body: info.text, buttons: buttons)
     }
@@ -255,6 +289,11 @@ final class UserProfileWindowController: DetailSheetController {
                 self?.dismiss(); NSWorkspace.shared.open(link)
             }))
         }
+        buttons.append(("Report", false, { [weak self] in
+            self?.dismiss()
+            presentReport(state: state, id: nil, accountId: accountId, acct: acct,
+                          remote: acct.contains("@"))
+        }))
         buttons.append(("Close", true, { [weak self] in self?.dismiss() }))
         configure(title: "User: @\(acct)", body: profile.text, buttons: buttons)
     }

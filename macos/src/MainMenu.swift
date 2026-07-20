@@ -72,6 +72,7 @@ enum MainMenu {
         add("Reply", #selector(MainWindowController.replyToSelection(_:)), "r")
         add("Boost", #selector(MainWindowController.boostSelection(_:)), "b")
         add("Favorite", #selector(MainWindowController.favoriteSelection(_:)), "f")
+        add("Bookmark", #selector(MainWindowController.bookmarkSelection(_:)), "m")
         add("Quote", #selector(MainWindowController.quoteSelection(_:)), "q")
         add("Edit", #selector(MainWindowController.editSelection(_:)), "e")
         let delete = statusMenu.addItem(withTitle: "Delete Post",

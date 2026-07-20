@@ -26,6 +26,20 @@ struct PlatformFeatures {
     bool media = false;       // attach media (with alt text) to posts
     bool follow_hashtags = false; // follow/unfollow hashtags (Mastodon)
     bool mute_conversations = false; // mute/unmute a thread's notifications (Mastodon)
+    bool bookmarks = false;          // save/unsave a post to your bookmarks (Mastodon)
+};
+
+// A moderation report. account_id is required; status_ids optionally names specific
+// posts. category is "spam" | "violation" | "legal" | "other"; forward sends the
+// report on to the user's remote instance (Mastodon). rule_ids apply only when
+// category == "violation".
+struct ReportDraft {
+    std::string account_id;
+    std::vector<std::string> status_ids;
+    std::string comment;
+    std::string category = "other";
+    bool forward = false;
+    std::vector<std::string> rule_ids;
 };
 
 // A hashtag the viewer follows (Mastodon /api/v1/followed_tags): its name (no
@@ -193,6 +207,14 @@ public:
     // Optional: unsupported platforms (Bluesky) inherit these no-op stubs.
     virtual bool mute_conversation(const Status&) { return false; }
     virtual bool unmute_conversation(const Status&) { return false; }
+    // Save / unsave a post to your bookmarks. Optional: platforms that don't
+    // support it (Bluesky) inherit these no-op stubs.
+    virtual bool bookmark(const Status&) { return false; }
+    virtual bool unbookmark(const Status&) { return false; }
+    // Report an account (and optionally specific posts) to the server's moderators.
+    // category is "spam" | "violation" | "legal" | "other"; forward sends it on to
+    // the user's remote instance. Optional: unsupported platforms inherit the stub.
+    virtual bool report(const ReportDraft&) { return false; }
     // Vote on a poll (choices = selected option indexes). Returns the updated poll,
     // or nullopt on failure / if unsupported.
     virtual std::optional<Poll> vote_poll(const std::string&, const std::vector<int>&) {

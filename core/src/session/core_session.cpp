@@ -375,6 +375,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_toggle_boost(cmd);
     else if (c == "toggle_favorite")
         cmd_toggle_favorite(cmd);
+    else if (c == "toggle_bookmark")
+        cmd_toggle_bookmark(cmd);
+    else if (c == "report")
+        cmd_report(cmd);
     else if (c == "toggle_pin_post")
         cmd_toggle_pin_post(cmd);
     else if (c == "toggle_mute_conversation")
@@ -858,9 +862,50 @@ void CoreSession::remember_position(const TimelineController* tc, const std::str
     for (const auto& item : tc->items())
         if (item.id() == id) {
             slot.date = item.sort_date();
+            play_row_earcons(tc, item); // per-post navigation earcons for the row we landed on
             break;
         }
     save_positions();
+}
+
+// Short indicator sounds as the cursor lands on a post: one per attribute the post
+// carries (pinned, poll, image/other media, mentions-you). Each is independently
+// toggleable in settings; the mention cue is skipped in the mentions/notifications
+// buffers where it would be redundant. Fires only on a genuine cursor move (its sole
+// caller, remember_position, is guarded against re-selecting the same row).
+void CoreSession::play_row_earcons(const TimelineController* tc, const TimelineItem& item) {
+    const Status* s = item.actionable_status();
+    if (!s)
+        return;
+    const std::string pack = soundpack_for(tc->account());
+    if (settings_.earcon_pinned && s->pinned)
+        sound_.play_named("pinned", pack);
+    if (settings_.earcon_poll && s->poll)
+        sound_.play_named("poll", pack);
+    // An image takes priority over other media (matches FastSM), but each cue is
+    // independently toggleable.
+    bool has_image = false, has_other = false;
+    for (const auto& m : s->media_attachments) {
+        if (m.type == MediaAttachment::Kind::Image)
+            has_image = true;
+        else
+            has_other = true;
+    }
+    if (has_image) {
+        if (settings_.earcon_image)
+            sound_.play_named("image", pack);
+    } else if (has_other && settings_.earcon_media) {
+        sound_.play_named("media", pack);
+    }
+    // A post that mentions you — redundant in the mentions/notifications buffers.
+    if (settings_.earcon_mention && tc->account() && !tc->source().is_notification_timeline()) {
+        const std::string& me = tc->account()->me().id;
+        for (const auto& mn : s->mentions)
+            if (mn.id == me) {
+                sound_.play_named("mention", pack);
+                break;
+            }
+    }
 }
 
 // Tell the UI to select a row after a core-driven navigation, remembering it as
@@ -1418,8 +1463,15 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
     const std::string id = cmd.value("account_id", std::string{});
     const std::string action = cmd.value("action", std::string{});
     const std::string handle = cmd.value("acct", std::string{});
-    if (id.empty() || action.empty())
+    if (id.empty() || action.empty()) {
+        // Accepting/declining a follow request with an unresolved account id used to
+        // fail silently, reading as "Enter does nothing". Surface it instead.
+        if (action == "authorize_request" || action == "reject_request") {
+            sound_.play(sound::Earcon::Error);
+            emit_announce("Couldn't identify the follow request to act on.");
+        }
         return;
+    }
     worker_.post([this, acct, id, action, handle] {
         bool ok = false;
         if (action == "follow")
@@ -1449,6 +1501,48 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
                 return;
             }
             emit_announce(relationship_message(action, handle));
+        });
+    });
+}
+
+void CoreSession::cmd_report(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct)
+        return;
+    if (acct->platform() != Platform::Mastodon) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("Reporting isn't available on this account.");
+        return;
+    }
+    ReportDraft draft;
+    draft.account_id = cmd.value("account_id", std::string{});
+    draft.comment = cmd.value("comment", std::string{});
+    draft.category = cmd.value("category", std::string("other"));
+    draft.forward = cmd.value("forward", false);
+    // Reporting a specific post: resolve its author and include the post itself.
+    if (const std::string row = cmd.value("id", std::string{}); !row.empty()) {
+        if (TimelineController* tc = current())
+            if (const TimelineItem* item = find_item(tc, row))
+                if (const Status* s = item->actionable_status()) {
+                    if (draft.account_id.empty())
+                        draft.account_id = s->account.id;
+                    draft.status_ids.push_back(s->id);
+                }
+    }
+    if (auto it = cmd.find("status_ids"); it != cmd.end() && it->is_array())
+        for (const auto& sid : *it)
+            if (sid.is_string())
+                draft.status_ids.push_back(sid.get<std::string>());
+    if (draft.account_id.empty()) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("Couldn't identify who to report.");
+        return;
+    }
+    worker_.post([this, acct, draft] {
+        const bool ok = acct->report(draft);
+        loop_.post([this, ok] {
+            sound_.play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
+            emit_announce(ok ? "Report submitted" : "Report failed");
         });
     });
 }
@@ -2175,6 +2269,29 @@ void CoreSession::cmd_toggle_favorite(const json& cmd) {
     tc->toggle_favorite(idx, [this](bool ok, bool active) {
         sound_.play(!ok ? sound::Earcon::Error
                         : (active ? sound::Earcon::Favorite : sound::Earcon::Unfavorite));
+    });
+}
+
+void CoreSession::cmd_toggle_bookmark(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc || !tc->account())
+        return;
+    if (!tc->account()->features().bookmarks) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("Bookmarks aren't supported on this account.");
+        return;
+    }
+    const int idx = tc->visible_index_of(cmd.value("id", std::string{}));
+    if (idx < 0)
+        return;
+    // Chime only once the server confirms the (un)bookmark.
+    tc->toggle_bookmark(idx, [this](bool ok, bool active) {
+        if (!ok) {
+            sound_.play(sound::Earcon::Error);
+            return;
+        }
+        sound_.play(active ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+        emit_announce(active ? "Bookmarked" : "Bookmark removed");
     });
 }
 
@@ -3048,6 +3165,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_boost({{"id", row}});
     if (a == "LikeToggle")
         return cmd_toggle_favorite({{"id", row}});
+    if (a == "BookmarkToggle")
+        return cmd_toggle_bookmark({{"id", row}});
     if (a == "PinPost")
         return cmd_toggle_pin_post({{"id", row}});
     if (a == "MuteConversation")
@@ -3945,6 +4064,7 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
     if (const Status* s = item.actionable_status()) {
         r["favorited"] = s->favourited;
         r["boosted"] = s->boosted;
+        r["bookmarked"] = s->bookmarked;
         if (s->favourites_count > 0)
             r["favorites_count"] = s->favourites_count; // gates "See who favorited"
         if (s->boosts_count > 0)

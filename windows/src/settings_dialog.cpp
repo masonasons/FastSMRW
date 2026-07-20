@@ -198,6 +198,34 @@ INT_PTR CALLBACK AudioProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     return FALSE;
 }
 
+INT_PTR CALLBACK EarconsProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        Ctx* ctx = on_init(dlg, lp);
+        checked(dlg, IDC_SET_EARCON_IMAGE, ctx->settings.earcon_image);
+        checked(dlg, IDC_SET_EARCON_MEDIA, ctx->settings.earcon_media);
+        checked(dlg, IDC_SET_EARCON_MENTION, ctx->settings.earcon_mention);
+        checked(dlg, IDC_SET_EARCON_PINNED, ctx->settings.earcon_pinned);
+        checked(dlg, IDC_SET_EARCON_POLL, ctx->settings.earcon_poll);
+        return TRUE;
+    }
+    case WM_NOTIFY:
+        if (is_apply(lp)) {
+            Ctx* ctx = ctx_of(dlg);
+            ctx->settings.earcon_image = is_checked(dlg, IDC_SET_EARCON_IMAGE);
+            ctx->settings.earcon_media = is_checked(dlg, IDC_SET_EARCON_MEDIA);
+            ctx->settings.earcon_mention = is_checked(dlg, IDC_SET_EARCON_MENTION);
+            ctx->settings.earcon_pinned = is_checked(dlg, IDC_SET_EARCON_PINNED);
+            ctx->settings.earcon_poll = is_checked(dlg, IDC_SET_EARCON_POLL);
+            ctx->applied = true;
+            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 // --- Reusable "Speech Details" modal: a checked, reorderable field list ---
 
 void swap_speech_items(HWND list, int a, int b) {
@@ -782,6 +810,7 @@ std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
         make_page(inst, IDD_SET_GENERAL, GeneralProc, &ctx),
         make_page(inst, IDD_SET_TIMELINES, TimelinesProc, &ctx),
         make_page(inst, IDD_SET_AUDIO, AudioProc, &ctx),
+        make_page(inst, IDD_SET_EARCONS, EarconsProc, &ctx),
         make_page(inst, IDD_SET_SPEECH, SpeechProc, &ctx),
         make_page(inst, IDD_SET_ADVANCED, AdvancedProc, &ctx),
         make_page(inst, IDD_SET_CONFIRM, ConfirmProc, &ctx),

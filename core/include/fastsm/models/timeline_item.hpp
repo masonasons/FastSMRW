@@ -38,6 +38,19 @@ struct TimelineItem {
         return {};
     }
 
+    // Content-sensitive identity for the refresh dedup. A conversation row keeps a
+    // STABLE id() ("c:" + conversation_id) even when a new message arrives, so the
+    // id-only refresh dedup would treat an updated conversation as "already have it"
+    // and drop it — leaving the buffer stale. Fold the latest message id into the
+    // key so a conversation that gained a message reads as fresh and flows through
+    // to merge_fresh (which then replaces the row in place). For every other row
+    // this equals id().
+    std::string refresh_key() const {
+        if (const auto* s = std::get_if<Status>(&value); s && !s->conversation_id.empty())
+            return "c:" + s->conversation_id + ":" + s->id; // conversation + latest message
+        return id();
+    }
+
     // The status this row carries: itself, or a notification's referenced post.
     const Status* status() const {
         if (const auto* s = std::get_if<Status>(&value))

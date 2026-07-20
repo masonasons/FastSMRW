@@ -90,10 +90,17 @@ void TimelineController::rebuild_visible() {
             continue; // a duplicate id already made it in
         visible_.push_back(item);
     }
-    // raw_ is canonical newest-first; flip the projection for time-ordered feeds
-    // when the reverse preference is on, so the UI reads oldest-first. Pinned posts
-    // stay pinned at the very top, so only the non-pinned tail is reversed.
-    if (reversed_ && source_.is_time_ordered()) {
+    // Flip the projection so the reading order honors the reverse preference. A
+    // normal time-ordered feed keeps raw_ newest-first and reverses when the user
+    // wants newest-at-bottom. A Thread is the exception: its raw_ is oldest-first
+    // (reply-tree order), i.e. already newest-at-bottom, so it reverses in the
+    // opposite case — when newest-at-top is wanted. Either way the thread now
+    // respects the setting instead of always rendering oldest-first. Pinned posts
+    // stay at the very top, so only the non-pinned tail is reversed.
+    const bool is_thread = source_.kind == TimelineSource::Kind::Thread;
+    const bool want_reverse =
+        is_thread ? !reversed_ : (reversed_ && source_.is_time_ordered());
+    if (want_reverse) {
         auto tail = std::find_if(visible_.begin(), visible_.end(),
                                  [](const TimelineItem& it) { return !it.is_pinned(); });
         std::reverse(tail, visible_.end());
@@ -142,6 +149,7 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
     }
     std::vector<TimelineItem> added;
     added.reserve(fresh.size());
+    int convo_updated = 0; // existing conversations that gained a newer message (chime once)
     for (auto& it : fresh) {
         if (const Notification* nn = it.notification(); nn && !nn->group_key.empty()) {
             if (auto g = group_row.find(nn->group_key); g != group_row.end()) {
@@ -150,6 +158,12 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
             }
         } else if (const Status* ss = it.status(); ss && !ss->conversation_id.empty()) {
             if (auto c = convo_row.find(ss->conversation_id); c != convo_row.end()) {
+                // A genuinely newer message (different last-status id) that will be
+                // shown should chime like any new item — replacing in place otherwise
+                // updates the row silently and reads as "not updating".
+                const Status* prev = raw_[c->second].status();
+                if (prev && prev->id != ss->id && (!filter_ || filter_(it)))
+                    ++convo_updated;
                 raw_[c->second] = std::move(it); // same conversation -> replace with its latest msg
                 continue;
             }
@@ -164,7 +178,7 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
     } else {
         // Only chime for rows that will actually be visible — e.g. a streamed
         // mention shouldn't ping when mentions are hidden from Notifications.
-        int visible_new = 0;
+        int visible_new = convo_updated;
         bool has_direct = false;
         for (const auto& it : added) {
             if (filter_ && !filter_(it))
@@ -426,7 +440,7 @@ TimelineController::RefreshScan TimelineController::scan_refresh(
             break;
         bool page_had_unknown = false;
         for (auto& it : p.items) {
-            if (known.find(it.id()) != known.end()) {
+            if (known.find(it.refresh_key()) != known.end()) {
                 // A known id BELOW fresh posts means we've paged back to content we
                 // already have -> stop. A known id ABOVE any fresh one is a post
                 // sitting at the top that this scan didn't fetch — a realtime-
@@ -472,7 +486,7 @@ void TimelineController::refresh() {
     std::unordered_set<std::string> known;
     known.reserve(raw_.size());
     for (const auto& it : raw_)
-        known.insert(it.id());
+        known.insert(it.refresh_key()); // content-sensitive: an updated conversation reads as fresh
     const bool was_empty = raw_.empty();
 
     worker_->post([this, known = std::move(known), was_empty, kMaxRefreshPages]() mutable {
@@ -687,6 +701,45 @@ bool TimelineController::toggle_favorite(int visible_index,
                     on_change();
                 if (on_error)
                     on_error(want ? "Favorite failed" : "Unfavorite failed");
+            }
+            if (done)
+                done(ok, want);
+        });
+    });
+    return want;
+}
+
+bool TimelineController::toggle_bookmark(int visible_index,
+                                         std::function<void(bool, bool)> done) {
+    if (visible_index < 0 || visible_index >= static_cast<int>(visible_.size()))
+        return false;
+    const std::string id = visible_[static_cast<size_t>(visible_index)].id();
+    TimelineItem* raw = find_raw(id);
+    if (!raw)
+        return false;
+    Status* s = raw->mutable_actionable_status();
+    if (!s)
+        return false;
+
+    const bool want = !s->bookmarked;
+    s->bookmarked = want;
+    rebuild_visible();
+    if (on_change)
+        on_change();
+
+    const Status target = *s;
+    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+        const bool ok = want ? account_->bookmark(target) : account_->unbookmark(target);
+        main_->post([this, id, want, ok, done = std::move(done)] {
+            if (!ok) {
+                if (TimelineItem* r = find_raw(id))
+                    if (Status* st = r->mutable_actionable_status())
+                        st->bookmarked = !want;
+                rebuild_visible();
+                if (on_change)
+                    on_change();
+                if (on_error)
+                    on_error(want ? "Bookmark failed" : "Unbookmark failed");
             }
             if (done)
                 done(ok, want);

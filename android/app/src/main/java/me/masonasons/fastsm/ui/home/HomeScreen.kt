@@ -192,6 +192,7 @@ fun HomeScreen(
                 onViewMedia = viewModel::playMedia,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onToggleBoost = viewModel::toggleBoost,
+                onToggleBookmark = viewModel::toggleBookmark,
                 onToggleMuteConversation = viewModel::toggleMuteConversation,
                 onOpenFavoritedBy = viewModel::openFavoritedBy,
                 onOpenRebloggedBy = viewModel::openRebloggedBy,
@@ -203,6 +204,7 @@ fun HomeScreen(
                 onSpeakReply = viewModel::speakReply,
                 onJumpToReply = viewModel::jumpToReply,
                 onAddAlias = viewModel::beginAlias,
+                onReport = viewModel::reportPost,
             )
         }
     }
@@ -487,6 +489,7 @@ private fun StatusList(
     onViewMedia: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onToggleBoost: (String) -> Unit,
+    onToggleBookmark: (String) -> Unit,
     onToggleMuteConversation: (String) -> Unit,
     onOpenFavoritedBy: (String) -> Unit,
     onOpenRebloggedBy: (String) -> Unit,
@@ -498,6 +501,7 @@ private fun StatusList(
     onSpeakReply: (String) -> Unit,
     onJumpToReply: (String) -> Unit,
     onAddAlias: (String) -> Unit,
+    onReport: (id: String, category: String, comment: String, forward: Boolean) -> Unit,
 ) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -551,6 +555,7 @@ private fun StatusList(
                 onViewMedia = onViewMedia,
                 onToggleFavorite = onToggleFavorite,
                 onToggleBoost = onToggleBoost,
+                onToggleBookmark = onToggleBookmark,
                 onToggleMuteConversation = onToggleMuteConversation,
                 onOpenFavoritedBy = onOpenFavoritedBy,
                 onOpenRebloggedBy = onOpenRebloggedBy,
@@ -562,6 +567,7 @@ private fun StatusList(
                 onSpeakReply = onSpeakReply,
                 onJumpToReply = onJumpToReply,
                 onAddAlias = onAddAlias,
+                onReport = onReport,
             )
         }
     }

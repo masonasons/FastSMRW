@@ -333,6 +333,16 @@ final class AppState {
 
     func toggleBoost(id: String) { client.send("toggle_boost", ["id": id]) }
     func toggleFavorite(id: String) { client.send("toggle_favorite", ["id": id]) }
+    func toggleBookmark(id: String) { client.send("toggle_bookmark", ["id": id]) }
+    func report(id: String?, accountId: String?, acct: String,
+                category: String, comment: String, forward: Bool) {
+        var payload: [String: Any] = ["category": category, "forward": forward]
+        if let id { payload["id"] = id }
+        if let accountId { payload["account_id"] = accountId }
+        if !acct.isEmpty { payload["acct"] = acct }
+        if !comment.isEmpty { payload["comment"] = comment }
+        client.send("report", payload)
+    }
     func togglePinPost(id: String) { client.send("toggle_pin_post", ["id": id]) }
     func toggleMuteConversation(id: String) { client.send("toggle_mute_conversation", ["id": id]) }
     func openFavoritedBy(id: String) { client.send("open_favorited_by", ["id": id]) }

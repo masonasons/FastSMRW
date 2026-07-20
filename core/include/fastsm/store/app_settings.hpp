@@ -13,6 +13,13 @@ struct AppSettings {
     bool sounds_enabled = true;
     int sound_volume = 100;     // master earcon/soundpack volume, 0-100 percent
     bool boundary_sound = true; // chime at the top/bottom of a timeline when navigating
+    // Per-post navigation earcons: a short sound as you move onto a post carrying
+    // each attribute. Each is independently toggleable (the Earcons settings).
+    bool earcon_image = true;   // post has an image attachment
+    bool earcon_media = true;   // post has other media (video / audio / GIF)
+    bool earcon_mention = true; // post mentions you (skipped in the mentions/notifications buffers)
+    bool earcon_pinned = true;  // post is pinned to a profile (yours or anyone's)
+    bool earcon_poll = true;    // post has a poll
     bool enter_to_send = false; // Return sends (else Ctrl+Return sends)
     std::string soundpack = "Default"; // global default, and the fallback per account
     // Per-account soundpack overrides, keyed by account_key ("mastodon:<id>" /
