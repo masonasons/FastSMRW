@@ -158,6 +158,7 @@ private:
     void ev_compose_context(const nlohmann::json& e);
     void ev_spawnable(const nlohmann::json& e);
     void ev_post_info(const nlohmann::json& e);
+    void ev_profile_editor(const nlohmann::json& e); // Edit Profile dialog (display name + bio)
     void ev_user_profile(const nlohmann::json& e);
     void ev_user_picker(const nlohmann::json& e);
     void ev_user_suggestions(const nlohmann::json& e); // fill the open @-mention picker

@@ -379,6 +379,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_toggle_bookmark(cmd);
     else if (c == "report")
         cmd_report(cmd);
+    else if (c == "open_profile_editor")
+        cmd_open_profile_editor(cmd);
+    else if (c == "update_profile")
+        cmd_update_profile(cmd);
     else if (c == "toggle_pin_post")
         cmd_toggle_pin_post(cmd);
     else if (c == "toggle_mute_conversation")
@@ -1543,6 +1547,64 @@ void CoreSession::cmd_report(const json& cmd) {
         loop_.post([this, ok] {
             sound_.play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
             emit_announce(ok ? "Report submitted" : "Report failed");
+        });
+    });
+}
+
+void CoreSession::cmd_open_profile_editor(const json&) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct)
+        return;
+    if (acct->platform() != Platform::Mastodon) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("Editing your profile isn't available on this account.");
+        return;
+    }
+    worker_.post([this, acct] {
+        auto src = acct->profile_source();
+        loop_.post([this, src] {
+            if (!src) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Couldn't load your profile.");
+                return;
+            }
+            json fields = json::array();
+            for (const auto& f : src->fields)
+                fields.push_back({{"name", f.name}, {"value", f.value}});
+            emit({{"event", "profile_editor"},
+                  {"display_name", src->display_name},
+                  {"note", src->note},
+                  {"locked", src->locked},
+                  {"bot", src->bot},
+                  {"discoverable", src->discoverable},
+                  {"privacy", src->privacy},
+                  {"sensitive", src->sensitive},
+                  {"max_fields", src->max_fields},
+                  {"fields", fields}});
+        });
+    });
+}
+
+void CoreSession::cmd_update_profile(const json& cmd) {
+    SocialAccount* acct = accounts_.selected();
+    if (!acct)
+        return;
+    ProfileSource p;
+    p.display_name = cmd.value("display_name", std::string{});
+    p.note = cmd.value("note", std::string{});
+    p.locked = cmd.value("locked", false);
+    p.bot = cmd.value("bot", false);
+    p.discoverable = cmd.value("discoverable", false);
+    p.privacy = cmd.value("privacy", std::string("public"));
+    p.sensitive = cmd.value("sensitive", false);
+    if (auto it = cmd.find("fields"); it != cmd.end() && it->is_array())
+        for (const auto& row : *it)
+            p.fields.push_back({row.value("name", std::string{}), row.value("value", std::string{})});
+    worker_.post([this, acct, p] {
+        const bool ok = acct->update_profile(p);
+        loop_.post([this, ok] {
+            sound_.play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
+            emit_announce(ok ? "Profile updated" : "Profile update failed");
         });
     });
 }
@@ -3177,6 +3239,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_follow_hashtag_prompt({{"id", row}});
     if (a == "ManageHashtags")
         return cmd_list_followed_hashtags();
+    if (a == "UpdateProfile")
+        return cmd_open_profile_editor({});
     if (a == "Enter") { // the configurable default action, like pressing Enter in the window
         const TimelineItem* it = tc ? find_item(tc, row) : nullptr;
         if (!it)

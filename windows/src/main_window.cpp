@@ -21,6 +21,7 @@
 #include "new_timeline_dialog.hpp"
 #include "server_filters_dialog.hpp"
 #include "media_player_window.hpp"
+#include "edit_profile_dialog.hpp"
 #include "post_info_dialog.hpp"
 #include "report_dialog.hpp"
 #include "user_analysis_dialog.hpp"
@@ -217,6 +218,7 @@ HMENU build_menu() {
     AppendMenuW(bar, MF_POPUP, reinterpret_cast<UINT_PTR>(app), L"&Application");
 
     HMENU me = CreatePopupMenu();
+    AppendMenuW(me, MF_STRING, ID_EDIT_PROFILE, L"&Edit Profile…");
     AppendMenuW(me, MF_STRING, ID_LIST_MANAGER, L"&Lists…");
     AppendMenuW(me, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
     AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
@@ -1215,6 +1217,41 @@ void MainWindow::ev_post_info(const json& e) {
     }
 }
 
+void MainWindow::ev_profile_editor(const json& e) {
+    leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
+    ProfileEdit cur;
+    cur.display_name = e.value("display_name", std::string{});
+    cur.note = e.value("note", std::string{});
+    cur.locked = e.value("locked", false);
+    cur.bot = e.value("bot", false);
+    cur.discoverable = e.value("discoverable", false);
+    cur.sensitive = e.value("sensitive", false);
+    cur.privacy = e.value("privacy", std::string("public"));
+    cur.max_fields = e.value("max_fields", 4);
+    if (e.contains("fields") && e["fields"].is_array())
+        for (const auto& f : e["fields"])
+            cur.fields.push_back({f.value("name", std::string{}), f.value("value", std::string{})});
+    const std::string keep_id = selected_id();
+    auto guard = enter_modal();
+    auto edited = show_edit_profile_dialog(hwnd_, inst_, cur);
+    restore_selection(keep_id);
+    leave_modal(guard);
+    if (!edited)
+        return;
+    json fields = json::array();
+    for (const auto& f : edited->fields)
+        fields.push_back({{"name", f.name}, {"value", f.value}});
+    dispatch_cmd({{"cmd", "update_profile"},
+                  {"display_name", edited->display_name},
+                  {"note", edited->note},
+                  {"locked", edited->locked},
+                  {"bot", edited->bot},
+                  {"discoverable", edited->discoverable},
+                  {"sensitive", edited->sensitive},
+                  {"privacy", edited->privacy},
+                  {"fields", std::move(fields)}});
+}
+
 void MainWindow::ev_user_profile(const json& e) {
     leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     const std::wstring text = to_wide(e.value("text", std::string{}));
@@ -2046,6 +2083,9 @@ void MainWindow::handle_command(int id) {
     case ID_ACCOUNT_SETTINGS:
         dispatch_cmd({{"cmd", "get_account_settings"}}); // core replies -> ev_account_settings
         break;
+    case ID_EDIT_PROFILE:
+        dispatch_cmd({{"cmd", "open_profile_editor"}}); // core replies -> ev_profile_editor
+        break;
     case ID_GO_BACK:
         dispatch_cmd({{"cmd", "go_back"}});
         break;
@@ -2095,6 +2135,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_spawnable(e);
     else if (ev == "post_info")
         ev_post_info(e);
+    else if (ev == "profile_editor")
+        ev_profile_editor(e);
     else if (ev == "user_profile")
         ev_user_profile(e);
     else if (ev == "user_picker")

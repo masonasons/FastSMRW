@@ -117,6 +117,102 @@ func presentReport(state: AppState, id: String?, accountId: String?, acct: Strin
                  category: category, comment: comment.stringValue, forward: forward.state == .on)
 }
 
+/// A top-left-origin container so the profile form can be laid out top-to-bottom.
+private final class FlippedContainer: NSView {
+    override var isFlipped: Bool { true }
+}
+
+/// Present the "Edit Profile" dialog (app-modal), prefilled from the current
+/// profile (display name, bio, metadata fields, privacy and flags), then submit.
+@MainActor
+func presentProfileEditor(state: AppState, editor: ProfileEditor) {
+    let width: CGFloat = 380
+    let rows = max(1, editor.maxFields)
+    let privacyTokens = ["public", "unlisted", "private", "direct"]
+    let container = FlippedContainer()
+    var y: CGFloat = 0
+    func addLabel(_ text: String) {
+        let l = NSTextField(labelWithString: text)
+        l.frame = NSRect(x: 0, y: y, width: width, height: 15)
+        container.addSubview(l)
+        y += 17
+    }
+
+    addLabel("Display name:")
+    let nameField = NSTextField(string: editor.displayName)
+    nameField.frame = NSRect(x: 0, y: y, width: width, height: 22)
+    container.addSubview(nameField)
+    y += 28
+
+    addLabel("Bio:")
+    let bioScroll = NSScrollView(frame: NSRect(x: 0, y: y, width: width, height: 90))
+    bioScroll.hasVerticalScroller = true
+    bioScroll.borderType = .bezelBorder
+    let bioView = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 90))
+    bioView.string = editor.note
+    bioView.isRichText = false
+    bioView.isVerticallyResizable = true
+    bioView.isHorizontallyResizable = false
+    bioView.textContainer?.widthTracksTextView = true
+    bioScroll.documentView = bioView
+    container.addSubview(bioScroll)
+    y += 96
+
+    addLabel("Default post privacy:")
+    let privacy = NSPopUpButton(frame: NSRect(x: 0, y: y, width: 180, height: 24))
+    privacy.addItems(withTitles: ["Public", "Unlisted", "Followers only", "Direct"])
+    privacy.selectItem(at: privacyTokens.firstIndex(of: editor.privacy) ?? 0)
+    container.addSubview(privacy)
+    y += 30
+
+    func addCheck(_ title: String, _ on: Bool) -> NSButton {
+        let b = NSButton(checkboxWithTitle: title, target: nil, action: nil)
+        b.state = on ? .on : .off
+        b.frame = NSRect(x: 0, y: y, width: width, height: 18)
+        container.addSubview(b)
+        y += 20
+        return b
+    }
+    let locked = addCheck("Require follow requests", editor.locked)
+    let bot = addCheck("This is a bot account", editor.bot)
+    let discoverable = addCheck("List me in the profile directory", editor.discoverable)
+    let sensitive = addCheck("Mark my media sensitive by default", editor.sensitive)
+    y += 4
+
+    addLabel("Profile fields (label and content):")
+    let nameW: CGFloat = 130
+    var fieldNames: [NSTextField] = []
+    var fieldValues: [NSTextField] = []
+    for i in 0..<rows {
+        let n = NSTextField(string: i < editor.fields.count ? editor.fields[i].name : "")
+        n.frame = NSRect(x: 0, y: y, width: nameW, height: 22)
+        let v = NSTextField(string: i < editor.fields.count ? editor.fields[i].value : "")
+        v.frame = NSRect(x: nameW + 8, y: y, width: width - nameW - 8, height: 22)
+        container.addSubview(n)
+        container.addSubview(v)
+        fieldNames.append(n)
+        fieldValues.append(v)
+        y += 26
+    }
+    container.frame = NSRect(x: 0, y: 0, width: width, height: y)
+
+    let alert = NSAlert()
+    alert.messageText = "Edit Profile"
+    alert.accessoryView = container
+    alert.addButton(withTitle: "Save")
+    alert.addButton(withTitle: "Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    var fields: [[String: String]] = []
+    for i in 0..<rows {
+        fields.append(["name": fieldNames[i].stringValue, "value": fieldValues[i].stringValue])
+    }
+    let token = privacyTokens[max(0, min(privacy.indexOfSelectedItem, privacyTokens.count - 1))]
+    state.updateProfile(displayName: nameField.stringValue, note: bioView.string,
+                        locked: locked.state == .on, bot: bot.state == .on,
+                        discoverable: discoverable.state == .on, sensitive: sensitive.state == .on,
+                        privacy: token, fields: fields)
+}
+
 /// Post Info — review a post and act on it.
 @MainActor
 final class PostInfoWindowController: DetailSheetController {

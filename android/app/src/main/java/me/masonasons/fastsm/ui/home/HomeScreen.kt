@@ -76,6 +76,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenAddTimeline: () -> Unit,
     onOpenAccountSettings: () -> Unit,
+    onEditProfile: () -> Unit,
 ) {
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val selected by viewModel.selectedAccount.collectAsStateWithLifecycle()
@@ -141,6 +142,10 @@ fun HomeScreen(
                             DropdownMenuItem(
                                 text = { Text("Trending hashtags") },
                                 onClick = { menuOpen = false; viewModel.listTrendingHashtags() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit profile") },
+                                onClick = { menuOpen = false; onEditProfile() },
                             )
                             DropdownMenuItem(
                                 text = { Text("Settings") },

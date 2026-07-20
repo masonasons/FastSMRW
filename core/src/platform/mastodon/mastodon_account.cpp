@@ -87,6 +87,8 @@ void MastodonAccount::load_configuration() {
     // Pull the instance's real maximum post length. Mastodon 4 exposes it at
     // /api/v2/instance (configuration.statuses.max_characters); older servers at
     // /api/v1/instance. Leave the default (500) if neither reports it.
+    // Also read the server's max profile metadata fields (default 4, but admins can
+    // raise MAX_PROFILE_FIELDS), exposed at configuration.accounts.max_profile_fields.
     for (const char* path : {"/api/v2/instance", "/api/v1/instance"}) {
         std::string body;
         long status = 0;
@@ -95,12 +97,20 @@ void MastodonAccount::load_configuration() {
         const json j = json::parse(body, nullptr, false);
         if (j.is_discarded())
             continue;
-        const int max =
-            j.value("configuration", json::object()).value("statuses", json::object()).value("max_characters", 0);
+        const json cfg = j.value("configuration", json::object());
+        const int max = cfg.value("statuses", json::object()).value("max_characters", 0);
+        const int fields = cfg.value("accounts", json::object()).value("max_profile_fields", 0);
+        bool got = false;
         if (max > 0) {
             max_chars_ = max;
-            return;
+            got = true;
         }
+        if (fields > 0) {
+            max_profile_fields_ = fields;
+            got = true;
+        }
+        if (got)
+            return;
     }
 }
 
@@ -834,6 +844,65 @@ bool MastodonAccount::report(const ReportDraft& r) {
     return request("POST", url, util::form_encode(params), "application/x-www-form-urlencoded", body,
                    status);
 }
+std::optional<ProfileSource> MastodonAccount::profile_source() {
+    // GET /api/v1/accounts/verify_credentials returns the raw editable source under
+    // "source" (note as plain text), plus the display name.
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/verify_credentials";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return std::nullopt;
+    try {
+        json j = json::parse(body);
+        if (!j.is_object())
+            return std::nullopt;
+        ProfileSource p;
+        p.display_name = j.value("display_name", std::string{});
+        p.locked = j.value("locked", false);
+        p.bot = j.value("bot", false);
+        p.discoverable = j.value("discoverable", false);
+        if (auto s = j.find("source"); s != j.end() && s->is_object()) {
+            p.note = s->value("note", std::string{});
+            p.privacy = s->value("privacy", std::string("public"));
+            p.sensitive = s->value("sensitive", false);
+            if (auto f = s->find("fields"); f != s->end() && f->is_array())
+                for (const auto& row : *f)
+                    p.fields.push_back({row.value("name", std::string{}),
+                                        row.value("value", std::string{})});
+        }
+        // Never expose fewer slots than the user already has filled.
+        p.max_fields = max_profile_fields_;
+        if (static_cast<int>(p.fields.size()) > p.max_fields)
+            p.max_fields = static_cast<int>(p.fields.size());
+        return p;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+bool MastodonAccount::update_profile(const ProfileSource& p) {
+    std::vector<std::pair<std::string, std::string>> params;
+    params.push_back({"display_name", p.display_name});
+    params.push_back({"note", p.note});
+    params.push_back({"locked", p.locked ? "true" : "false"});
+    params.push_back({"bot", p.bot ? "true" : "false"});
+    params.push_back({"discoverable", p.discoverable ? "true" : "false"});
+    params.push_back({"source[privacy]", p.privacy.empty() ? "public" : p.privacy});
+    params.push_back({"source[sensitive]", p.sensitive ? "true" : "false"});
+    // Send every metadata slot the editor provided (it renders the server's max, so
+    // blank slots here clear a removed field).
+    for (size_t i = 0; i < p.fields.size(); ++i) {
+        const std::string key = "fields_attributes[" + std::to_string(i) + "]";
+        params.push_back({key + "[name]", p.fields[i].name});
+        params.push_back({key + "[value]", p.fields[i].value});
+    }
+    const std::string url = credentials_.instance_url + "/api/v1/accounts/update_credentials";
+    std::string body;
+    long status = 0;
+    return request("PATCH", url, util::form_encode(params), "application/x-www-form-urlencoded",
+                   body, status);
+}
+
 std::optional<Poll> MastodonAccount::vote_poll(const std::string& poll_id,
                                                const std::vector<int>& choices) {
     if (poll_id.empty() || choices.empty())

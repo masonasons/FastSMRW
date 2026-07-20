@@ -42,6 +42,25 @@ struct ReportDraft {
     std::vector<std::string> rule_ids;
 };
 
+// One profile metadata row ("Website" / "https://…"). Mastodon allows up to 4.
+struct ProfileField {
+    std::string name;
+    std::string value;
+};
+
+// The editable source of your own profile (raw, not HTML) for the profile editor.
+struct ProfileSource {
+    std::string display_name;
+    std::string note; // bio, plain-text source
+    std::vector<ProfileField> fields; // metadata rows (up to 4)
+    bool locked = false;        // require follow requests to follow you
+    bool bot = false;           // this account is automated
+    bool discoverable = false;  // list this account in the profile directory
+    std::string privacy = "public"; // default posting visibility (source[privacy])
+    bool sensitive = false;     // mark your media as sensitive by default
+    int max_fields = 4;         // how many metadata fields the server allows
+};
+
 // A hashtag the viewer follows (Mastodon /api/v1/followed_tags): its name (no
 // '#'), canonical URL, and whether the viewer currently follows it.
 struct FollowedTag {
@@ -215,6 +234,10 @@ public:
     // category is "spam" | "violation" | "legal" | "other"; forward sends it on to
     // the user's remote instance. Optional: unsupported platforms inherit the stub.
     virtual bool report(const ReportDraft&) { return false; }
+    // Fetch the editable source of your own profile (display name + raw bio), or
+    // nullopt if unsupported. Update your display name + bio; returns success.
+    virtual std::optional<ProfileSource> profile_source() { return std::nullopt; }
+    virtual bool update_profile(const ProfileSource& /*profile*/) { return false; }
     // Vote on a poll (choices = selected option indexes). Returns the updated poll,
     // or nullopt on failure / if unsupported.
     virtual std::optional<Poll> vote_poll(const std::string&, const std::vector<int>&) {

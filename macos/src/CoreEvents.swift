@@ -140,6 +140,30 @@ struct PostInfo: Decodable {
     }
 }
 
+/// One profile metadata row (label + content).
+struct ProfileFieldItem: Decodable {
+    let name: String
+    let value: String
+}
+
+/// Your own profile's editable source (raw, not HTML), for Edit Profile.
+struct ProfileEditor: Decodable {
+    let displayName: String
+    let note: String
+    var locked = false
+    var bot = false
+    var discoverable = false
+    var sensitive = false
+    var privacy = "public"
+    var maxFields = 4
+    var fields: [ProfileFieldItem] = []
+    enum CodingKeys: String, CodingKey {
+        case note, locked, bot, discoverable, sensitive, privacy, fields
+        case displayName = "display_name"
+        case maxFields = "max_fields"
+    }
+}
+
 /// A user's profile + relationship, for the profile dialog.
 struct UserProfile: Decodable {
     let text: String
@@ -478,6 +502,7 @@ enum CoreEvent {
     case composeContext(ComposeContext)
     case spawnableTimelines(SpawnableTimelines)
     case postInfo(PostInfo)
+    case profileEditor(ProfileEditor)
     case userProfile(UserProfile)
     case userPicker(UserPicker)
     case clientFilter(ClientFilterEvent)
@@ -518,6 +543,7 @@ enum CoreEvent {
         case "spawnable_timelines":
             return decode(SpawnableTimelines.self).map(CoreEvent.spawnableTimelines)
         case "post_info": return decode(PostInfo.self).map(CoreEvent.postInfo)
+        case "profile_editor": return decode(ProfileEditor.self).map(CoreEvent.profileEditor)
         case "user_profile": return decode(UserProfile.self).map(CoreEvent.userProfile)
         case "user_picker": return decode(UserPicker.self).map(CoreEvent.userPicker)
         case "client_filter": return decode(ClientFilterEvent.self).map(CoreEvent.clientFilter)

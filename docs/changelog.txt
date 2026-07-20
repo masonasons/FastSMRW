@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.4.4
+-----
+
+- New: edit your own profile — display name, bio, up to your server's number of metadata fields, default post privacy, and the require-follow-requests / bot account / list-in-directory / mark-media-sensitive options — from "Edit Profile" in the Me (account) menu.
+
 0.4.3
 -----
 

@@ -76,6 +76,8 @@ private:
     void cmd_toggle_favorite(const nlohmann::json& cmd);
     void cmd_toggle_bookmark(const nlohmann::json& cmd);
     void cmd_report(const nlohmann::json& cmd); // report a post/user to the server's moderators
+    void cmd_open_profile_editor(const nlohmann::json& cmd); // fetch your profile -> profile_editor
+    void cmd_update_profile(const nlohmann::json& cmd);      // submit display name + bio changes
     void cmd_toggle_pin_post(const nlohmann::json& cmd); // pin/unpin your own post to profile
     void cmd_toggle_mute_conversation(const nlohmann::json& cmd); // mute/unmute a thread's notifs
     void cmd_delete_post(const nlohmann::json& cmd);     // delete your own post

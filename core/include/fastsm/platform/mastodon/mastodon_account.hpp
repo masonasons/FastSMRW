@@ -42,6 +42,8 @@ public:
     bool bookmark(const Status& status) override;
     bool unbookmark(const Status& status) override;
     bool report(const ReportDraft& draft) override;
+    std::optional<ProfileSource> profile_source() override;
+    bool update_profile(const ProfileSource& profile) override;
     std::optional<Poll> vote_poll(const std::string& poll_id,
                                   const std::vector<int>& choices) override;
 
@@ -113,6 +115,7 @@ private:
     User me_;
     net::IHttpClient* http_;
     int max_chars_;
+    int max_profile_fields_ = 4; // server's max profile metadata fields (default 4)
     // Set once we learn this instance predates grouped notifications (/api/v2/
     // notifications 404s) so we stop probing v2 and go straight to v1.
     bool grouped_notifs_unsupported_ = false;

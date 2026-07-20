@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.masonasons.fastsm.ui.CoreViewModel
+import me.masonasons.fastsm.ui.ProfileEditorDialog
 import me.masonasons.fastsm.ui.compose.ComposeScreen
 import me.masonasons.fastsm.ui.home.HomeScreen
 import me.masonasons.fastsm.ui.media.MediaScreen
@@ -75,6 +76,7 @@ private fun App(vm: CoreViewModel) {
     val profile by vm.profile.collectAsStateWithLifecycle()
     val media by vm.media.collectAsStateWithLifecycle()
     val appUpdate by vm.appUpdate.collectAsStateWithLifecycle()
+    val profileEditor by vm.profileEditor.collectAsStateWithLifecycle()
     // Show the add-account screen when there are no accounts, or when the user
     // explicitly asks to add one from the account picker.
     var addingAccount by remember { mutableStateOf(false) }
@@ -136,6 +138,20 @@ private fun App(vm: CoreViewModel) {
             onOpenSettings = { showSettings = true },
             onOpenAddTimeline = { showAddTimeline = true },
             onOpenAccountSettings = { showAccountSettings = true },
+            onEditProfile = { vm.openProfileEditor() },
+        )
+    }
+
+    // Edit Profile dialog, shown over whatever screen is active.
+    profileEditor?.let { editor ->
+        ProfileEditorDialog(
+            editor = editor,
+            onSubmit = { u ->
+                vm.updateProfile(u.displayName, u.note, u.locked, u.bot, u.discoverable,
+                    u.sensitive, u.privacy, u.fields)
+                vm.dismissProfileEditor()
+            },
+            onDismiss = { vm.dismissProfileEditor() },
         )
     }
 

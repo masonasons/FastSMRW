@@ -343,6 +343,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"Options", "Settings", "alt+win+o"},
         {"Exit", "Exit FastSMRW", "alt+shift+win+q"}, // Win8.1 keymap rebinds to control+shift+win+q
         {"AccountSettings", "Account settings", ""}, // unbound by default (in-app Ctrl+Shift+,)
+        {"UpdateProfile", "Edit your profile", ""},  // unbound by default (in-app Me menu)
         {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
         {"StopMedia", "Stop media playback", "control+alt+win+s"},
     };

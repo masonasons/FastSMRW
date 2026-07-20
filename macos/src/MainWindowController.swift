@@ -116,6 +116,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         state.onPostInfo = { [weak self] info in
             self?.presentDetail(PostInfoWindowController(state: state, info: info))
         }
+        state.onProfileEditor = { editor in
+            presentProfileEditor(state: state, editor: editor)
+        }
         state.onUserProfile = { [weak self] profile in
             self?.presentDetail(UserProfileWindowController(state: state, profile: profile))
         }
@@ -266,6 +269,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func boostSelection(_ sender: Any?) { postsViewController.boostSelection(sender) }
     @objc func favoriteSelection(_ sender: Any?) { postsViewController.favoriteSelection(sender) }
     @objc func bookmarkSelection(_ sender: Any?) { postsViewController.bookmarkSelection(sender) }
+    @objc func editProfile(_ sender: Any?) { state.openProfileEditor() }
     @objc func quoteSelection(_ sender: Any?) { postsViewController.quoteSelection(sender) }
     @objc func openSelectionInBrowser(_ sender: Any?) {
         postsViewController.openSelectionInBrowser(sender)

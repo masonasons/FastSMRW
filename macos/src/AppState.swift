@@ -39,6 +39,7 @@ final class AppState {
     var onSettings: (() -> Void)?
     var onSpawnable: (([Spawnable]) -> Void)?
     var onPostInfo: ((PostInfo) -> Void)?
+    var onProfileEditor: ((ProfileEditor) -> Void)?
     var onUserProfile: ((UserProfile) -> Void)?
     var onUserPicker: ((UserPicker) -> Void)?
     var onClientFilter: ((ClientFilter) -> Void)?
@@ -160,6 +161,8 @@ final class AppState {
             onSpawnable?(e.timelines)
         case let .postInfo(e):
             onPostInfo?(e)
+        case let .profileEditor(e):
+            onProfileEditor?(e)
         case let .userProfile(e):
             onUserProfile?(e)
         case let .userPicker(e):
@@ -334,6 +337,16 @@ final class AppState {
     func toggleBoost(id: String) { client.send("toggle_boost", ["id": id]) }
     func toggleFavorite(id: String) { client.send("toggle_favorite", ["id": id]) }
     func toggleBookmark(id: String) { client.send("toggle_bookmark", ["id": id]) }
+    func openProfileEditor() { client.send("open_profile_editor") }
+    func updateProfile(displayName: String, note: String, locked: Bool, bot: Bool,
+                       discoverable: Bool, sensitive: Bool, privacy: String,
+                       fields: [[String: String]]) {
+        client.send("update_profile", [
+            "display_name": displayName, "note": note,
+            "locked": locked, "bot": bot, "discoverable": discoverable,
+            "sensitive": sensitive, "privacy": privacy, "fields": fields,
+        ])
+    }
     func report(id: String?, accountId: String?, acct: String,
                 category: String, comment: String, forward: Bool) {
         var payload: [String: Any] = ["category": category, "forward": forward]

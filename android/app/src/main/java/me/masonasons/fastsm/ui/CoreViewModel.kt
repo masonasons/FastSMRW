@@ -115,6 +115,22 @@ data class AliasEntry(val key: String, val handle: String, val alias: String)
 /** One trending hashtag (from trending_hashtags). [following] = you already follow it. */
 data class TrendingTagUi(val name: String, val url: String, val following: Boolean)
 
+/** One profile metadata row (label + content). */
+data class ProfileFieldUi(val name: String, val value: String)
+
+/** Your own profile's editable source, for the Edit Profile dialog. */
+data class ProfileEditorUi(
+    val displayName: String,
+    val note: String,
+    val locked: Boolean,
+    val bot: Boolean,
+    val discoverable: Boolean,
+    val sensitive: Boolean,
+    val privacy: String,
+    val maxFields: Int,
+    val fields: List<ProfileFieldUi>,
+)
+
 /** A user's profile card (user_profile event). [text] is the composed profile. */
 data class ProfileUi(
     val text: String,
@@ -233,6 +249,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while a profile screen is open (from a user_profile event). */
     private val _profile = MutableStateFlow<ProfileUi?>(null)
     val profile: StateFlow<ProfileUi?> = _profile.asStateFlow()
+
+    /** Non-null while the Edit Profile dialog should be shown (profile_editor event). */
+    private val _profileEditor = MutableStateFlow<ProfileEditorUi?>(null)
+    val profileEditor: StateFlow<ProfileEditorUi?> = _profileEditor.asStateFlow()
 
     /** The core's full settings object (from the settings event), or null. */
     private val _settings = MutableStateFlow<JSONObject?>(null)
@@ -385,6 +405,27 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
             "compose_context" -> _composeContext.value = parseComposeContext(e)
             "post_result" -> _postResults.tryEmit(e.optBoolean("ok"))
+
+            "profile_editor" -> {
+                val arr = e.optJSONArray("fields")
+                val fields = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val f = arr.getJSONObject(i)
+                        add(ProfileFieldUi(f.optString("name"), f.optString("value")))
+                    }
+                }
+                _profileEditor.value = ProfileEditorUi(
+                    displayName = e.optString("display_name"),
+                    note = e.optString("note"),
+                    locked = e.optBoolean("locked"),
+                    bot = e.optBoolean("bot"),
+                    discoverable = e.optBoolean("discoverable"),
+                    sensitive = e.optBoolean("sensitive"),
+                    privacy = e.optString("privacy", "public"),
+                    maxFields = e.optInt("max_fields", 4),
+                    fields = fields,
+                )
+            }
 
             "user_picker" -> {
                 val arr = e.optJSONArray("users")
@@ -708,6 +749,26 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleBoost(id: String) = core.dispatch("toggle_boost") { put("id", id) }
 
     fun toggleBookmark(id: String) = core.dispatch("toggle_bookmark") { put("id", id) }
+
+    /** Open the Edit Profile dialog (the core replies with a profile_editor event). */
+    fun openProfileEditor() = core.dispatch("open_profile_editor")
+    fun dismissProfileEditor() { _profileEditor.value = null }
+    fun updateProfile(displayName: String, note: String, locked: Boolean, bot: Boolean,
+                      discoverable: Boolean, sensitive: Boolean, privacy: String,
+                      fields: List<ProfileFieldUi>) {
+        core.dispatch("update_profile") {
+            put("display_name", displayName)
+            put("note", note)
+            put("locked", locked)
+            put("bot", bot)
+            put("discoverable", discoverable)
+            put("sensitive", sensitive)
+            put("privacy", privacy)
+            val arr = org.json.JSONArray()
+            for (f in fields) arr.put(org.json.JSONObject().put("name", f.name).put("value", f.value))
+            put("fields", arr)
+        }
+    }
 
     /** Report a post to the server's moderators. */
     fun reportPost(id: String, category: String, comment: String, forward: Boolean) =

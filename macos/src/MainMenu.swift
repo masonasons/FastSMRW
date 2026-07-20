@@ -170,6 +170,9 @@ enum MainMenu {
                                              keyEquivalent: "a")
         addAccount.keyEquivalentModifierMask = [.command, .shift]
         accountMenu.addItem(.separator())
+        accountMenu.addItem(withTitle: "Edit Profile…",
+                            action: #selector(MainWindowController.editProfile(_:)),
+                            keyEquivalent: "")
         accountMenu.addItem(withTitle: "Followed Hashtags…",
                             action: #selector(MainWindowController.manageHashtags(_:)),
                             keyEquivalent: "")
