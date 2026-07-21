@@ -110,6 +110,15 @@ AppSettings settings_from_json(const json& root) {
         if (auto nf = it->find("notification"); nf != it->end())
             speech.notification =
                 items_from_json<NotificationSpeechField>(*nf, notification_field_from_key);
+        if (auto a = it->find("autoread"); a != it->end())
+            speech.autoread = items_from_json<StatusSpeechField>(*a, status_field_from_key);
+        if (auto c = it->find("copy_status"); c != it->end())
+            speech.copy_status = items_from_json<StatusSpeechField>(*c, status_field_from_key);
+        if (auto c = it->find("copy_user"); c != it->end())
+            speech.copy_user = items_from_json<UserSpeechField>(*c, user_field_from_key);
+        if (auto c = it->find("copy_notification"); c != it->end())
+            speech.copy_notification =
+                items_from_json<NotificationSpeechField>(*c, notification_field_from_key);
         speech.separator = it->value("separator", std::string(", "));
     }
     settings.speech = speech.normalized();
@@ -166,6 +175,10 @@ json settings_to_json(const AppSettings& settings) {
     root["speech"]["status"] = items_to_json(settings.speech.status);
     root["speech"]["user"] = items_to_json(settings.speech.user);
     root["speech"]["notification"] = items_to_json(settings.speech.notification);
+    root["speech"]["autoread"] = items_to_json(settings.speech.autoread);
+    root["speech"]["copy_status"] = items_to_json(settings.speech.copy_status);
+    root["speech"]["copy_user"] = items_to_json(settings.speech.copy_user);
+    root["speech"]["copy_notification"] = items_to_json(settings.speech.copy_notification);
     root["speech"]["separator"] = settings.speech.separator;
     return root;
 }

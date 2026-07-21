@@ -157,6 +157,8 @@ KeyBindings layer_keymap() {
         {"f", "LikeToggle"},         {"q", "Quote"},
         {"e", "Edit"},               {"n", "Post"},
         {"m", "BookmarkToggle"},      // M bookmarks / unbookmarks the post
+        {"a", "AutoRead"},            // A toggles auto-reading new posts
+        {"c", "Copy"},                // C copies the post / user
         {"p", "PinPost"},            {"t", "NewTimeline"},
         {"u", "UserTimeline"},        {"h", "FollowHashtag"},
         {"l", "FollowToggle"},        // L follows/unfollows the post author
@@ -191,6 +193,8 @@ std::string layer_help_text() {
            "B: Boost or unboost\n"
            "F: Like or unlike\n"
            "M: Bookmark or remove bookmark\n"
+           "A: Auto-read new posts on or off\n"
+           "C: Copy the post or user\n"
            "P: Pin or unpin your post to your profile\n"
            "T: New timeline\n"
            "U: User's timeline\n"
@@ -332,6 +336,8 @@ const std::vector<ActionDef>& action_catalog() {
         {"MoveTimelineDown", "Move timeline down", ""},   // unbound (in-app Shift+Down)
         {"TogglePin", "Pin / unpin timeline", "control+alt+win+p"}, // also in-app Ctrl+P
         {"MuteTimeline", "Mute / unmute timeline sounds", ""}, // unbound (in-app Ctrl+M)
+        {"AutoRead", "Auto-read new posts in the timeline", "alt+win+a"}, // also in-app / layer A
+        {"Copy", "Copy the post or user", "control+shift+win+c"}, // also in-app Ctrl+C / layer C
         {"PinPost", "Pin / unpin post to profile", ""},   // unbound (in-app / layer P)
         {"MuteConversation", "Mute / unmute conversation", ""}, // unbound (Status menu / post info)
         {"DeletePost", "Delete your post", "alt+win+delete"}, // in-app Delete; Win8.1 overrides

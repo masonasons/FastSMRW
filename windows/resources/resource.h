@@ -93,6 +93,11 @@
 #define IDC_SET_REPEAT_EDGE   346
 #define IDC_SET_ABSOLUTE_TIME 347
 #define IDC_SET_SEPARATOR     348
+// Speech page: auto-read + per-kind copy template editors.
+#define IDC_SET_SPEECH_AUTOREAD    660
+#define IDC_SET_SPEECH_COPY_POSTS  661
+#define IDC_SET_SPEECH_COPY_USERS  662
+#define IDC_SET_SPEECH_COPY_NOTIFS 663
 
 #define IDD_SPEECH_DETAIL     380
 #define IDC_SPEECH_DETAIL_LIST 381

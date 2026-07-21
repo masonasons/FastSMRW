@@ -38,6 +38,10 @@ public:
     bool create();
     HWND hwnd() const { return hwnd_; }
     HACCEL accel() const { return accel_; }
+    // True when a Ctrl+Up/Down keystroke should reach the posts ListView natively
+    // (a user-list timeline with the list focused) so it moves the multi-selection
+    // focus instead of being consumed as the movement-unit-jump accelerator.
+    bool wants_native_list_nav(const MSG& msg);
     void set_core(fastsm_core* core) { core_ = core; }
     void set_speaker(fastsm::speech::Speaker* speaker) { speaker_ = speaker; }
     void cycle_focus(); // Tab between the two panes
@@ -69,6 +73,7 @@ private:
         bool dismissable = false;
         bool pinned = false;    // user pinned this tab (locked from dismissal)
         bool muted = false;     // user muted this tab's new-item earcon
+        bool auto_read = false; // auto-read new posts in this tab
         bool user_list = false; // rows are users: multi-select + batch actions
         bool enter_opens_thread = false; // Enter always opens the thread (Conversations)
         bool reversed = false;  // oldest at top, newest at bottom (load older from the top)
@@ -172,6 +177,7 @@ private:
     void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
     void ev_media_open(const nlohmann::json& e);   // stream audio in the in-app player
+    void ev_copy(const nlohmann::json& e);         // write the composed text to the clipboard
     void ev_media_picker(const nlohmann::json& e); // choose which media to play
     void ev_client_filter(const nlohmann::json& e);  // open the per-timeline client filter dialog
     void ev_server_filters(const nlohmann::json& e); // open / refresh the server filters manager

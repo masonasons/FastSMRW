@@ -92,6 +92,18 @@ final class SettingsWindowController: NSWindowController {
             p.button("Notification Fields…") { [weak p] in
                 p?.openSpeechDetail("Speech Details — Notifications", category: "notification")
             }
+            p.button("Auto-read Fields…") { [weak p] in
+                p?.openSpeechDetail("Speech Details — Auto-read", category: "autoread")
+            }
+            p.button("Copy Fields — Posts…") { [weak p] in
+                p?.openSpeechDetail("Copy Details — Posts", category: "copy_status")
+            }
+            p.button("Copy Fields — Users…") { [weak p] in
+                p?.openSpeechDetail("Copy Details — Users", category: "copy_user")
+            }
+            p.button("Copy Fields — Notifications…") { [weak p] in
+                p?.openSpeechDetail("Copy Details — Notifications", category: "copy_notification")
+            }
         }
 
         tab("Behavior", "hand.tap") { p in

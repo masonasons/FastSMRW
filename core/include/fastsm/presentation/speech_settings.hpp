@@ -82,6 +82,13 @@ struct SpeechSettings {
     std::vector<SpeechItem<StatusSpeechField>> status;
     std::vector<SpeechItem<UserSpeechField>> user;
     std::vector<SpeechItem<NotificationSpeechField>> notification;
+    // A separate template for auto-reading newly-arrived posts (so the stream can be
+    // read more tersely than a post you navigate to).
+    std::vector<SpeechItem<StatusSpeechField>> autoread;
+    // Templates used when copying a row to the clipboard (Ctrl+C), one per kind.
+    std::vector<SpeechItem<StatusSpeechField>> copy_status;
+    std::vector<SpeechItem<UserSpeechField>> copy_user;
+    std::vector<SpeechItem<NotificationSpeechField>> copy_notification;
     std::string separator = ", "; // spoken between the fields of a row
 
     // The Mac default order/visibility.
@@ -94,6 +101,8 @@ struct SpeechSettings {
 
     bool operator==(const SpeechSettings& o) const {
         return status == o.status && user == o.user && notification == o.notification &&
+               autoread == o.autoread && copy_status == o.copy_status &&
+               copy_user == o.copy_user && copy_notification == o.copy_notification &&
                separator == o.separator;
     }
 };

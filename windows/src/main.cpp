@@ -105,7 +105,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     const HACCEL accel = window.accel();
     MSG msg{};
     while (GetMessageW(&msg, nullptr, 0, 0)) {
-        if (accel && TranslateAcceleratorW(window.hwnd(), accel, &msg))
+        if (accel && !window.wants_native_list_nav(msg) &&
+            TranslateAcceleratorW(window.hwnd(), accel, &msg))
             continue;
         // Handle Tab between panes ourselves (IsDialogMessage would swallow the
         // list views' arrow keys), but let the dialogs run their own loops.

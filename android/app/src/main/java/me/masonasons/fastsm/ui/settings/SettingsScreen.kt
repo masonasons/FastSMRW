@@ -92,9 +92,9 @@ private val notificationFieldLabels = mapOf(
 )
 
 private fun fieldLabel(list: String, field: String): String = when (list) {
-    "status" -> statusFieldLabels
-    "user" -> userFieldLabels
-    else -> notificationFieldLabels
+    "user", "copy_user" -> userFieldLabels
+    "notification", "copy_notification" -> notificationFieldLabels
+    else -> statusFieldLabels // status, autoread, copy_status
 }[field] ?: field
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,6 +121,10 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         speechList == "status" -> "Posts"
         speechList == "user" -> "Users"
         speechList == "notification" -> "Notifications"
+        speechList == "autoread" -> "Auto-read"
+        speechList == "copy_status" -> "Copy: Posts"
+        speechList == "copy_user" -> "Copy: Users"
+        speechList == "copy_notification" -> "Copy: Notifications"
         panel == "timelines" -> "Timelines"
         panel == "audio" -> "Audio"
         panel == "earcons" -> "Earcons"
@@ -263,6 +267,10 @@ private fun SpeechPanel(s: JSONObject, vm: CoreViewModel, onConfigure: (String) 
     ActionRow("Configure Posts…") { onConfigure("status") }
     ActionRow("Configure Users…") { onConfigure("user") }
     ActionRow("Configure Notifications…") { onConfigure("notification") }
+    ActionRow("Configure Auto-read…") { onConfigure("autoread") }
+    ActionRow("Copy template — Posts…") { onConfigure("copy_status") }
+    ActionRow("Copy template — Users…") { onConfigure("copy_user") }
+    ActionRow("Copy template — Notifications…") { onConfigure("copy_notification") }
     ComboRow("Content warnings", cwOptions, s.optString("cw_mode")) {
         vm.updateSetting { put("cw_mode", it) }
     }

@@ -1,5 +1,8 @@
 package me.masonasons.fastsm
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -94,6 +97,13 @@ private fun App(vm: CoreViewModel) {
     // Mastodon OAuth: the core hands us the authorize URL to open in a browser.
     LaunchedEffect(vm) {
         vm.openUrls.collect { url -> CustomTabs.launch(context, Uri.parse(url)) }
+    }
+    // Copy the core-composed string to the system clipboard on request.
+    LaunchedEffect(vm) {
+        vm.copyText.collect { text ->
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.setPrimaryClip(ClipData.newPlainText("FastSM", text))
+        }
     }
 
     val ctx = composeContext

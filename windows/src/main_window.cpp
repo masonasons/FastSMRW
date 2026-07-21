@@ -73,6 +73,8 @@ enum {
     ID_NEW_TIMELINE,
     ID_TOGGLE_PIN,
     ID_TOGGLE_MUTE,
+    ID_TOGGLE_AUTO_READ,
+    ID_COPY,
     ID_CLOSE_TIMELINE,
     ID_CLEAR_TIMELINE,
     ID_CLEAR_ALL,
@@ -236,6 +238,7 @@ HMENU build_menu() {
     AppendMenuW(status, MF_STRING, ID_BOOST, L"&Boost\tB");
     AppendMenuW(status, MF_STRING, ID_FAVORITE, L"&Favorite\tF");
     AppendMenuW(status, MF_STRING, ID_BOOKMARK, L"Book&mark\tM");
+    AppendMenuW(status, MF_STRING, ID_COPY, L"&Copy\tCtrl+C");
     AppendMenuW(status, MF_STRING, ID_QUOTE, L"&Quote\tQ");
     AppendMenuW(status, MF_STRING, ID_POST_INFO, L"Post &Info…\tEnter");
     AppendMenuW(status, MF_STRING, ID_VIEW_THREAD, L"View &Thread");
@@ -257,6 +260,7 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_STRING, ID_REFRESH, L"Re&fresh Timeline\tCtrl+R");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_MUTE, L"&Mute Timeline Sounds\tCtrl+M");
+    AppendMenuW(timeline, MF_STRING, ID_TOGGLE_AUTO_READ, L"Auto-&read New Posts\tA");
     AppendMenuW(timeline, MF_STRING, ID_CLOSE_TIMELINE, L"&Close Timeline\tCtrl+W");
     AppendMenuW(timeline, MF_STRING, ID_LOAD_OLDER, L"Load &Older Posts\tPeriod");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
@@ -327,6 +331,7 @@ bool MainWindow::create() {
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
         {FVIRTKEY | FCONTROL, 'P', ID_TOGGLE_PIN}, // Ctrl+P: pin/unpin the current tab
         {FVIRTKEY | FCONTROL, 'M', ID_TOGGLE_MUTE}, // Ctrl+M: mute/unmute the current tab's sounds
+        {FVIRTKEY | FCONTROL, 'C', ID_COPY},        // Ctrl+C: copy the focused post/user
         {FVIRTKEY | FCONTROL, 'S', ID_STOP_MEDIA}, // Ctrl+S: stop background audio
         {FVIRTKEY | FCONTROL, VK_OEM_COMMA, ID_SETTINGS},
         {FVIRTKEY | FCONTROL | FSHIFT, VK_OEM_COMMA, ID_ACCOUNT_SETTINGS}, // Ctrl+Shift+Comma
@@ -687,6 +692,16 @@ void MainWindow::update_mute_menu() {
         muted ? L"Un&mute Timeline Sounds\tCtrl+M" : L"&Mute Timeline Sounds\tCtrl+M";
     mii.dwTypeData = label.data();
     SetMenuItemInfoW(bar, ID_TOGGLE_MUTE, FALSE, &mii);
+
+    const bool ar = tl && tl->auto_read;
+    MENUITEMINFOW ari{};
+    ari.cbSize = sizeof(ari);
+    ari.fMask = MIIM_STATE | MIIM_STRING;
+    ari.fState = ar ? MFS_CHECKED : MFS_UNCHECKED;
+    std::wstring ar_label =
+        ar ? L"Stop Auto-&reading New Posts\tA" : L"Auto-&read New Posts\tA";
+    ari.dwTypeData = ar_label.data();
+    SetMenuItemInfoW(bar, ID_TOGGLE_AUTO_READ, FALSE, &ari);
 }
 
 void MainWindow::maybe_load_older(int row) {
@@ -814,6 +829,33 @@ void MainWindow::dispatch_cmd(const json& cmd) {
     fastsm_core_dispatch(core_, s.c_str(), s.size());
 }
 
+void MainWindow::ev_copy(const json& e) {
+    const std::wstring text = to_wide(e.value("text", std::string{}));
+    if (text.empty() || !OpenClipboard(hwnd_))
+        return;
+    EmptyClipboard();
+    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    if (HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+        if (void* dst = GlobalLock(mem)) {
+            CopyMemory(dst, text.c_str(), bytes);
+            GlobalUnlock(mem);
+            SetClipboardData(CF_UNICODETEXT, mem); // clipboard now owns `mem`
+        } else {
+            GlobalFree(mem);
+        }
+    }
+    CloseClipboard();
+}
+
+bool MainWindow::wants_native_list_nav(const MSG& msg) {
+    if (msg.message != WM_KEYDOWN || (msg.wParam != VK_UP && msg.wParam != VK_DOWN))
+        return false;
+    if ((GetKeyState(VK_CONTROL) & 0x8000) == 0)
+        return false;
+    Timeline* tc = current();
+    return tc && tc->user_list && GetFocus() == timeline_view_;
+}
+
 void MainWindow::on_view_keydown(int vk) {
     // Shift+letter: first-letter navigation to the next post whose spoken text
     // starts with that letter. Plain letters stay post actions (below), so this
@@ -853,6 +895,9 @@ void MainWindow::on_view_keydown(int vk) {
     case 'M':
         do_bookmark();
         break;
+    case 'A': // toggle auto-read of new posts for the current tab
+        dispatch_cmd({{"cmd", "toggle_auto_read"}});
+        break;
     case 'P': { // pin/unpin your own post to your profile (core rejects others' posts)
         const std::string id = selected_id();
         if (!id.empty())
@@ -869,6 +914,10 @@ void MainWindow::on_view_keydown(int vk) {
         compose("edit");
         break;
     case VK_SPACE: { // open the post's thread (Mac parity)
+        // In a user list Ctrl+Space toggles the row's multi-selection (handled
+        // natively by the ListView); don't also open a thread.
+        if (GetKeyState(VK_CONTROL) & 0x8000)
+            break;
         const std::string id = selected_id();
         if (!id.empty())
             dispatch_cmd({{"cmd", "open_thread"}, {"id", id}});
@@ -2048,6 +2097,15 @@ void MainWindow::handle_command(int id) {
     case ID_TOGGLE_MUTE:
         dispatch_cmd({{"cmd", "toggle_mute"}});
         break;
+    case ID_TOGGLE_AUTO_READ:
+        dispatch_cmd({{"cmd", "toggle_auto_read"}});
+        break;
+    case ID_COPY: {
+        const std::string id = selected_id();
+        if (!id.empty())
+            dispatch_cmd({{"cmd", "copy"}, {"id", id}});
+        break;
+    }
     case ID_TOGGLE_PIN:
         dispatch_cmd({{"cmd", "toggle_pin"}});
         break;
@@ -2157,6 +2215,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_invisible_ui_action(e);
     else if (ev == "media_open")
         ev_media_open(e);
+    else if (ev == "copy_to_clipboard")
+        ev_copy(e);
     else if (ev == "media_picker")
         ev_media_picker(e);
     else if (ev == "client_filter")
@@ -2206,6 +2266,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.dismissable = t.value("dismissable", false);
         tl.pinned = t.value("pinned", false);
         tl.muted = t.value("muted", false);
+        tl.auto_read = t.value("auto_read", false);
         tl.user_list = t.value("user_list", false);
         tl.enter_opens_thread = t.value("enter_opens_thread", false);
         if (same_account)

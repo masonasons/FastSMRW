@@ -525,6 +525,18 @@ INT_PTR CALLBACK SpeechProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             edit_speech(dlg, L"Speech Details — Notifications",
                         ctx->settings.speech.notification);
             return TRUE;
+        case IDC_SET_SPEECH_AUTOREAD:
+            edit_speech(dlg, L"Speech Details — Auto-read Posts", ctx->settings.speech.autoread);
+            return TRUE;
+        case IDC_SET_SPEECH_COPY_POSTS:
+            edit_speech(dlg, L"Copy Details — Posts", ctx->settings.speech.copy_status);
+            return TRUE;
+        case IDC_SET_SPEECH_COPY_USERS:
+            edit_speech(dlg, L"Copy Details — Users", ctx->settings.speech.copy_user);
+            return TRUE;
+        case IDC_SET_SPEECH_COPY_NOTIFS:
+            edit_speech(dlg, L"Copy Details — Notifications", ctx->settings.speech.copy_notification);
+            return TRUE;
         }
         break;
     }

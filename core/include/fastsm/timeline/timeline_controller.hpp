@@ -35,6 +35,9 @@ public:
     std::function<void(std::string)> on_error;  // a network action failed
     // N new rows arrived (that pass the filter); has_direct = any is a DM/direct mention.
     std::function<void(int n, bool has_direct)> on_received_new;
+    // The newly-arrived visible rows themselves (for auto-read). Fires alongside
+    // on_received_new when new visible rows arrive.
+    std::function<void(const std::vector<TimelineItem>&)> on_new_items;
 
     // The filtered rows the UI should display.
     const std::vector<TimelineItem>& items() const { return visible_; }
@@ -82,6 +85,10 @@ public:
     // the chime — fetching/ordering are unaffected.
     void set_muted(bool muted) { muted_ = muted; }
     bool muted() const { return muted_; }
+
+    // Auto-read: when on, newly-arrived posts are spoken automatically.
+    void set_auto_read(bool on) { auto_read_ = on; }
+    bool auto_read() const { return auto_read_; }
 
     // Populate a static (non-fetched) timeline with a fixed set of user rows —
     // e.g. the users referenced in one post. Safe to call again to replace them
@@ -192,6 +199,7 @@ private:
     bool reversed_ = false;             // global reverse-timelines preference
     bool pinned_ = false;               // user "pinned" this tab (locks dismissal)
     bool muted_ = false;                // user muted this tab's new-item earcon
+    bool auto_read_ = false;            // user enabled auto-read for this tab
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     // Page-boundary cursors (row id -> cursor to fetch the page just below it),

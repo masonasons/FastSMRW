@@ -172,6 +172,8 @@ private:
     void cmd_reorder_timeline(const nlohmann::json& cmd); // move current timeline up/down
     void cmd_toggle_pin(); // pin/unpin the current tab (locks/unlocks dismissal)
     void cmd_toggle_mute(); // mute/unmute the current tab's new-item earcon
+    void cmd_toggle_auto_read(); // toggle auto-reading new posts in the current tab
+    void cmd_copy(const nlohmann::json& cmd); // copy the focused row to the clipboard
     void cmd_close_timeline();
     void cmd_clear_timeline();
     void cmd_clear_all_timelines();
@@ -244,6 +246,7 @@ private:
         TimelineSource source;
         bool pinned = false;
         bool muted = false;
+        bool auto_read = false;
     };
     std::map<std::string, std::vector<SavedTimeline>> load_open_timelines() const;
     void save_open_timelines() const;

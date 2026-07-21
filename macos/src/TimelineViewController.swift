@@ -203,6 +203,13 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         guard let id = selectedRowId else { return }
         state.toggleBookmark(id: id)
     }
+    // The standard Copy action (⌘C), reachable via the Edit menu when the posts
+    // list is first responder; the core composes the copy string.
+    @objc func copySelection(_ sender: Any?) {
+        guard let id = selectedRowId else { return }
+        state.copy(id: id)
+    }
+    @objc func copy(_ sender: Any?) { copySelection(sender) }
     @objc func openSelectionInBrowser(_ sender: Any?) {
         guard let id = selectedRowId else { return }
         state.openStatus(id: id)

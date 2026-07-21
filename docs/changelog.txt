@@ -1,8 +1,13 @@
 FastSMRW changelog
 ==================
 
-0.4.4
+0.4.5
 -----
+
+- New: auto-read — turn it on for a timeline (A, or Alt+Win+A in the invisible interface) and new posts are read aloud as they arrive; it has its own configurable template in Speech settings.
+- New: copy the focused post, user, or notification to the clipboard (Ctrl+C, or Ctrl+Win+Shift+C in the invisible interface), with its own copy templates per kind in Speech settings.
+- New: in user lists (followers, muted, blocked, and so on), Ctrl+Up/Down and Ctrl+Space now build a multi-selection for batch follow/mute/block, on Windows.
+- Changed: on Windows, the movement-unit jump stays on Ctrl+arrows in post timelines but steps aside for multi-selection in user lists.
 
 - New: edit your own profile — display name, bio, up to your server's number of metadata fields, default post privacy, and the require-follow-requests / bot account / list-in-directory / mark-media-sensitive options — from "Edit Profile" in the Me (account) menu.
 

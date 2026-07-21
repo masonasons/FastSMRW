@@ -30,7 +30,17 @@ std::string accessibility_label(const Status& s, std::int64_t now);
 std::string accessibility_label(const TimelineItem& item, std::int64_t now);
 // Configurable spoken labels for a user row / a notification (SpeechConfig).
 std::string accessibility_label(const User& u);
+std::string accessibility_label(const User& u, const std::vector<SpeechItem<UserSpeechField>>& fields);
 std::string accessibility_label(const Notification& n, std::int64_t now);
+std::string accessibility_label(const Notification& n, std::int64_t now,
+                                const std::vector<SpeechItem<NotificationSpeechField>>& fields);
+
+// The clipboard string for a row (Ctrl+C), composed from the per-kind copy
+// templates in SpeechConfig.
+std::string copy_label(const TimelineItem& item, std::int64_t now);
+// The auto-read string for a newly-arrived row: posts use the dedicated auto-read
+// template; other kinds fall back to their normal spoken label.
+std::string autoread_label(const TimelineItem& item, std::int64_t now);
 
 // A single openable link offered by the "open link in post" action, with a
 // human-readable title for the chooser.

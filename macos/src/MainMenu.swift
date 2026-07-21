@@ -141,6 +141,9 @@ enum MainMenu {
                              action: #selector(MainWindowController.toggleMute(_:)),
                              keyEquivalent: "m")
         muteTimeline.keyEquivalentModifierMask = [.command]
+        timelineMenu.addItem(withTitle: "Auto-read New Posts",
+                             action: #selector(MainWindowController.toggleAutoRead(_:)),
+                             keyEquivalent: "")
         let moveUp = timelineMenu.addItem(withTitle: "Move Timeline Up",
                                           action: #selector(MainWindowController.moveTimelineUp(_:)),
                                           keyEquivalent: "")

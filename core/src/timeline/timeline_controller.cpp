@@ -180,6 +180,7 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
         // mention shouldn't ping when mentions are hidden from Notifications.
         int visible_new = convo_updated;
         bool has_direct = false;
+        std::vector<TimelineItem> fresh_visible; // the new visible rows, for auto-read
         for (const auto& it : added) {
             if (filter_ && !filter_(it))
                 continue; // hidden (client filter / hide filter / hidden mentions)
@@ -190,6 +191,8 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
             ++visible_new;
             if (it.is_direct())
                 has_direct = true; // a DM/direct mention -> the "messages" chime
+            if (on_new_items)
+                fresh_visible.push_back(it); // copy for auto-read (before `added` is moved)
         }
         // Prepend the genuinely new rows, preserving server order.
         added.insert(added.end(), std::make_move_iterator(raw_.begin()),
@@ -197,6 +200,8 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
         raw_ = std::move(added);
         if (visible_new > 0 && on_received_new)
             on_received_new(visible_new, has_direct);
+        if (!fresh_visible.empty() && on_new_items)
+            on_new_items(fresh_visible);
     }
 
     // Keep rows newest-first by timestamp (notifications included — their

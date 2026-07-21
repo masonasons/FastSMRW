@@ -455,6 +455,10 @@ void CoreSession::handle(const json& cmd) {
         cmd_toggle_pin();
     else if (c == "toggle_mute")
         cmd_toggle_mute();
+    else if (c == "toggle_auto_read")
+        cmd_toggle_auto_read();
+    else if (c == "copy")
+        cmd_copy(cmd);
     else if (c == "close_timeline")
         cmd_close_timeline();
     else if (c == "clear_timeline")
@@ -2246,6 +2250,37 @@ void CoreSession::cmd_toggle_mute() {
     emit_announce(tc->source().title() + (now_muted ? ", muted" : ", unmuted"));
 }
 
+void CoreSession::cmd_toggle_auto_read() {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const bool on = !tc->auto_read();
+    tc->set_auto_read(on);
+    save_open_timelines(); // auto-read state survives a restart
+    sound_.play(on ? sound::Earcon::Favorite : sound::Earcon::Unfavorite);
+    emit_timelines(); // refresh the UI's auto-read flag
+    emit_announce(tc->source().title() + (on ? ", auto-read on" : ", auto-read off"));
+}
+
+void CoreSession::cmd_copy(const json& cmd) {
+    TimelineController* tc = current();
+    if (!tc)
+        return;
+    const TimelineItem* item = find_item(tc, cmd.value("id", std::string{}));
+    if (!item) {
+        sound_.play(sound::Earcon::Error);
+        return;
+    }
+    const std::string text = present::copy_label(*item, util::now_unix());
+    if (text.empty()) {
+        sound_.play(sound::Earcon::Error);
+        return;
+    }
+    // The front end writes its native clipboard; the string is composed here.
+    emit({{"event", "copy_to_clipboard"}, {"text", text}});
+    emit_announce("Copied");
+}
+
 void CoreSession::cmd_close_timeline() {
     TimelineController* tc = current();
     // A pinned tab is locked; only inherently-dismissable, un-pinned tabs close.
@@ -2257,6 +2292,7 @@ void CoreSession::cmd_close_timeline() {
     tc->on_change = nullptr;
     tc->on_error = nullptr;
     tc->on_received_new = nullptr;
+    tc->on_new_items = nullptr;
     tc->clear(); // drops this timeline's cache file (if it was cacheable)
     retired_.push_back(std::move(timelines_[static_cast<size_t>(closed_index)]));
     timelines_.erase(timelines_.begin() + closed_index);
@@ -3205,6 +3241,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_pin();
     if (a == "MuteTimeline")
         return cmd_toggle_mute();
+    if (a == "AutoRead")
+        return cmd_toggle_auto_read();
     if (a == "speak_item") {
         if (TimelineController* tc = current())
             invisible_speak_index(tc->visible_index_of(tc->selected_id()));
@@ -3229,6 +3267,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_toggle_favorite({{"id", row}});
     if (a == "BookmarkToggle")
         return cmd_toggle_bookmark({{"id", row}});
+    if (a == "Copy")
+        return cmd_copy({{"id", row}});
     if (a == "PinPost")
         return cmd_toggle_pin_post({{"id", row}});
     if (a == "MuteConversation")
@@ -3365,6 +3405,7 @@ void CoreSession::rebuild_timelines() {
         std::vector<TimelineSource> sources;
         std::vector<bool> pins;
         std::vector<bool> mutes;
+        std::vector<bool> auto_reads;
         bool from_saved = false;
         if (auto it = saved.find(key); it != saved.end() && !it->second.empty()) {
             from_saved = true;
@@ -3372,6 +3413,7 @@ void CoreSession::rebuild_timelines() {
                 sources.push_back(st.source);
                 pins.push_back(st.pinned);
                 mutes.push_back(st.muted);
+                auto_reads.push_back(st.auto_read);
             }
             // Migration: make sure the account's standing (non-dismissable) default
             // timelines are present even if it was saved before those defaults
@@ -3388,6 +3430,7 @@ void CoreSession::rebuild_timelines() {
                     sources.push_back(def);
                     pins.push_back(false);
                     mutes.push_back(false);
+                    auto_reads.push_back(false);
                     migrated = true;
                 }
             }
@@ -3405,6 +3448,8 @@ void CoreSession::rebuild_timelines() {
             v[i]->set_pinned(pins[i]);
         for (size_t i = 0; i < v.size() && i < mutes.size(); ++i)
             v[i]->set_muted(mutes[i]);
+        for (size_t i = 0; i < v.size() && i < auto_reads.size(); ++i)
+            v[i]->set_auto_read(auto_reads[i]);
         if (key == accounts_.selected_key())
             timelines_ = std::move(v);
         else
@@ -3474,6 +3519,29 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
         }
         if (auto name = p->source().new_items_sound_name())
             sound_.play_named(*name, pack);
+    };
+    tc->on_new_items = [this, p](const std::vector<TimelineItem>& items) {
+        if (!p->auto_read() || items.empty())
+            return;
+        // Above a handful at once, summarize rather than reading each (Python parity).
+        constexpr size_t kReadThreshold = 4;
+        if (items.size() >= kReadThreshold) {
+            emit_announce(std::to_string(items.size()) + " new in " + p->source().title());
+            return;
+        }
+        // items arrive newest-first; read them oldest-first so they flow in order.
+        const std::int64_t now = util::now_unix();
+        std::string speech;
+        for (auto it = items.rbegin(); it != items.rend(); ++it) {
+            const std::string s = present::autoread_label(*it, now);
+            if (s.empty())
+                continue;
+            if (!speech.empty())
+                speech += ". ";
+            speech += s;
+        }
+        if (!speech.empty())
+            emit_announce(speech);
     };
     return tc;
 }
@@ -3596,7 +3664,12 @@ void CoreSession::cmd_get_speech_catalog() {
     emit({{"event", "speech_catalog"},
           {"status", build(status_fields)},
           {"user", build(user_fields)},
-          {"notification", build(notif_fields)}});
+          {"notification", build(notif_fields)},
+          // The auto-read and copy templates reuse the same field sets as their kind.
+          {"autoread", build(status_fields)},
+          {"copy_status", build(status_fields)},
+          {"copy_user", build(user_fields)},
+          {"copy_notification", build(notif_fields)}});
 }
 
 void CoreSession::cmd_set_client_filter(const json& cmd) {
@@ -3826,8 +3899,9 @@ CoreSession::load_open_timelines() const {
                 if (arr.is_array())
                     for (const auto& j : arr)
                         if (auto s = source_from_json(j))
-                            out[key].push_back(
-                                {*s, j.value("pinned", false), j.value("muted", false)});
+                            out[key].push_back({*s, j.value("pinned", false),
+                                                j.value("muted", false),
+                                                j.value("auto_read", false)});
     } catch (...) {
     }
     return out;
@@ -3846,6 +3920,8 @@ void CoreSession::save_open_timelines() const {
                 j["pinned"] = true;
             if (tc->muted())
                 j["muted"] = true;
+            if (tc->auto_read())
+                j["auto_read"] = true;
             arr.push_back(std::move(j));
         }
         root[key] = arr;
@@ -4081,6 +4157,7 @@ void CoreSession::emit_timelines() {
                        {"dismissable", s.is_dismissable() && !tc->pinned()},
                        {"pinned", tc->pinned()},
                        {"muted", tc->muted()},
+                       {"auto_read", tc->auto_read()},
                        {"user_list", s.is_user_list()},
                        {"enter_opens_thread", s.enter_opens_thread()}});
     }

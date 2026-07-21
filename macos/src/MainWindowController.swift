@@ -270,6 +270,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func favoriteSelection(_ sender: Any?) { postsViewController.favoriteSelection(sender) }
     @objc func bookmarkSelection(_ sender: Any?) { postsViewController.bookmarkSelection(sender) }
     @objc func editProfile(_ sender: Any?) { state.openProfileEditor() }
+    @objc func toggleAutoRead(_ sender: Any?) { state.toggleAutoRead() }
+    @objc func copy(_ sender: Any?) { postsViewController.copySelection(sender) }
     @objc func quoteSelection(_ sender: Any?) { postsViewController.quoteSelection(sender) }
     @objc func openSelectionInBrowser(_ sender: Any?) {
         postsViewController.openSelectionInBrowser(sender)

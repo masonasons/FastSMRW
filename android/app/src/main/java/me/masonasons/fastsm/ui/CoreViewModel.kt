@@ -215,6 +215,13 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     )
     val announcements: SharedFlow<String> = _announcements.asSharedFlow()
 
+    /** Text the core asked us to copy to the system clipboard (Ctrl+C / Copy). */
+    private val _copyText = MutableSharedFlow<String>(
+        extraBufferCapacity = 4,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val copyText: SharedFlow<String> = _copyText.asSharedFlow()
+
     /** Mastodon OAuth (Phase 1b): the core asks us to open a URL in the browser. */
     private val _openUrls = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -530,6 +537,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             "announce" -> _announcements.tryEmit(e.optString("message"))
+            "copy_to_clipboard" -> _copyText.tryEmit(e.optString("text"))
             "open_url" -> _openUrls.tryEmit(e.optString("url"))
 
             // Core asks us to move to a row (e.g. jump to a reply's parent): update
@@ -749,6 +757,11 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleBoost(id: String) = core.dispatch("toggle_boost") { put("id", id) }
 
     fun toggleBookmark(id: String) = core.dispatch("toggle_bookmark") { put("id", id) }
+
+    /** Toggle auto-reading of new posts for the current timeline. */
+    fun toggleAutoRead() = core.dispatch("toggle_auto_read")
+    /** Copy the focused post/user/notification to the clipboard. */
+    fun copyRow(id: String) = core.dispatch("copy") { put("id", id) }
 
     /** Open the Edit Profile dialog (the core replies with a profile_editor event). */
     fun openProfileEditor() = core.dispatch("open_profile_editor")

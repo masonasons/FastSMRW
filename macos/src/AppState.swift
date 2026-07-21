@@ -114,6 +114,16 @@ final class AppState {
             }
             return
         }
+        // Copy the core-composed string to the system clipboard.
+        if let data = json.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           obj["event"] as? String == "copy_to_clipboard" {
+            if let text = obj["text"] as? String {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+            return
+        }
         // The core asks the UI to show its per-platform "user actions" affordance.
         if let data = json.data(using: .utf8),
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -337,6 +347,8 @@ final class AppState {
     func toggleBoost(id: String) { client.send("toggle_boost", ["id": id]) }
     func toggleFavorite(id: String) { client.send("toggle_favorite", ["id": id]) }
     func toggleBookmark(id: String) { client.send("toggle_bookmark", ["id": id]) }
+    func toggleAutoRead() { client.send("toggle_auto_read") }
+    func copy(id: String) { client.send("copy", ["id": id]) }
     func openProfileEditor() { client.send("open_profile_editor") }
     func updateProfile(displayName: String, note: String, locked: Bool, bot: Bool,
                        discoverable: Bool, sensitive: Bool, privacy: String,

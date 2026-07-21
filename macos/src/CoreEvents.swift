@@ -342,9 +342,9 @@ struct SpeechCatalog: Decodable {
     let notification: [SpeechField]
     func fields(for category: String) -> [SpeechField] {
         switch category {
-        case "user": return user
-        case "notification": return notification
-        default: return status
+        case "user", "copy_user": return user
+        case "notification", "copy_notification": return notification
+        default: return status // status, autoread, copy_status
         }
     }
 }

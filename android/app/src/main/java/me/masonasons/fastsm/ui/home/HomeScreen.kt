@@ -144,6 +144,10 @@ fun HomeScreen(
                                 onClick = { menuOpen = false; viewModel.listTrendingHashtags() },
                             )
                             DropdownMenuItem(
+                                text = { Text("Auto-read new posts") },
+                                onClick = { menuOpen = false; viewModel.toggleAutoRead() },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Edit profile") },
                                 onClick = { menuOpen = false; onEditProfile() },
                             )
@@ -210,6 +214,7 @@ fun HomeScreen(
                 onJumpToReply = viewModel::jumpToReply,
                 onAddAlias = viewModel::beginAlias,
                 onReport = viewModel::reportPost,
+                onCopy = viewModel::copyRow,
             )
         }
     }
@@ -507,6 +512,7 @@ private fun StatusList(
     onJumpToReply: (String) -> Unit,
     onAddAlias: (String) -> Unit,
     onReport: (id: String, category: String, comment: String, forward: Boolean) -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -573,6 +579,7 @@ private fun StatusList(
                 onJumpToReply = onJumpToReply,
                 onAddAlias = onAddAlias,
                 onReport = onReport,
+                onCopy = onCopy,
             )
         }
     }

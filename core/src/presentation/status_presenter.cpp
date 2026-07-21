@@ -327,17 +327,42 @@ std::optional<std::string> notification_field_string(NotificationSpeechField f, 
 }
 } // namespace
 
-std::string accessibility_label(const User& u) {
-    std::string label = compose_fields(SpeechConfig::current().user,
-                                       [&](UserSpeechField f) { return user_field_string(f, u); });
+std::string accessibility_label(const User& u, const std::vector<SpeechItem<UserSpeechField>>& fields) {
+    std::string label =
+        compose_fields(fields, [&](UserSpeechField f) { return user_field_string(f, u); });
     return label.empty() ? display_name_for(u) : label; // never read a blank row
 }
 
-std::string accessibility_label(const Notification& n, std::int64_t now) {
+std::string accessibility_label(const User& u) {
+    return accessibility_label(u, SpeechConfig::current().user);
+}
+
+std::string accessibility_label(const Notification& n, std::int64_t now,
+                                const std::vector<SpeechItem<NotificationSpeechField>>& fields) {
     std::string label = compose_fields(
-        SpeechConfig::current().notification,
-        [&](NotificationSpeechField f) { return notification_field_string(f, n, now); });
+        fields, [&](NotificationSpeechField f) { return notification_field_string(f, n, now); });
     return label.empty() ? display_name_for(n.account) : label;
+}
+
+std::string accessibility_label(const Notification& n, std::int64_t now) {
+    return accessibility_label(n, now, SpeechConfig::current().notification);
+}
+
+std::string copy_label(const TimelineItem& item, std::int64_t now) {
+    const SpeechSettings& cfg = SpeechConfig::current();
+    if (const Status* s = std::get_if<Status>(&item.value))
+        return accessibility_label(*s, now, cfg.copy_status);
+    if (const Notification* n = std::get_if<Notification>(&item.value))
+        return accessibility_label(*n, now, cfg.copy_notification);
+    if (const User* u = std::get_if<User>(&item.value))
+        return accessibility_label(*u, cfg.copy_user);
+    return compact_line(item, now);
+}
+
+std::string autoread_label(const TimelineItem& item, std::int64_t now) {
+    if (const Status* s = std::get_if<Status>(&item.value))
+        return accessibility_label(*s, now, SpeechConfig::current().autoread);
+    return accessibility_label(item, now); // notifications / users: their normal label
 }
 
 std::string compact_line(const TimelineItem& item, std::int64_t now) {

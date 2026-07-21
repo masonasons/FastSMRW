@@ -217,6 +217,27 @@ SpeechSettings SpeechSettings::defaults() {
     s.notification = {
         {N::Actor}, {N::Action}, {N::Handle, false}, {N::Text}, {N::Time},
     };
+    // Auto-read defaults to a terse read of a new post (no time/stats/reaction noise).
+    s.autoread = {
+        {S::BoostedBy},        {S::Author},   {S::Handle, false}, {S::ContentWarning},
+        {S::Text},             {S::Quote},    {S::Media},         {S::Poll},
+        {S::Time, false},      {S::Stats, false}, {S::Favorited, false}, {S::Boosted, false},
+        {S::Visibility, false}, {S::Source, false},
+    };
+    // Copy defaults to author + @handle + text (handle ON so the @ comes across).
+    s.copy_status = {
+        {S::BoostedBy},   {S::Author},       {S::Handle},           {S::ContentWarning},
+        {S::Text},        {S::Quote},        {S::Media, false},     {S::Poll, false},
+        {S::Time, false}, {S::Stats, false}, {S::Favorited, false}, {S::Boosted, false},
+        {S::Visibility, false}, {S::Source, false},
+    };
+    s.copy_user = {
+        {U::Author}, {U::Handle},           {U::Bot, false},       {U::Locked, false},
+        {U::Bio, false}, {U::Followers, false}, {U::Following, false}, {U::Posts, false},
+    };
+    s.copy_notification = {
+        {N::Actor}, {N::Action}, {N::Handle, false}, {N::Text}, {N::Time, false},
+    };
     return s;
 }
 
@@ -226,6 +247,10 @@ SpeechSettings SpeechSettings::normalized() const {
     out.status = merge(status, def.status);
     out.user = merge(user, def.user);
     out.notification = merge(notification, def.notification);
+    out.autoread = merge(autoread, def.autoread);
+    out.copy_status = merge(copy_status, def.copy_status);
+    out.copy_user = merge(copy_user, def.copy_user);
+    out.copy_notification = merge(copy_notification, def.copy_notification);
     out.separator = separator;
     return out;
 }

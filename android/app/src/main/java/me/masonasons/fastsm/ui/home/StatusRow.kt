@@ -55,6 +55,7 @@ fun StatusRow(
     onJumpToReply: (String) -> Unit,
     onAddAlias: (String) -> Unit,
     onReport: (id: String, category: String, comment: String, forward: Boolean) -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -73,6 +74,7 @@ fun StatusRow(
         })
         if (row.favoritesCount > 0) add(MenuAction("See who favorited") { onOpenFavoritedBy(row.id) })
         if (row.boostsCount > 0) add(MenuAction("See who boosted") { onOpenRebloggedBy(row.id) })
+        add(MenuAction("Copy") { onCopy(row.id) })
         add(MenuAction("Report post") { showReport = true })
         add(MenuAction("View author's posts") { onOpenAuthor(row.id) })
         add(MenuAction("View author's profile") { onOpenProfile(row.id) })
