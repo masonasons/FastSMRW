@@ -273,6 +273,14 @@ final class AppState {
     // chosen category (or announce an error if they can't be fully loaded).
     func analyzeUsers(category: String) { client.send("analyze_users", ["category": category]) }
     func reorderTimeline(dir: String) { client.send("reorder_timeline", ["dir": dir]) }
+    // Movement units: jump the cursor forward/back by the active unit ("prev"/"next"),
+    // and cycle which unit is active. The core replies with select_row / an announce.
+    func moveByUnit(dir: String) {
+        let from = currentSelectedId
+        guard !from.isEmpty else { return }
+        client.send("move", ["from_id": from, "dir": dir])
+    }
+    func cycleMovement(dir: String) { client.send("cycle_movement", ["dir": dir]) }
     // Speech field order/enable (nested under settings.speech.<category>).
     func speechItems(for category: String) -> [[String: Any]] {
         (settingsRaw["speech"] as? [String: Any])?[category] as? [[String: Any]] ?? []

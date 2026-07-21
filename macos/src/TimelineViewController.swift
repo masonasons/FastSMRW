@@ -74,6 +74,14 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         // the core asks for the platform "user actions" affordance — the profile.
         state.onUserActionsMenu = { [weak self] in self?.openUserProfile(nil) }
         tableView.onCommandReturn = { [weak self] in self?.openLinksForSelection(nil) }
+        // Option+arrows drive movement units (Up/Down jump by the unit, Left/Right
+        // pick the unit). Handled on the table (not menu key-equivalents) so
+        // VoiceOver speaks the core's announcement, not a menu title. (Reordering
+        // timelines with Shift+arrows lives on the timelines sidebar.)
+        tableView.onOptionUp = { [weak self] in self?.state.moveByUnit(dir: "prev") }
+        tableView.onOptionDown = { [weak self] in self?.state.moveByUnit(dir: "next") }
+        tableView.onOptionLeft = { [weak self] in self?.state.cycleMovement(dir: "prev") }
+        tableView.onOptionRight = { [weak self] in self?.state.cycleMovement(dir: "next") }
         tableView.onSpace = { [weak self] in self?.viewThread(nil) }
         // Backspace closes the current timeline; ⌘Backspace deletes the post.
         tableView.onDelete = { [weak self] in self?.closeCurrentTimeline(nil) }
@@ -90,6 +98,7 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
             case "q": self.quoteSelection(nil)
             case "u": self.openUserTimeline(nil)
             case "e": self.editSelection(nil)
+            case "p": self.pinPostSelection(nil)
             default: return false
             }
             return true

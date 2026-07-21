@@ -1,6 +1,14 @@
 FastSMRW changelog
 ==================
 
+0.4.7
+-----
+
+- New: on the Mac, reorder your open timelines with Shift+Up and Shift+Down in the timelines list.
+- New: on the Mac, jump through a timeline by movement unit with Option+Up and Option+Down, and pick the unit with Option+Left and Option+Right.
+- Changed: on the Mac, Open Link is now Command+O.
+- New: on the Mac, press P to pin or unpin your own post to your profile, and Command+P to pin or unpin the current timeline.
+
 0.4.6
 -----
 

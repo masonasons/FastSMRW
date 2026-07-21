@@ -79,7 +79,7 @@ enum MainMenu {
                                         action: #selector(MainWindowController.deleteSelection(_:)),
                                         keyEquivalent: "\u{8}")
         delete.keyEquivalentModifierMask = [.command]
-        add("Pin to Profile", #selector(MainWindowController.pinPostSelection(_:)), "")
+        add("Pin to Profile", #selector(MainWindowController.pinPostSelection(_:)), "p")
         add("Mute Conversation", #selector(MainWindowController.muteConversationSelection(_:)), "")
         statusMenu.addItem(.separator())
         add("Speak User", #selector(MainWindowController.speakUserForSelection(_:)), ";", [.command])
@@ -90,7 +90,7 @@ enum MainMenu {
         // interact" (Behavior settings), handled on the posts table. This item
         // stays as an explicit, always-media action reachable from the menu.
         add("View Media…", #selector(MainWindowController.playMediaForSelection(_:)), "")
-        add("Open Link…", #selector(MainWindowController.openLinksForSelection(_:)), "\r", [.command])
+        add("Open Link…", #selector(MainWindowController.openLinksForSelection(_:)), "o", [.command])
         add("View Thread", #selector(MainWindowController.viewThread(_:)), " ")
         add("Open User Timeline", #selector(MainWindowController.openUserTimeline(_:)), "u")
         add("Open User Profile", #selector(MainWindowController.openUserProfile(_:)), "u", [.command])
@@ -134,9 +134,10 @@ enum MainMenu {
                                           keyEquivalent: "l")
         filter.keyEquivalentModifierMask = [.command]
         timelineMenu.addItem(.separator())
-        timelineMenu.addItem(withTitle: "Pin / Unpin Timeline",
+        let pinTimeline = timelineMenu.addItem(withTitle: "Pin / Unpin Timeline",
                              action: #selector(MainWindowController.togglePin(_:)),
-                             keyEquivalent: "")
+                             keyEquivalent: "p")
+        pinTimeline.keyEquivalentModifierMask = [.command]
         let muteTimeline = timelineMenu.addItem(withTitle: "Mute / Unmute Timeline Sounds",
                              action: #selector(MainWindowController.toggleMute(_:)),
                              keyEquivalent: "m")
@@ -144,16 +145,15 @@ enum MainMenu {
         timelineMenu.addItem(withTitle: "Auto-read New Posts",
                              action: #selector(MainWindowController.toggleAutoRead(_:)),
                              keyEquivalent: "")
-        let moveUp = timelineMenu.addItem(withTitle: "Move Timeline Up",
-                                          action: #selector(MainWindowController.moveTimelineUp(_:)),
-                                          keyEquivalent: "")
-        moveUp.keyEquivalentModifierMask = [.command, .option]
-        moveUp.keyEquivalent = String(UnicodeScalar(NSUpArrowFunctionKey)!)
-        let moveDown = timelineMenu.addItem(withTitle: "Move Timeline Down",
-                                            action: #selector(MainWindowController.moveTimelineDown(_:)),
-                                            keyEquivalent: "")
-        moveDown.keyEquivalentModifierMask = [.command, .option]
-        moveDown.keyEquivalent = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+        // Reorder is driven by Shift+Up/Down on the posts table (matching Windows);
+        // no menu key-equivalent, so VoiceOver speaks the new position, not the
+        // menu title. These stay as discoverable, clickable menu entries.
+        timelineMenu.addItem(withTitle: "Move Timeline Up",
+                             action: #selector(MainWindowController.moveTimelineUp(_:)),
+                             keyEquivalent: "")
+        timelineMenu.addItem(withTitle: "Move Timeline Down",
+                             action: #selector(MainWindowController.moveTimelineDown(_:)),
+                             keyEquivalent: "")
         timelineMenu.addItem(.separator())
         for number in 1...9 {
             let item = timelineMenu.addItem(withTitle: "Go to Timeline \(number)",

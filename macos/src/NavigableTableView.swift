@@ -18,6 +18,15 @@ final class NavigableTableView: NSTableView {
     var onCommandRight: (() -> Void)?
     var onCommandUp: (() -> Void)?
     var onCommandDown: (() -> Void)?
+    /// Shift+Up/Down: reorder the open timelines (matches Windows).
+    var onShiftUp: (() -> Void)?
+    var onShiftDown: (() -> Void)?
+    /// Option+Up/Down: jump by the current movement unit; Option+Left/Right:
+    /// cycle which movement unit is active.
+    var onOptionUp: (() -> Void)?
+    var onOptionDown: (() -> Void)?
+    var onOptionLeft: (() -> Void)?
+    var onOptionRight: (() -> Void)?
     var onReturn: (() -> Void)?
     var onCommandReturn: (() -> Void)?
     var onShiftReturn: (() -> Void)?
@@ -76,17 +85,27 @@ final class NavigableTableView: NSTableView {
                 onDelete(); return
             }
         case Key.leftArrow:
-            if event.modifierFlags.contains(.command), let onCommandLeft { onCommandLeft(); return }
-            if let onLeftArrow { onLeftArrow(); return }
+            let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            if mods == .command, let onCommandLeft { onCommandLeft(); return }
+            if mods == .option, let onOptionLeft { onOptionLeft(); return }
+            if mods.isEmpty, let onLeftArrow { onLeftArrow(); return }
         case Key.rightArrow:
-            if event.modifierFlags.contains(.command), let onCommandRight { onCommandRight(); return }
-            if let onRightArrow { onRightArrow(); return }
+            let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            if mods == .command, let onCommandRight { onCommandRight(); return }
+            if mods == .option, let onOptionRight { onOptionRight(); return }
+            if mods.isEmpty, let onRightArrow { onRightArrow(); return }
         case Key.upArrow:
-            if event.modifierFlags.contains(.command), let onCommandUp { onCommandUp(); return }
-            if selectedRow == 0 { onBoundary?(); return }
+            let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            if mods == .command, let onCommandUp { onCommandUp(); return }
+            if mods == .shift, let onShiftUp { onShiftUp(); return }
+            if mods == .option, let onOptionUp { onOptionUp(); return }
+            if mods.isEmpty, selectedRow == 0 { onBoundary?(); return }
         case Key.downArrow:
-            if event.modifierFlags.contains(.command), let onCommandDown { onCommandDown(); return }
-            if numberOfRows > 0, selectedRow == numberOfRows - 1 { onBoundary?(); return }
+            let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            if mods == .command, let onCommandDown { onCommandDown(); return }
+            if mods == .shift, let onShiftDown { onShiftDown(); return }
+            if mods == .option, let onOptionDown { onOptionDown(); return }
+            if mods.isEmpty, numberOfRows > 0, selectedRow == numberOfRows - 1 { onBoundary?(); return }
         default:
             // Plain character keys (no ⌘/⌃/⌥) become single-key shortcuts.
             let modifiers = event.modifierFlags.intersection([.command, .control, .option])

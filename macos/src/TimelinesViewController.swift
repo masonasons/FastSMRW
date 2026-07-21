@@ -45,6 +45,10 @@ final class TimelinesViewController: NSViewController, NSTableViewDataSource, NS
         tableView.onTab = { [weak self] in self?.onMoveToPosts?() }
         tableView.onBoundary = { [weak self] in self?.state.playEarcon("boundary") }
         tableView.onDelete = { [weak self] in self?.closeSelectedTimeline() }
+        // Shift+Up/Down reorder the timelines from the sidebar too (matches the
+        // posts pane and Windows). The core announces the new position.
+        tableView.onShiftUp = { [weak self] in self?.reorderSelected(dir: "up") }
+        tableView.onShiftDown = { [weak self] in self?.reorderSelected(dir: "down") }
         tableView.menuProvider = { [weak self] row in self?.contextMenu(row: row) }
 
         let scrollView = NSScrollView()
@@ -111,6 +115,15 @@ final class TimelinesViewController: NSViewController, NSTableViewDataSource, NS
         state.selectTimeline(index: sender.tag)
         state.toggleMute()
     }
+    /// Shift+Up/Down from the sidebar: reorder the selected timeline. Select the
+    /// row first so the core's "current" timeline is the one we're moving.
+    private func reorderSelected(dir: String) {
+        let row = tableView.selectedRow
+        guard timelines.indices.contains(row) else { return }
+        state.selectTimeline(index: row)
+        state.reorderTimeline(dir: dir)
+    }
+
     @objc private func moveUpRow(_ sender: NSMenuItem) {
         state.selectTimeline(index: sender.tag)
         state.reorderTimeline(dir: "up")
