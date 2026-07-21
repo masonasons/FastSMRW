@@ -2430,19 +2430,63 @@ void MainWindow::ev_update_ready(const json& e) {
     const std::wstring bat_path = app_dir + L"\\fastsmrw-update.bat";
     const unsigned long pid = GetCurrentProcessId();
 
+    const std::string pid_s = std::to_string(pid);
+    const std::string extract_u = to_utf8(extract_dir);
+    const std::string app_u = to_utf8(app_dir);
+    const std::string exe_u = to_utf8(exe_name);
+
     // Batch: wait for this process to exit, extract the zip, overlay the run
     // folder, relaunch, and delete itself. Quote every path for spaces.
+    //
+    // Windows 7 compatibility: the old script used `Wait-Process -Timeout` and
+    // `Expand-Archive`, both PowerShell 5+ (Windows 10+) only. Windows 7 ships
+    // PowerShell 2.0, where those commands don't exist, so the update silently
+    // did nothing and the app relaunched unchanged. Now we wait with a plain
+    // tasklist poll, and unzip with Expand-Archive only where it exists — falling
+    // back to the shell's built-in unzip (Shell.Application, works everywhere) on
+    // older PowerShell.
     std::string bat;
-    bat += "@echo off\r\nchcp 65001 >nul\r\n";
-    bat += "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Wait-Process -Id " +
-           std::to_string(pid) + " -Timeout 20 -ErrorAction SilentlyContinue; " +
-           "Expand-Archive -LiteralPath '" + zip + "' -DestinationPath '" + to_utf8(extract_dir) +
-           "' -Force\"\r\n";
-    bat += "xcopy /s /e /y /q \"" + to_utf8(extract_dir) + "\\*\" \"" + to_utf8(app_dir) +
-           "\\\" >nul\r\n";
-    bat += "rmdir /s /q \"" + to_utf8(extract_dir) + "\"\r\n";
+    bat += "@echo off\r\nchcp 65001 >nul\r\nsetlocal enableextensions\r\n";
+    // Wait for FastSMRW (this PID) to close. ping is the portable "sleep".
+    bat += ":waitloop\r\n";
+    bat += "tasklist /fi \"PID eq " + pid_s + "\" 2>nul | find \"" + pid_s +
+           "\" >nul\r\n";
+    bat += "if errorlevel 1 goto extract\r\n";
+    bat += "ping -n 2 127.0.0.1 >nul\r\n";
+    bat += "goto waitloop\r\n";
+    bat += ":extract\r\n";
+    // Detect the PowerShell major version (PSVersionTable exists back to 2.0).
+    bat += "set \"PSMAJOR=0\"\r\n";
+    bat += "for /f \"usebackq delims=\" %%v in (`powershell -NoProfile -Command "
+           "\"$PSVersionTable.PSVersion.Major\" 2^>nul`) do set \"PSMAJOR=%%v\"\r\n";
+    bat += "if \"%PSMAJOR%\"==\"\" set \"PSMAJOR=0\"\r\n";
+    bat += "if %PSMAJOR% GEQ 5 (\r\n";
+    bat += "  powershell -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive "
+           "-LiteralPath '" +
+           zip + "' -DestinationPath '" + extract_u + "' -Force\"\r\n";
+    bat += ") else (\r\n";
+    // Shell.Application unzip: works on Windows 7's PowerShell 2.0. CopyHere is
+    // asynchronous, so wait until the destination's top-level item count catches
+    // up (bounded), then a short settle before overlaying.
+    bat += "  powershell -NoProfile -ExecutionPolicy Bypass -Command \""
+           "$ErrorActionPreference='Stop'; "
+           "$null=New-Item -ItemType Directory -Force -Path '" +
+           extract_u +
+           "'; "
+           "$s=New-Object -ComObject Shell.Application; "
+           "$z=$s.NameSpace('" +
+           zip + "'); $d=$s.NameSpace('" + extract_u +
+           "'); "
+           "$d.CopyHere($z.Items(),20); "
+           "$n=$z.Items().Count; $t=0; "
+           "do { Start-Sleep -Milliseconds 300; $t=$t+1 } "
+           "while ($d.Items().Count -lt $n -and $t -lt 200); "
+           "Start-Sleep -Milliseconds 1500\"\r\n";
+    bat += ")\r\n";
+    bat += "xcopy /s /e /y /q \"" + extract_u + "\\*\" \"" + app_u + "\\\" >nul\r\n";
+    bat += "rmdir /s /q \"" + extract_u + "\"\r\n";
     bat += "del /q \"" + zip + "\"\r\n";
-    bat += "start \"\" \"" + to_utf8(app_dir) + "\\" + to_utf8(exe_name) + "\"\r\n";
+    bat += "start \"\" \"" + app_u + "\\" + exe_u + "\"\r\n";
     bat += "del \"%~f0\"\r\n";
 
     {

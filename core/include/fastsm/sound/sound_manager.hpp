@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace fastsm::sound {
@@ -43,7 +44,14 @@ public:
     SoundManager(const SoundManager&) = delete;
     SoundManager& operator=(const SoundManager&) = delete;
 
-    void set_user_packs_dir(std::filesystem::path dir) { user_packs_dir_ = std::move(dir); }
+    // Create the user packs dir up front so the "Open Soundpacks Folder" button in
+    // every front end lands on a real directory (ShellExecute/NSWorkspace silently
+    // fail on a path that doesn't exist yet — it's only created lazily otherwise).
+    void set_user_packs_dir(std::filesystem::path dir) {
+        user_packs_dir_ = std::move(dir);
+        std::error_code ec;
+        std::filesystem::create_directories(user_packs_dir_, ec);
+    }
     void set_bundled_packs_dir(std::filesystem::path dir) { bundled_packs_dir_ = std::move(dir); }
 
     // "" or "Default"/"default" selects the bundled default pack.

@@ -1,6 +1,12 @@
 FastSMRW changelog
 ==================
 
+0.4.6
+-----
+
+- Fixed: the "Open Soundpacks Folder" button now works even before you've added a custom pack, opening (and creating) your soundpacks folder instead of doing nothing.
+- Fixed: updating now works on Windows 7 — the portable updater no longer relied on tools only present on Windows 10 and later.
+
 0.4.5
 -----
 
