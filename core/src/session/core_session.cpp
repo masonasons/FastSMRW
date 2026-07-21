@@ -782,6 +782,11 @@ void CoreSession::cmd_select_timeline(const json& cmd) {
         if (cmd.value("speak_position", false)) // invisible interface: add "n of count"
             msg += ", " + timeline_position_text(tc);
         emit_announce(msg);
+        // Visiting Notifications clears the unread badge (Bluesky updateSeen).
+        if (tc->source().kind == TimelineSource::Kind::Notifications && tc->account()) {
+            SocialAccount* a = tc->account();
+            worker_.post([a] { a->mark_notifications_seen(); });
+        }
     }
 }
 
@@ -980,19 +985,87 @@ void CoreSession::cmd_get_spawnable() {
                 }
             }
             refresh_lists(account); // keep the list cache warm for the next Ctrl+T
+        } else if (account->platform() == Platform::Bluesky) {
+            tls.push_back({{"kind", "hashtag"}, {"title", "Hashtag"}, {"input", "Hashtag"}});
+            tls.push_back({{"kind", "search_posts"}, {"title", "Search Posts"}, {"input", "Search"}});
+            tls.push_back(
+                {{"kind", "search_people"}, {"title", "Search People"}, {"input", "Search"}});
+            // The account's curation lists and custom feeds, offered from cache
+            // (each refreshed below for next time). "param" carries the at-uri,
+            // which the UI echoes back on spawn.
+            const std::string akey = account->account_key();
+            auto push_cached = [&](const std::map<std::string, std::vector<TimelineList>>& cache,
+                                   const char* kind_str, const std::string& ck_prefix,
+                                   const std::string& title_prefix) {
+                auto it = cache.find(akey);
+                if (it == cache.end())
+                    return;
+                for (const auto& l : it->second) {
+                    const std::string ck = ck_prefix + l.id;
+                    bool open = false;
+                    for (auto& tc : timelines_)
+                        if (tc->source().cache_key() == ck) {
+                            open = true;
+                            break;
+                        }
+                    if (!open)
+                        tls.push_back({{"kind", kind_str},
+                                       {"param", l.id},
+                                       {"title", title_prefix + l.title}});
+                }
+            };
+            push_cached(lists_by_account_, "list", "list:", "List: ");
+            push_cached(feeds_by_account_, "feed", "feed:", "Feed: ");
+            refresh_lists(account);
+            refresh_feeds(account);
         }
     }
     emit({{"event", "spawnable_timelines"}, {"timelines", tls}});
 }
 
 void CoreSession::refresh_lists(SocialAccount* account) {
-    if (!account || account->platform() != Platform::Mastodon)
+    if (!account)
         return;
     const std::string key = account->account_key();
     worker_.post([this, account, key] {
         auto lists = account->lists();
         loop_.post([this, key, lists = std::move(lists)]() mutable {
             lists_by_account_[key] = std::move(lists);
+        });
+    });
+}
+
+void CoreSession::refresh_feeds(SocialAccount* account) {
+    if (!account)
+        return;
+    const std::string key = account->account_key();
+    worker_.post([this, account, key] {
+        auto feeds = account->saved_feeds();
+        loop_.post([this, key, feeds = std::move(feeds)]() mutable {
+            feeds_by_account_[key] = std::move(feeds);
+        });
+    });
+}
+
+void CoreSession::refresh_muted_words(SocialAccount* account) {
+    if (!account)
+        return;
+    const std::string key = account->account_key();
+    worker_.post([this, account, key] {
+        auto words = account->muted_words();
+        loop_.post([this, key, words = std::move(words)]() mutable {
+            auto& slot = muted_words_by_account_[key];
+            if (slot == words)
+                return; // unchanged (e.g. empty -> empty): nothing to re-render
+            slot = std::move(words);
+            // Re-apply the filter to every open + parked timeline, then push the
+            // refreshed visible lists so newly-muted posts disappear at once.
+            for (auto& tc : timelines_)
+                apply_timeline_settings(*tc);
+            for (auto& [k, v] : parked_)
+                for (auto& tc : v)
+                    apply_timeline_settings(*tc);
+            emit_all_timelines();
         });
     });
 }
@@ -1220,6 +1293,23 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
         spawn_source(TimelineSource::list(id, "List: " + title));
         return;
     }
+    // A Bluesky custom feed: "param" is the feed generator at-uri; look up its
+    // title from the cached feed set for a nice "Feed: <name>" heading.
+    if (kind == "feed") {
+        const std::string id = cmd.value("param", std::string{});
+        if (id.empty())
+            return;
+        std::string title = "Feed";
+        if (SocialAccount* a = accounts_.selected())
+            if (auto it = feeds_by_account_.find(a->account_key()); it != feeds_by_account_.end())
+                for (const auto& f : it->second)
+                    if (f.id == id) {
+                        title = f.title;
+                        break;
+                    }
+        spawn_source(TimelineSource::feed(id, "Feed: " + title));
+        return;
+    }
     // "Sent" is your own posts, shown as a standard (dismissable, pinnable) user
     // timeline. It reuses UserPosts with your account id, titled "Sent".
     if (kind == "sent") {
@@ -1357,10 +1447,6 @@ void CoreSession::cmd_open_status_actors(const json& cmd, bool boosted) {
     TimelineController* tc = current();
     if (!tc || !accounts_.selected())
         return;
-    if (accounts_.selected()->platform() != Platform::Mastodon) {
-        emit_announce("Seeing who favorited or boosted a post isn't available on this account.");
-        return;
-    }
     const TimelineItem* item = find_item(tc, cmd.value("id", std::string{}));
     if (!item)
         return;
@@ -1517,17 +1603,13 @@ void CoreSession::cmd_report(const json& cmd) {
     SocialAccount* acct = accounts_.selected();
     if (!acct)
         return;
-    if (acct->platform() != Platform::Mastodon) {
-        sound_.play(sound::Earcon::Error);
-        emit_announce("Reporting isn't available on this account.");
-        return;
-    }
     ReportDraft draft;
     draft.account_id = cmd.value("account_id", std::string{});
     draft.comment = cmd.value("comment", std::string{});
     draft.category = cmd.value("category", std::string("other"));
     draft.forward = cmd.value("forward", false);
-    // Reporting a specific post: resolve its author and include the post itself.
+    // Reporting a specific post: resolve its author and include the post itself
+    // (with its cid, which Bluesky strong refs require).
     if (const std::string row = cmd.value("id", std::string{}); !row.empty()) {
         if (TimelineController* tc = current())
             if (const TimelineItem* item = find_item(tc, row))
@@ -1535,6 +1617,7 @@ void CoreSession::cmd_report(const json& cmd) {
                     if (draft.account_id.empty())
                         draft.account_id = s->account.id;
                     draft.status_ids.push_back(s->id);
+                    draft.status_cids.push_back(s->cid.value_or(std::string{}));
                 }
     }
     if (auto it = cmd.find("status_ids"); it != cmd.end() && it->is_array())
@@ -1559,14 +1642,12 @@ void CoreSession::cmd_open_profile_editor(const json&) {
     SocialAccount* acct = accounts_.selected();
     if (!acct)
         return;
-    if (acct->platform() != Platform::Mastodon) {
-        sound_.play(sound::Earcon::Error);
-        emit_announce("Editing your profile isn't available on this account.");
-        return;
-    }
-    worker_.post([this, acct] {
+    // Bluesky profiles are just a display name + bio (+ avatar); "simple" tells the
+    // UI to hide the Mastodon-only metadata fields, privacy, and account flags.
+    const bool simple = acct->platform() != Platform::Mastodon;
+    worker_.post([this, acct, simple] {
         auto src = acct->profile_source();
-        loop_.post([this, src] {
+        loop_.post([this, src, simple] {
             if (!src) {
                 sound_.play(sound::Earcon::Error);
                 emit_announce("Couldn't load your profile.");
@@ -1576,6 +1657,7 @@ void CoreSession::cmd_open_profile_editor(const json&) {
             for (const auto& f : src->fields)
                 fields.push_back({{"name", f.name}, {"value", f.value}});
             emit({{"event", "profile_editor"},
+                  {"simple", simple},
                   {"display_name", src->display_name},
                   {"note", src->note},
                   {"locked", src->locked},
@@ -3401,6 +3483,7 @@ void CoreSession::rebuild_timelines() {
     for (SocialAccount* account : accounts_.accounts()) {
         worker_.post([account] { account->load_configuration(); }); // refresh char limit
         refresh_lists(account); // warm each account's list cache for Ctrl+T
+        refresh_muted_words(account); // load keyword mutes (Bluesky) for the filter
         const std::string key = account->account_key();
         std::vector<TimelineSource> sources;
         std::vector<bool> pins;
@@ -3482,6 +3565,7 @@ void CoreSession::switch_account(const std::string& new_key) {
     } else if (SocialAccount* a = accounts_.selected()) {
         timelines_ = build_timelines_for(a, a->default_timelines());
     }
+    refresh_muted_words(accounts_.selected()); // keep keyword mutes current for this account
     for (auto& tc : timelines_)
         tc->refresh(); // freshen the account we just switched to
     update_streaming();
@@ -3580,7 +3664,13 @@ void CoreSession::apply_timeline_settings(TimelineController& tc) {
         client = it->second;
     const bool has_client = client.is_active();
     const std::string me_id = tc.account() ? tc.account()->me().id : std::string{};
-    tc.set_filter([hide_mentions, has_client, client, me_id](const TimelineItem& item) {
+    // Client-side keyword mutes (Bluesky muted words), lowercased.
+    std::vector<std::string> muted;
+    if (tc.account())
+        if (auto it = muted_words_by_account_.find(tc.account()->account_key());
+            it != muted_words_by_account_.end())
+            muted = it->second;
+    tc.set_filter([hide_mentions, has_client, client, me_id, muted](const TimelineItem& item) {
         if (const Status* s = item.status(); s && s->any_filter_hides())
             return false; // server-side hide
         if (hide_mentions) {
@@ -3590,6 +3680,21 @@ void CoreSession::apply_timeline_settings(TimelineController& tc) {
         }
         if (has_client && !client_filter_should_show(client, item, me_id))
             return false;
+        // Keyword mute: hide a post whose text or hashtags contain a muted word.
+        if (!muted.empty())
+            if (const Status* s = item.status()) {
+                const Status& d = s->display_status();
+                std::string hay = d.text;
+                for (const auto& t : d.tags) {
+                    hay += ' ';
+                    hay += t;
+                }
+                for (char& c : hay)
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                for (const auto& w : muted)
+                    if (hay.find(w) != std::string::npos)
+                        return false;
+            }
         return true;
     });
 }

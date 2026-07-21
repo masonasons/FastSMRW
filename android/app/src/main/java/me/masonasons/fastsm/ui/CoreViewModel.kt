@@ -129,6 +129,8 @@ data class ProfileEditorUi(
     val privacy: String,
     val maxFields: Int,
     val fields: List<ProfileFieldUi>,
+    // Bluesky: only display name + bio apply; hide the Mastodon-only controls.
+    val simple: Boolean = false,
 )
 
 /** A user's profile card (user_profile event). [text] is the composed profile. */
@@ -431,6 +433,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                     privacy = e.optString("privacy", "public"),
                     maxFields = e.optInt("max_fields", 4),
                     fields = fields,
+                    simple = e.optBoolean("simple"),
                 )
             }
 

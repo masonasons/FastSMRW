@@ -34,6 +34,7 @@ set(CORE_SRC
     ${CORE}/platform/mastodon/mastodon_account.cpp
     ${CORE}/platform/bluesky/bluesky_map.cpp
     ${CORE}/platform/bluesky/bluesky_account.cpp
+    ${CORE}/platform/bluesky/bluesky_richtext.cpp
     ${CORE}/auth/mastodon_auth.cpp
     ${CORE}/auth/bluesky_auth.cpp
     ${CORE}/store/paths.cpp

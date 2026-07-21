@@ -94,9 +94,14 @@ private:
     void cmd_go_back();
     void cmd_get_spawnable();
     void cmd_spawn_timeline(const nlohmann::json& cmd);
-    // Refresh the selected account's Mastodon lists in the background so the New
-    // Timeline dialog (Ctrl+T) can offer them instantly from cache.
+    // Refresh the selected account's lists (Mastodon lists / Bluesky curation
+    // lists) and Bluesky custom feeds in the background so the New Timeline dialog
+    // (Ctrl+T) can offer them instantly from cache.
     void refresh_lists(SocialAccount* account);
+    void refresh_feeds(SocialAccount* account);
+    // Fetch the account's muted words (Bluesky) in the background, then re-apply
+    // the client filter so open timelines mute matching posts.
+    void refresh_muted_words(SocialAccount* account);
 
     // --- Mastodon lists: user membership + list management ---
     void cmd_get_user_lists(const nlohmann::json& cmd); // {account_id, acct} -> user_lists event
@@ -309,6 +314,11 @@ private:
     // account_key -> the account's timeline lists, refreshed in the background so
     // Ctrl+T can offer them without a network round trip in the hot path.
     std::map<std::string, std::vector<TimelineList>> lists_by_account_;
+    // account_key -> the account's custom feeds (Bluesky), cached like lists_by_account_.
+    std::map<std::string, std::vector<TimelineList>> feeds_by_account_;
+    // account_key -> the account's muted words (Bluesky), lowercased; applied by
+    // apply_timeline_settings as a client-side keyword mute.
+    std::map<std::string, std::vector<std::string>> muted_words_by_account_;
     std::function<void(const std::string&)> emit_;
 
     std::unique_ptr<net::IHttpClient> http_;

@@ -4,6 +4,18 @@ FastSMRW changelog
 0.4.6
 -----
 
+- Fixed: on Bluesky, replying to a post now keeps it in the conversation instead of posting it detached.
+- Fixed: on Bluesky, links, @mentions, and #hashtags in posts you write now work — links open, mentions notify and resolve, and hashtags are searchable.
+- New: on Bluesky, you can now attach images (with alt text) to your posts.
+- New: on Bluesky, posts now show link preview cards, videos, and quoted posts that include media, when you read them.
+- New: on Bluesky, the New Timeline dialog now offers your custom feeds and lists, hashtag timelines, and post/people search.
+- New: on Bluesky, you can now report a post or a person to the moderators, from the post info window and the profile view.
+- New: on Bluesky, posts carrying adult or graphic content labels now arrive with a content warning.
+- New: on Bluesky, your muted words now hide matching posts across your timelines.
+- New: on Bluesky, edit your own profile (display name and bio) from the Me menu.
+- New: on Bluesky, pin one of your posts to your profile (and unpin it).
+- New: on Bluesky, see who liked or reposted a post from the post info window.
+- New: on Bluesky, opening Notifications now clears the unread count shown in other apps.
 - Fixed: the "Open Soundpacks Folder" button now works even before you've added a custom pack, opening (and creating) your soundpacks folder instead of doing nothing.
 - Fixed: updating now works on Windows 7 — the portable updater no longer relied on tools only present on Windows 10 and later.
 

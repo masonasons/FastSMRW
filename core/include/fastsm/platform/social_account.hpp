@@ -36,6 +36,9 @@ struct PlatformFeatures {
 struct ReportDraft {
     std::string account_id;
     std::vector<std::string> status_ids;
+    // Parallel to status_ids: each reported post's cid (Bluesky strong refs need
+    // uri + cid). Empty / unused on Mastodon.
+    std::vector<std::string> status_cids;
     std::string comment;
     std::string category = "other";
     bool forward = false;
@@ -188,6 +191,10 @@ public:
     // Timelines the user can open via the New Timeline dialog (Ctrl+T).
     virtual std::vector<TimelineSource> spawnable_timelines() const { return {}; }
 
+    // Mark the account's notifications as seen (clears the unread badge on other
+    // clients). Runs on the worker thread. Default no-op; Bluesky calls updateSeen.
+    virtual void mark_notifications_seen() {}
+
     // Refresh server-derived configuration (e.g. the instance character limit).
     // Runs synchronously on the worker thread; default is a no-op for platforms
     // with a fixed limit (Bluesky).
@@ -313,6 +320,14 @@ public:
     // Fetch the account's lists so the New Timeline dialog can offer them. Runs
     // synchronously on the worker thread. Empty for platforms without lists.
     virtual std::vector<TimelineList> lists() { return {}; }
+    // The account's custom feeds (Bluesky saved/pinned feed generators), offered
+    // by the New Timeline dialog like lists. Runs synchronously on the worker
+    // thread. Empty for platforms without custom feeds (Mastodon).
+    virtual std::vector<TimelineList> saved_feeds() { return {}; }
+    // The account's muted words (Bluesky preferences), lowercased, for client-side
+    // keyword muting. Runs synchronously on the worker thread. Empty for platforms
+    // that mute server-side instead (Mastodon uses managed filters).
+    virtual std::vector<std::string> muted_words() { return {}; }
     // The lists a given account is a member of (Mastodon /api/v1/accounts/:id/lists).
     virtual std::vector<TimelineList> account_lists(const std::string&) { return {}; }
     // Add or remove an account from one of the viewer's lists. (Mastodon only

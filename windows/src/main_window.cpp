@@ -1277,6 +1277,7 @@ void MainWindow::ev_profile_editor(const json& e) {
     cur.sensitive = e.value("sensitive", false);
     cur.privacy = e.value("privacy", std::string("public"));
     cur.max_fields = e.value("max_fields", 4);
+    cur.simple = e.value("simple", false);
     if (e.contains("fields") && e["fields"].is_array())
         for (const auto& f : e["fields"])
             cur.fields.push_back({f.value("name", std::string{}), f.value("value", std::string{})});

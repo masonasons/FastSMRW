@@ -92,6 +92,150 @@ void test_bluesky_notification_mapping() {
     }
 }
 
+void test_bluesky_facet_mapping() {
+    // A post whose record carries mention + tag facets populates mentions/tags.
+    const char* kFaceted = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/2", "cid": "cid2",
+        "author": { "did": "did:plc:x", "handle": "bob.test", "displayName": "Bob" },
+        "record": {
+          "text": "hi @alice.bsky.social #a11y",
+          "createdAt": "2024-06-28T10:00:00Z",
+          "facets": [
+            { "index": { "byteStart": 3, "byteEnd": 21 },
+              "features": [ { "$type": "app.bsky.richtext.facet#mention", "did": "did:plc:alice" } ] },
+            { "index": { "byteStart": 22, "byteEnd": 27 },
+              "features": [ { "$type": "app.bsky.richtext.facet#tag", "tag": "a11y" } ] }
+          ]
+        },
+        "likeCount": 0, "repostCount": 0, "replyCount": 0
+      }
+    })JSON";
+    const Status s = bluesky::map_feed_item(json::parse(kFaceted));
+    CHECK_EQ(s.mentions.size(), size_t(1));
+    if (!s.mentions.empty()) {
+        CHECK_EQ(s.mentions[0].id, std::string("did:plc:alice"));
+        CHECK_EQ(s.mentions[0].acct, std::string("alice.bsky.social")); // '@' stripped from the slice
+    }
+    CHECK_EQ(s.tags.size(), size_t(1));
+    if (!s.tags.empty())
+        CHECK_EQ(s.tags[0], std::string("a11y"));
+}
+
+void test_bluesky_embed_external_and_video() {
+    // An external link-card view maps to a Card.
+    const char* kExternal = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/e", "cid": "cide",
+        "author": { "did": "did:plc:x", "handle": "bob.test" },
+        "record": { "text": "look", "createdAt": "2024-06-28T10:00:00Z" },
+        "embed": {
+          "$type": "app.bsky.embed.external#view",
+          "external": { "uri": "https://ex.com/a", "title": "A title",
+                        "description": "desc", "thumb": "https://ex.com/t.jpg" }
+        }
+      }
+    })JSON";
+    const Status e = bluesky::map_feed_item(json::parse(kExternal));
+    CHECK(e.card.has_value());
+    if (e.card) {
+        CHECK_EQ(e.card->url, std::string("https://ex.com/a"));
+        CHECK_EQ(e.card->title, std::string("A title"));
+    }
+
+    // A video view maps to a Video attachment (playlist + thumbnail + alt).
+    const char* kVideo = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/v", "cid": "cidv",
+        "author": { "did": "did:plc:x", "handle": "bob.test" },
+        "record": { "text": "clip", "createdAt": "2024-06-28T10:00:00Z" },
+        "embed": {
+          "$type": "app.bsky.embed.video#view",
+          "playlist": "https://v/hls.m3u8", "thumbnail": "https://v/t.jpg", "alt": "a clip"
+        }
+      }
+    })JSON";
+    const Status v = bluesky::map_feed_item(json::parse(kVideo));
+    CHECK_EQ(v.media_attachments.size(), size_t(1));
+    if (!v.media_attachments.empty()) {
+        CHECK(v.media_attachments[0].type == MediaAttachment::Kind::Video);
+        CHECK_EQ(v.media_attachments[0].url, std::string("https://v/hls.m3u8"));
+        CHECK_EQ(v.media_attachments[0].description, std::string("a clip"));
+    }
+}
+
+void test_bluesky_embed_record_with_media() {
+    // recordWithMedia carries both a quoted post and media.
+    const char* kRWM = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/rwm", "cid": "cidr",
+        "author": { "did": "did:plc:x", "handle": "bob.test" },
+        "record": { "text": "quoting with a pic", "createdAt": "2024-06-28T10:00:00Z" },
+        "embed": {
+          "$type": "app.bsky.embed.recordWithMedia#view",
+          "media": {
+            "$type": "app.bsky.embed.images#view",
+            "images": [ { "thumb": "https://t/x.jpg", "fullsize": "https://f/x.jpg", "alt": "pic" } ]
+          },
+          "record": {
+            "record": {
+              "$type": "app.bsky.embed.record#viewRecord",
+              "uri": "at://did:plc:q/app.bsky.feed.post/q1", "cid": "qcid",
+              "author": { "did": "did:plc:q", "handle": "quoted.test", "displayName": "Quoted" },
+              "value": { "text": "the quoted text" }
+            }
+          }
+        }
+      }
+    })JSON";
+    const Status s = bluesky::map_feed_item(json::parse(kRWM));
+    CHECK_EQ(s.media_attachments.size(), size_t(1));
+    CHECK(s.quote != nullptr);
+    if (s.quote) {
+        CHECK_EQ(s.quote->text, std::string("the quoted text"));
+        CHECK_EQ(s.quote->account.display_name, std::string("Quoted"));
+    }
+}
+
+void test_bluesky_labels_content_warning() {
+    // A sensitive moderation label surfaces as a content warning.
+    const char* kLabeled = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/l", "cid": "cidl",
+        "author": { "did": "did:plc:x", "handle": "bob.test" },
+        "record": { "text": "nsfw", "createdAt": "2024-06-28T10:00:00Z" },
+        "labels": [ { "val": "porn" } ]
+      }
+    })JSON";
+    const Status s = bluesky::map_feed_item(json::parse(kLabeled));
+    CHECK(s.has_content_warning());
+    if (s.spoiler_text)
+        CHECK(s.spoiler_text->find("porn") != std::string::npos);
+
+    // A self-label in the record also counts.
+    const char* kSelf = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/l2", "cid": "cidl2",
+        "author": { "did": "did:plc:x", "handle": "bob.test" },
+        "record": { "text": "x", "createdAt": "2024-06-28T10:00:00Z",
+                    "labels": { "$type": "com.atproto.label.defs#selfLabels",
+                                "values": [ { "val": "nudity" } ] } }
+      }
+    })JSON";
+    CHECK(bluesky::map_feed_item(json::parse(kSelf)).has_content_warning());
+
+    // A non-sensitive label (e.g. spam) does NOT hide content behind a CW.
+    const char* kSpam = R"JSON({
+      "post": {
+        "uri": "at://did:plc:x/app.bsky.feed.post/l3", "cid": "cidl3",
+        "author": { "did": "did:plc:x", "handle": "bob.test" },
+        "record": { "text": "y", "createdAt": "2024-06-28T10:00:00Z" },
+        "labels": [ { "val": "spam" } ]
+      }
+    })JSON";
+    CHECK(!bluesky::map_feed_item(json::parse(kSpam)).has_content_warning());
+}
+
 void test_bluesky_plain_post() {
     const char* kPlain = R"JSON({
       "post": {

@@ -157,8 +157,10 @@ struct ProfileEditor: Decodable {
     var privacy = "public"
     var maxFields = 4
     var fields: [ProfileFieldItem] = []
+    // Bluesky: only display name + bio apply; hide the Mastodon-only controls.
+    var simple = false
     enum CodingKeys: String, CodingKey {
-        case note, locked, bot, discoverable, sensitive, privacy, fields
+        case note, locked, bot, discoverable, sensitive, privacy, fields, simple
         case displayName = "display_name"
         case maxFields = "max_fields"
     }

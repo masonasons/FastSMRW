@@ -32,6 +32,7 @@ CORE_SRC=(
     util/demojify.cpp util/base64.cpp
     platform/mastodon/mastodon_map.cpp platform/mastodon/mastodon_account.cpp
     platform/bluesky/bluesky_map.cpp platform/bluesky/bluesky_account.cpp
+    platform/bluesky/bluesky_richtext.cpp
     auth/mastodon_auth.cpp auth/bluesky_auth.cpp
     store/paths.cpp store/dpapi.cpp store/timeline_cache.cpp store/timeline_codec.cpp
     store/app_config.cpp store/app_settings.cpp store/account_store.cpp

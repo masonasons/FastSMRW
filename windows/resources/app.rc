@@ -419,7 +419,7 @@ BEGIN
     LTEXT     "&Bio:", -1, 8, 40, 284, 9
     EDITTEXT  IDC_EP_NOTE, 8, 52, 284, 44,
               ES_MULTILINE | ES_WANTRETURN | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP
-    LTEXT     "Default post &privacy:", -1, 8, 102, 120, 9
+    LTEXT     "Default post &privacy:", IDC_EP_PRIVACY_LABEL, 8, 102, 120, 9
     COMBOBOX  IDC_EP_PRIVACY, 8, 114, 120, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     AUTOCHECKBOX "&Require follow requests", IDC_EP_LOCKED, 148, 102, 144, 12
     AUTOCHECKBOX "This is a &bot account", IDC_EP_BOT, 148, 116, 144, 12

@@ -36,6 +36,20 @@ void test_form_encode();
 void test_bluesky_feed_mapping();
 void test_bluesky_plain_post();
 void test_bluesky_notification_mapping();
+void test_bluesky_facet_mapping();
+void test_bluesky_embed_external_and_video();
+void test_bluesky_embed_record_with_media();
+void test_bluesky_labels_content_warning();
+
+// From test_bluesky_richtext.cpp
+void test_bluesky_facets_link();
+void test_bluesky_facets_link_trailing_punct();
+void test_bluesky_facets_bare_www();
+void test_bluesky_facets_mention();
+void test_bluesky_facets_mention_needs_domain();
+void test_bluesky_facets_tag();
+void test_bluesky_facets_utf8_offsets();
+void test_bluesky_facets_mixed();
 
 // From test_auth.cpp
 void test_instance_normalization();
@@ -144,6 +158,19 @@ int main() {
     test_bluesky_feed_mapping();
     test_bluesky_plain_post();
     test_bluesky_notification_mapping();
+    test_bluesky_facet_mapping();
+    test_bluesky_embed_external_and_video();
+    test_bluesky_embed_record_with_media();
+    test_bluesky_labels_content_warning();
+
+    test_bluesky_facets_link();
+    test_bluesky_facets_link_trailing_punct();
+    test_bluesky_facets_bare_www();
+    test_bluesky_facets_mention();
+    test_bluesky_facets_mention_needs_domain();
+    test_bluesky_facets_tag();
+    test_bluesky_facets_utf8_offsets();
+    test_bluesky_facets_mixed();
     test_instance_normalization();
     test_base64();
     test_timeline_cache();

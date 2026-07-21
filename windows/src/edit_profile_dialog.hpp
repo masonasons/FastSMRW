@@ -25,6 +25,8 @@ struct ProfileEdit {
     bool sensitive = false;              // mark media sensitive by default
     std::string privacy = "public";      // default post visibility
     int max_fields = 4;                  // how many metadata rows to show
+    bool simple = false;                 // Bluesky: only display name + bio; hide
+                                         // metadata fields, privacy, and account flags
 };
 
 // Modal "Edit Profile" dialog, prefilled from `current` (its max_fields controls

@@ -49,7 +49,8 @@ fun ProfileEditorDialog(
     var sensitive by remember { mutableStateOf(editor.sensitive) }
     var privacy by remember { mutableStateOf(editor.privacy) }
     var privacyOpen by remember { mutableStateOf(false) }
-    val rows = maxOf(1, editor.maxFields)
+    // Bluesky profiles are just display name + bio: no metadata field rows.
+    val rows = if (editor.simple) 0 else maxOf(1, editor.maxFields)
     val fieldNames = remember {
         mutableStateListOf<String>().apply {
             for (i in 0 until rows) add(editor.fields.getOrNull(i)?.name ?: "")
@@ -74,25 +75,27 @@ fun ProfileEditorDialog(
                     value = note, onValueChange = { note = it },
                     label = { Text("Bio") }, modifier = Modifier.fillMaxWidth(),
                 )
-                Text("Default post privacy", style = MaterialTheme.typography.labelLarge)
-                Box {
-                    TextButton(onClick = { privacyOpen = true }) {
-                        Text(privacyOptions.firstOrNull { it.first == privacy }?.second ?: "Public")
-                    }
-                    DropdownMenu(expanded = privacyOpen, onDismissRequest = { privacyOpen = false }) {
-                        privacyOptions.forEach { (token, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = { privacy = token; privacyOpen = false },
-                            )
+                if (!editor.simple) {
+                    Text("Default post privacy", style = MaterialTheme.typography.labelLarge)
+                    Box {
+                        TextButton(onClick = { privacyOpen = true }) {
+                            Text(privacyOptions.firstOrNull { it.first == privacy }?.second ?: "Public")
+                        }
+                        DropdownMenu(expanded = privacyOpen, onDismissRequest = { privacyOpen = false }) {
+                            privacyOptions.forEach { (token, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = { privacy = token; privacyOpen = false },
+                                )
+                            }
                         }
                     }
+                    CheckRow("Require follow requests", locked) { locked = it }
+                    CheckRow("This is a bot account", bot) { bot = it }
+                    CheckRow("List me in the profile directory", discoverable) { discoverable = it }
+                    CheckRow("Mark my media sensitive by default", sensitive) { sensitive = it }
+                    Text("Profile fields", style = MaterialTheme.typography.labelLarge)
                 }
-                CheckRow("Require follow requests", locked) { locked = it }
-                CheckRow("This is a bot account", bot) { bot = it }
-                CheckRow("List me in the profile directory", discoverable) { discoverable = it }
-                CheckRow("Mark my media sensitive by default", sensitive) { sensitive = it }
-                Text("Profile fields", style = MaterialTheme.typography.labelLarge)
                 for (i in 0 until rows) {
                     OutlinedTextField(
                         value = fieldNames[i], onValueChange = { fieldNames[i] = it },

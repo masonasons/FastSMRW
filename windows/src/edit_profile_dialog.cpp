@@ -81,6 +81,20 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 sel = static_cast<int>(i);
         }
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
+        // Bluesky: a profile is just a display name + bio. Hide the Mastodon-only
+        // privacy, account flags, and metadata fields entirely.
+        if (c.simple) {
+            for (int id : {IDC_EP_PRIVACY, IDC_EP_PRIVACY_LABEL, IDC_EP_LOCKED, IDC_EP_BOT,
+                           IDC_EP_DISCOVERABLE, IDC_EP_SENSITIVE, IDC_EP_FIELDS_LABEL})
+                ShowWindow(GetDlgItem(dlg, id), SW_HIDE);
+            ctx->rows = 0;
+            for (int i = 0; i < kMaxRows; ++i) {
+                ShowWindow(GetDlgItem(dlg, kFieldIds[i].first), SW_HIDE);
+                ShowWindow(GetDlgItem(dlg, kFieldIds[i].second), SW_HIDE);
+            }
+            SetFocus(GetDlgItem(dlg, IDC_EP_DISPLAYNAME));
+            return FALSE;
+        }
         // Show only as many field rows as the server allows; prefill existing ones.
         ctx->rows = c.max_fields < 1 ? 1 : (c.max_fields > kMaxRows ? kMaxRows : c.max_fields);
         for (int i = 0; i < kMaxRows; ++i) {

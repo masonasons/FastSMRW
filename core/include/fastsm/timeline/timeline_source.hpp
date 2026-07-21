@@ -25,7 +25,9 @@ struct TimelineSource {
         SearchPeople, // people search for param; rows are users
         RemoteLocal, // a remote instance's Local timeline (param = instance domain)
         RemoteUser,  // a remote user's posts (param = "user@instance"), fetched abroad
-        List,        // a Mastodon list timeline (param = list id)
+        List,        // a Mastodon list timeline (param = list id); on Bluesky a
+                     // curation list feed (param = list at-uri)
+        Feed,        // a Bluesky custom feed / feed generator (param = feed at-uri)
         Mutes,       // the account's muted users; rows are users
         Blocks,      // the account's blocked users; rows are users
         FollowRequests, // accounts requesting to follow you; rows are users
@@ -82,6 +84,8 @@ struct TimelineSource {
             return title_text.empty() ? ("@" + param) : title_text;
         case Kind::List:
             return title_text.empty() ? "List" : title_text;
+        case Kind::Feed:
+            return title_text.empty() ? "Feed" : title_text;
         case Kind::Mutes:
             return "Muted Users";
         case Kind::Blocks:
@@ -141,6 +145,8 @@ struct TimelineSource {
             return "remoteUser:" + param;
         case Kind::List:
             return "list:" + param;
+        case Kind::Feed:
+            return "feed:" + param;
         case Kind::Mutes:
             return "mutes";
         case Kind::Blocks:
@@ -178,7 +184,7 @@ struct TimelineSource {
     // order, user lists keep server order, and searches keep relevance order.
     bool is_time_ordered() const {
         return kind != Kind::Thread && kind != Kind::SearchPosts && kind != Kind::Trends &&
-               !is_user_list();
+               kind != Kind::Feed && !is_user_list();
     }
     // Rows are users (not statuses), so the UI offers multi-select + batch actions.
     bool is_user_list() const {
@@ -254,6 +260,7 @@ struct TimelineSource {
         case Kind::PostUsers:
         case Kind::AnalyzedUsers:
         case Kind::Trends:
+        case Kind::Feed:
             return std::nullopt; // not a streaming feed; no new-items chime
         case Kind::Conversations:
             return "messages"; // DM chime when a conversation updates
@@ -302,6 +309,10 @@ struct TimelineSource {
     // A Mastodon list timeline (id = list id, title = "List: <name>").
     static TimelineSource list(std::string list_id, std::string title = {}) {
         return {Kind::List, std::move(list_id), std::move(title)};
+    }
+    // A Bluesky custom feed / feed generator (id = feed at-uri).
+    static TimelineSource feed(std::string feed_uri, std::string title = {}) {
+        return {Kind::Feed, std::move(feed_uri), std::move(title)};
     }
     // The users referenced in one post (author + mentions), seeded at spawn.
     static TimelineSource post_users(std::string status_id, std::string title = {}) {

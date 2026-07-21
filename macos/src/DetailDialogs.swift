@@ -127,7 +127,8 @@ private final class FlippedContainer: NSView {
 @MainActor
 func presentProfileEditor(state: AppState, editor: ProfileEditor) {
     let width: CGFloat = 380
-    let rows = max(1, editor.maxFields)
+    let simple = editor.simple // Bluesky: display name + bio only
+    let rows = simple ? 0 : max(1, editor.maxFields)
     let privacyTokens = ["public", "unlisted", "private", "direct"]
     let container = FlippedContainer()
     var y: CGFloat = 0
@@ -158,28 +159,35 @@ func presentProfileEditor(state: AppState, editor: ProfileEditor) {
     container.addSubview(bioScroll)
     y += 96
 
-    addLabel("Default post privacy:")
     let privacy = NSPopUpButton(frame: NSRect(x: 0, y: y, width: 180, height: 24))
     privacy.addItems(withTitles: ["Public", "Unlisted", "Followers only", "Direct"])
     privacy.selectItem(at: privacyTokens.firstIndex(of: editor.privacy) ?? 0)
-    container.addSubview(privacy)
-    y += 30
+    if !simple {
+        addLabel("Default post privacy:")
+        privacy.frame = NSRect(x: 0, y: y, width: 180, height: 24)
+        container.addSubview(privacy)
+        y += 30
+    }
 
+    // Creates the checkbox; only lays it out when not in Bluesky "simple" mode. The
+    // submit code still reads its (default off) state, which the core ignores there.
     func addCheck(_ title: String, _ on: Bool) -> NSButton {
         let b = NSButton(checkboxWithTitle: title, target: nil, action: nil)
         b.state = on ? .on : .off
-        b.frame = NSRect(x: 0, y: y, width: width, height: 18)
-        container.addSubview(b)
-        y += 20
+        if !simple {
+            b.frame = NSRect(x: 0, y: y, width: width, height: 18)
+            container.addSubview(b)
+            y += 20
+        }
         return b
     }
     let locked = addCheck("Require follow requests", editor.locked)
     let bot = addCheck("This is a bot account", editor.bot)
     let discoverable = addCheck("List me in the profile directory", editor.discoverable)
     let sensitive = addCheck("Mark my media sensitive by default", editor.sensitive)
-    y += 4
+    if !simple { y += 4 }
 
-    addLabel("Profile fields (label and content):")
+    if !simple { addLabel("Profile fields (label and content):") }
     let nameW: CGFloat = 130
     var fieldNames: [NSTextField] = []
     var fieldValues: [NSTextField] = []

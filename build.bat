@@ -95,7 +95,7 @@ REM ---- 1) core -> fastsm_core.lib ----
 set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\winhttp_client.cpp core\src\net\sse_parser.cpp core\src\models\serialization.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\quote_text.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp core\src\util\log.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\mastodon\mastodon_map.cpp core\src\platform\mastodon\mastodon_account.cpp"
-set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\platform\bluesky\bluesky_account.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\platform\bluesky\bluesky_account.cpp core\src\platform\bluesky\bluesky_richtext.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\auth\mastodon_auth.cpp core\src\auth\bluesky_auth.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\base64.cpp core\src\store\paths.cpp core\src\store\dpapi.cpp core\src\store\timeline_cache.cpp core\src\store\timeline_codec.cpp core\src\store\app_config.cpp core\src\store\account_store.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\runtime\worker_queue.cpp core\src\timeline\timeline_controller.cpp core\src\timeline\streaming_client.cpp core\src\timeline\movement.cpp core\src\timeline\client_filter.cpp"
@@ -177,7 +177,7 @@ if defined ISCC (
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_bluesky_richtext.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"

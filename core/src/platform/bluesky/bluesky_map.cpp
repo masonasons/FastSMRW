@@ -1,7 +1,9 @@
 #include "fastsm/platform/bluesky/bluesky_map.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "fastsm/util/date_parsing.hpp"
 
@@ -24,11 +26,12 @@ const json* obj(const json& j, const char* key) {
     return nullptr;
 }
 
-// Pull image attachments out of an embed view.
-void map_embed_media(const json& embed, Status& s) {
-    const std::string type = str(embed, "$type");
+// Map a media embed *view* (images / video / external link card) onto a status.
+// recordWithMedia's media is one of these too, so this is shared.
+void map_media_view(const json& view, Status& s) {
+    const std::string type = str(view, "$type");
     if (type == "app.bsky.embed.images#view") {
-        if (auto it = embed.find("images"); it != embed.end() && it->is_array()) {
+        if (auto it = view.find("images"); it != view.end() && it->is_array()) {
             for (const auto& img : *it) {
                 MediaAttachment m;
                 m.type = MediaAttachment::Kind::Image;
@@ -38,6 +41,116 @@ void map_embed_media(const json& embed, Status& s) {
                 s.media_attachments.push_back(std::move(m));
             }
         }
+    } else if (type == "app.bsky.embed.video#view") {
+        MediaAttachment m;
+        m.type = MediaAttachment::Kind::Video;
+        m.url = str(view, "playlist"); // HLS manifest
+        m.preview_url = str(view, "thumbnail");
+        m.description = str(view, "alt");
+        s.media_attachments.push_back(std::move(m));
+    } else if (type == "app.bsky.embed.external#view") {
+        // A link preview card (also how Bluesky surfaces GIFs, via Tenor).
+        if (const json* ext = obj(view, "external")) {
+            Card c;
+            c.url = str(*ext, "uri");
+            c.title = str(*ext, "title");
+            c.description = str(*ext, "description");
+            c.image_url = str(*ext, "thumb");
+            if (!c.url.empty())
+                s.card = std::move(c);
+        }
+    }
+}
+
+// Map an embedded quoted post (app.bsky.embed.record#viewRecord) to a light
+// Status: enough to speak the author and text.
+std::shared_ptr<Status> map_quote_record(const json& rec) {
+    if (str(rec, "uri").empty())
+        return nullptr; // viewNotFound / viewBlocked carry no post
+    Status q;
+    q.platform = Platform::Bluesky;
+    q.id = str(rec, "uri");
+    q.cid = str(rec, "cid");
+    if (const json* qa = obj(rec, "author"))
+        q.account = map_author(*qa);
+    if (const json* val = obj(rec, "value"))
+        q.text = str(*val, "text");
+    return std::make_shared<Status>(std::move(q));
+}
+
+// Populate mentions/tags from a post record's richtext `facets` (byte-range
+// annotations over the plain text). Mention facets carry the DID; the handle is
+// the sliced display text ("@handle"). Tag facets carry the bare tag.
+void map_facets(const json& record, Status& s) {
+    auto fit = record.find("facets");
+    if (fit == record.end() || !fit->is_array())
+        return;
+    for (const auto& f : *fit) {
+        const json* index = obj(f, "index");
+        const auto feats = f.find("features");
+        if (!index || feats == f.end() || !feats->is_array())
+            continue;
+        const std::size_t bs = index->value("byteStart", 0);
+        const std::size_t be = index->value("byteEnd", 0);
+        std::string slice;
+        if (be > bs && be <= s.text.size())
+            slice = s.text.substr(bs, be - bs);
+        for (const auto& feat : *feats) {
+            const std::string type = str(feat, "$type");
+            if (type == "app.bsky.richtext.facet#mention") {
+                Mention m;
+                m.id = str(feat, "did");
+                m.acct = slice.empty() ? std::string{} : slice;
+                if (!m.acct.empty() && m.acct.front() == '@')
+                    m.acct.erase(m.acct.begin());
+                m.username = m.acct;
+                m.url = "https://bsky.app/profile/" + (m.acct.empty() ? m.id : m.acct);
+                if (!m.id.empty() || !m.acct.empty())
+                    s.mentions.push_back(std::move(m));
+            } else if (type == "app.bsky.richtext.facet#tag") {
+                std::string tag = str(feat, "tag");
+                if (tag.empty() && slice.size() > 1 && slice.front() == '#')
+                    tag = slice.substr(1);
+                if (!tag.empty())
+                    s.tags.push_back(std::move(tag));
+            }
+        }
+    }
+}
+
+// Moderation / self labels that warrant a content warning for a blind user,
+// mirroring the media blur the visual app applies to sensitive content.
+bool is_sensitive_label(const std::string& v) {
+    return v == "porn" || v == "sexual" || v == "nudity" || v == "graphic-media" || v == "gore" ||
+           v == "corpse" || v == "self-harm" || v == "sexual-figurative";
+}
+
+// Surface a post's sensitive labels (moderator labels on the post view + the
+// author's self-labels in the record) as a content warning, so it gets the same
+// hide/warn treatment as a Mastodon CW. Leaves an existing CW untouched.
+void apply_labels(const json& post, const json* record, Status& s) {
+    std::vector<std::string> sensitive;
+    auto scan = [&](const json& arr) {
+        if (!arr.is_array())
+            return;
+        for (const auto& l : arr) {
+            const std::string v = str(l, "val");
+            if (is_sensitive_label(v) &&
+                std::find(sensitive.begin(), sensitive.end(), v) == sensitive.end())
+                sensitive.push_back(v);
+        }
+    };
+    if (auto it = post.find("labels"); it != post.end())
+        scan(*it);
+    if (record)
+        if (const json* self = obj(*record, "labels"))
+            if (auto vals = self->find("values"); vals != self->end())
+                scan(*vals);
+    if (!sensitive.empty() && (!s.spoiler_text || s.spoiler_text->empty())) {
+        std::string joined;
+        for (size_t i = 0; i < sensitive.size(); ++i)
+            joined += (i ? ", " : "") + sensitive[i];
+        s.spoiler_text = "Sensitive: " + joined;
     }
 }
 
@@ -88,6 +201,7 @@ Status map_post(const json& post) {
                 if (std::string uri = str(*parent, "uri"); !uri.empty())
                     s.in_reply_to_id = uri;
         }
+        map_facets(*record, s);
     }
     if (s.created_at == 0)
         s.created_at = util::parse_iso8601(str(post, "indexedAt")).value_or(0);
@@ -108,22 +222,24 @@ Status map_post(const json& post) {
     }
 
     if (const json* embed = obj(post, "embed")) {
-        map_embed_media(*embed, s);
-        // Quote post (record embed): app.bsky.embed.record#view
-        if (str(*embed, "$type") == "app.bsky.embed.record#view") {
-            if (const json* rec = obj(*embed, "record")) {
-                Status q;
-                q.platform = Platform::Bluesky;
-                q.id = str(*rec, "uri");
-                q.cid = str(*rec, "cid");
-                if (const json* qa = obj(*rec, "author"))
-                    q.account = map_author(*qa);
-                if (const json* val = obj(*rec, "value"))
-                    q.text = str(*val, "text");
-                s.quote = std::make_shared<Status>(std::move(q));
-            }
+        const std::string type = str(*embed, "$type");
+        if (type == "app.bsky.embed.record#view") {
+            // A pure quote post.
+            if (const json* rec = obj(*embed, "record"))
+                s.quote = map_quote_record(*rec);
+        } else if (type == "app.bsky.embed.recordWithMedia#view") {
+            // Quote + media together.
+            if (const json* media = obj(*embed, "media"))
+                map_media_view(*media, s);
+            if (const json* wrap = obj(*embed, "record"))
+                if (const json* rec = obj(*wrap, "record"))
+                    s.quote = map_quote_record(*rec);
+        } else {
+            // Images / video / external card.
+            map_media_view(*embed, s);
         }
     }
+    apply_labels(post, obj(post, "record"), s);
     return s;
 }
 
