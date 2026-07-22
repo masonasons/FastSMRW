@@ -5,6 +5,7 @@ FastSMRW changelog
 -----
 
 - Fixed: busy streaming timelines no longer bog the app down — new posts arriving in a flood are batched into one update instead of redrawing the whole timeline for every single post, so sounds and actions stay snappy even with a large cache.
+- Fixed: switching accounts no longer jumps you to whatever post you were reading in the other account; each account remembers its own place in each timeline.
 
 0.5.0
 -----

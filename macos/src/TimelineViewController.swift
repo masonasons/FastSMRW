@@ -35,8 +35,14 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
 
     private var rows: [Row] { state.currentRows }
     private var currentKey: String {
-        state.timelines.indices.contains(state.currentIndex)
-            ? state.timelines[state.currentIndex].kind : ""
+        guard state.timelines.indices.contains(state.currentIndex) else { return "" }
+        let timeline = state.timelines[state.currentIndex]
+        // Scope the remembered reading position by account, so the same kind
+        // (e.g. "home") in two accounts doesn't share a position — switching
+        // accounts was landing on the other account's post when its id existed
+        // in both (same-instance accounts share post ids). Title keeps two
+        // spawned timelines of the same kind distinct too.
+        return "\(state.selectedAccountKey)/\(timeline.kind)/\(timeline.title)"
     }
     private var selectedRowId: String? {
         let row = tableView.selectedRow

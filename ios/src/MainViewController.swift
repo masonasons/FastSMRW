@@ -52,8 +52,13 @@ final class MainViewController: UIViewController {
     private weak var aliasesVC: AliasesViewController?
 
     private var currentKey: String {
-        state.timelines.indices.contains(state.currentIndex)
-            ? state.timelines[state.currentIndex].kind : ""
+        guard state.timelines.indices.contains(state.currentIndex) else { return "" }
+        let timeline = state.timelines[state.currentIndex]
+        // Scope the remembered reading position by account, so the same kind
+        // (e.g. "home") in two accounts doesn't share a position — switching
+        // accounts otherwise lands on the other account's post when its id
+        // exists in both (same-instance accounts share post ids).
+        return "\(state.selectedAccountKey)/\(timeline.kind)/\(timeline.title)"
     }
 
     init(state: AppState) {
