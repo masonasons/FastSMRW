@@ -14,6 +14,8 @@ Front ends today:
 - **Windows** — pure Win32 (no frameworks), the reference front end.
 - **Android** — Kotlin + Jetpack Compose.
 - **macOS** — Swift + AppKit.
+- **iOS** — Swift + UIKit.
+  **[Join the public beta on TestFlight](https://testflight.apple.com/join/1Aw6DRGy)**
 
 ## Design goals
 
@@ -46,7 +48,7 @@ command and emits every event on its own core-loop thread.
 
 Adding a feature is therefore: a new command + event(s) in the core once, then
 wiring the UI to send/render them in **each** app — never engine logic in a front
-end. A future iOS/Linux/other UI binds the same core the same way.
+end. A future Linux/other UI binds the same core the same way.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full architecture and contribution rules.
 
@@ -111,3 +113,18 @@ macos/build.sh            # Debug build
 macos/build.sh release    # Release build
 macos/package-dmg.sh      # Package a .dmg
 ```
+
+## Building — iOS
+
+Swift + UIKit, sharing the Swift command/event bridge with the Mac app
+(`apple/shared/`). Same tooling as macOS (Xcode + XcodeGen; the `.xcodeproj`
+is generated from `ios/project.yml`).
+
+```sh
+ios/build.sh              # Debug build for the simulator
+ios/build.sh device       # Build for a connected iPhone (automatic signing)
+ios/testflight.sh         # Archive + upload a beta to TestFlight
+```
+
+Prefer not to build it yourself? The beta is on
+[TestFlight](https://testflight.apple.com/join/1Aw6DRGy).
