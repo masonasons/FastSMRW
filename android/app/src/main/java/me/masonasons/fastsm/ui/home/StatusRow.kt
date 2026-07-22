@@ -32,10 +32,22 @@ import me.masonasons.fastsm.ui.RowUi
  * the same [MenuAction] list drives both TalkBack's custom actions and the
  * long-press menu, so they can't drift.
  */
+// The Android-supported post actions, in default order (View Media first).
+// A subset of the shared post_action_catalog(): the actions StatusRow has a
+// handler for. Keys not here (post_info, links, browser, followers, following,
+// follow_hashtag, pin_post) aren't wired on Android yet.
+private val DEFAULT_POST_ACTION_ORDER = listOf(
+    "play_media", "reply", "boost", "favorite", "bookmark", "quote", "thread",
+    "mute_conversation", "favorited_by", "reblogged_by", "copy", "user_timeline",
+    "user_profile", "speak_user", "alias", "speak_reply", "jump_reply", "edit",
+    "report", "delete",
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun StatusRow(
     row: RowUi,
+    actionOrder: List<String>,
     onOpenThread: (String) -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -61,32 +73,46 @@ fun StatusRow(
     var confirmDelete by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
 
+    // The user's configured action list, in order, keeping only the actions
+    // that apply to this post (the same list drives TalkBack's custom actions
+    // and the long-press menu). Falls back to the default order until settings
+    // arrive.
+    val order = actionOrder.ifEmpty { DEFAULT_POST_ACTION_ORDER }
     val menuActions = buildList {
-        add(MenuAction("Reply") { onReply(row.id) })
-        add(MenuAction(if (row.favorited) "Unfavourite" else "Favourite") { onToggleFavorite(row.id) })
-        add(MenuAction(if (row.boosted) "Unboost" else "Boost") { onToggleBoost(row.id) })
-        add(MenuAction(if (row.bookmarked) "Remove bookmark" else "Bookmark") { onToggleBookmark(row.id) })
-        add(MenuAction("Quote") { onQuote(row.id) })
-        if (row.hasMedia) add(MenuAction("View media") { onViewMedia(row.id) })
-        add(MenuAction("View conversation") { onOpenThread(row.id) })
-        add(MenuAction(if (row.muted) "Unmute conversation" else "Mute conversation") {
-            onToggleMuteConversation(row.id)
-        })
-        if (row.favoritesCount > 0) add(MenuAction("See who favorited") { onOpenFavoritedBy(row.id) })
-        if (row.boostsCount > 0) add(MenuAction("See who boosted") { onOpenRebloggedBy(row.id) })
-        add(MenuAction("Copy") { onCopy(row.id) })
-        add(MenuAction("Report post") { showReport = true })
-        add(MenuAction("View author's posts") { onOpenAuthor(row.id) })
-        add(MenuAction("View author's profile") { onOpenProfile(row.id) })
-        add(MenuAction("Speak user info") { onSpeakUser(row.id) })
-        add(MenuAction("Add or edit alias") { onAddAlias(row.id) })
-        if (row.isReply) {
-            add(MenuAction("Speak referenced reply") { onSpeakReply(row.id) })
-            add(MenuAction("Jump to referenced reply") { onJumpToReply(row.id) })
-        }
-        if (row.isMine) {
-            add(MenuAction("Edit") { onEdit(row.id) })
-            add(MenuAction("Delete") { confirmDelete = true })
+        order.forEach { key ->
+            val action: MenuAction? = when (key) {
+                "reply" -> MenuAction("Reply") { onReply(row.id) }
+                "boost" -> MenuAction(if (row.boosted) "Unboost" else "Boost") { onToggleBoost(row.id) }
+                "favorite" ->
+                    MenuAction(if (row.favorited) "Unfavourite" else "Favourite") { onToggleFavorite(row.id) }
+                "bookmark" ->
+                    MenuAction(if (row.bookmarked) "Remove bookmark" else "Bookmark") { onToggleBookmark(row.id) }
+                "quote" -> MenuAction("Quote") { onQuote(row.id) }
+                "play_media" -> if (row.hasMedia) MenuAction("View media") { onViewMedia(row.id) } else null
+                "thread" -> MenuAction("View conversation") { onOpenThread(row.id) }
+                "mute_conversation" ->
+                    MenuAction(if (row.muted) "Unmute conversation" else "Mute conversation") {
+                        onToggleMuteConversation(row.id)
+                    }
+                "favorited_by" ->
+                    if (row.favoritesCount > 0) MenuAction("See who favorited") { onOpenFavoritedBy(row.id) } else null
+                "reblogged_by" ->
+                    if (row.boostsCount > 0) MenuAction("See who boosted") { onOpenRebloggedBy(row.id) } else null
+                "copy" -> MenuAction("Copy") { onCopy(row.id) }
+                "report" -> MenuAction("Report post") { showReport = true }
+                "user_timeline" -> MenuAction("View author's posts") { onOpenAuthor(row.id) }
+                "user_profile" -> MenuAction("View author's profile") { onOpenProfile(row.id) }
+                "speak_user" -> MenuAction("Speak user info") { onSpeakUser(row.id) }
+                "alias" -> MenuAction("Add or edit alias") { onAddAlias(row.id) }
+                "speak_reply" ->
+                    if (row.isReply) MenuAction("Speak referenced reply") { onSpeakReply(row.id) } else null
+                "jump_reply" ->
+                    if (row.isReply) MenuAction("Jump to referenced reply") { onJumpToReply(row.id) } else null
+                "edit" -> if (row.isMine) MenuAction("Edit") { onEdit(row.id) } else null
+                "delete" -> if (row.isMine) MenuAction("Delete") { confirmDelete = true } else null
+                else -> null // a catalog action Android doesn't wire yet
+            }
+            if (action != null) add(action)
         }
     }
     val actions = menuActions.toAccessibilityActions()

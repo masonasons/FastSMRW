@@ -66,6 +66,15 @@ struct AppSettings {
         bool enabled = true;
     };
     std::vector<MovementUnitPref> movement_units;
+    // The per-post actions offered on mobile (VoiceOver/TalkBack action rotor +
+    // long-press menu), in display order. Normalized on load like movement
+    // units: saved order first, any catalog action not saved appended enabled.
+    // Desktop uses full menus and ignores this.
+    struct PostActionPref {
+        std::string action; // a post_action_catalog() key
+        bool enabled = true;
+    };
+    std::vector<PostActionPref> post_actions;
     // Invisible interface (Windows): control the client from any window.
     std::string invisible_mode = "off";       // "off" | "hotkey" | "keyhook" | "layer"
     std::string invisible_keymap = "default";  // active keymap name
@@ -86,5 +95,16 @@ struct AppSettings {
     // Auto-refresh choices offered in Settings (seconds); 0 = Off. Mac parity.
     static constexpr int kAutoRefreshOptions[] = {0, 30, 60, 120, 300};
 };
+
+// The canonical set of per-post actions, in default display order (View Media
+// and Open Links first). One shared vocabulary: the interact / secondary-
+// interact settings each pick one key, and the mobile action list toggles /
+// orders many. `key` is the stable settings token; `label` is the base UI name
+// (toggle actions like Boost show a state-dependent name in the app).
+struct PostActionDef {
+    std::string key;
+    std::string label;
+};
+const std::vector<PostActionDef>& post_action_catalog();
 
 } // namespace fastsm::store

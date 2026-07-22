@@ -11,6 +11,32 @@ using nlohmann::json;
 using namespace fastsm::present;
 
 namespace fastsm::store {
+
+const std::vector<PostActionDef>& post_action_catalog() {
+    // Default display order for the mobile action list — View Media and Open
+    // Links first, then the interaction verbs, then navigation/less-common
+    // actions. Keys are stable settings tokens shared with the interact /
+    // secondary-interact settings; see CoreSession::run_post_action.
+    static const std::vector<PostActionDef> catalog = {
+        {"play_media", "View Media"},        {"links", "Open Links"},
+        {"reply", "Reply"},                  {"boost", "Boost"},
+        {"favorite", "Favorite"},            {"bookmark", "Bookmark"},
+        {"quote", "Quote"},                  {"thread", "View Thread"},
+        {"post_info", "Post Info"},          {"copy", "Copy"},
+        {"user_profile", "User Profile"},    {"user_timeline", "User Timeline"},
+        {"followers", "Followers"},          {"following", "Following"},
+        {"mute_conversation", "Mute Conversation"},
+        {"favorited_by", "See Who Favorited"}, {"reblogged_by", "See Who Boosted"},
+        {"alias", "Add or Edit Alias"},      {"follow_hashtag", "Follow Hashtag"},
+        {"speak_user", "Speak User"},        {"speak_reply", "Speak Referenced Reply"},
+        {"jump_reply", "Jump to Referenced Reply"},
+        {"edit", "Edit Post"},               {"pin_post", "Pin to Profile"},
+        {"report", "Report"},                {"browser", "Open in Browser"},
+        {"delete", "Delete Post"},
+    };
+    return catalog;
+}
+
 namespace {
 
 template <class Field>
@@ -97,6 +123,27 @@ AppSettings settings_from_json(const json& root) {
             if (seen.insert(unit.key()).second)
                 prefs.push_back({unit.key(), true});
         settings.movement_units = std::move(prefs);
+    }
+    {
+        // Mobile post-action list: same normalization as movement units — saved
+        // order first (unknown keys dropped), then any catalog action the saved
+        // list is missing appended enabled, so new actions appear for upgraders.
+        std::unordered_set<std::string> known;
+        for (const auto& def : post_action_catalog())
+            known.insert(def.key);
+        std::vector<AppSettings::PostActionPref> prefs;
+        std::unordered_set<std::string> seen;
+        if (auto it = root.find("post_actions"); it != root.end() && it->is_array()) {
+            for (const auto& e : *it) {
+                const std::string key = e.value("action", std::string{});
+                if (known.count(key) && seen.insert(key).second)
+                    prefs.push_back({key, e.value("enabled", true)});
+            }
+        }
+        for (const auto& def : post_action_catalog())
+            if (seen.insert(def.key).second)
+                prefs.push_back({def.key, true});
+        settings.post_actions = std::move(prefs);
     }
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.reverse_timelines = root.value("reverse_timelines", false);
@@ -186,6 +233,14 @@ json settings_to_json(const AppSettings& settings) {
     } else {
         for (const auto& pref : settings.movement_units)
             root["movement_units"].push_back({{"unit", pref.unit}, {"enabled", pref.enabled}});
+    }
+    root["post_actions"] = json::array();
+    if (settings.post_actions.empty()) {
+        for (const auto& def : post_action_catalog())
+            root["post_actions"].push_back({{"action", def.key}, {"enabled", true}});
+    } else {
+        for (const auto& pref : settings.post_actions)
+            root["post_actions"].push_back({{"action", pref.action}, {"enabled", pref.enabled}});
     }
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["reverse_timelines"] = settings.reverse_timelines;

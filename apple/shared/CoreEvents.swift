@@ -48,6 +48,10 @@ struct Row: Decodable, Equatable {
     /// jumps (the iOS rotor). Present on status rows.
     var time: Int?
     var thread: String?
+    /// Favorite/boost counts (omitted by the core when zero) — gate the
+    /// "See who favorited / boosted" post actions.
+    var favoritesCount = 0
+    var boostsCount = 0
 
     enum CodingKeys: String, CodingKey {
         case id, text, favorited, boosted, acct, time, thread
@@ -57,6 +61,8 @@ struct Row: Decodable, Equatable {
         case gapAfter = "gap_after"
         case followRequest = "follow_request"
         case accountId = "account_id"
+        case favoritesCount = "favorites_count"
+        case boostsCount = "boosts_count"
     }
 
     // Custom decoder: the core omits most boolean flags when they're false (e.g.
@@ -77,6 +83,8 @@ struct Row: Decodable, Equatable {
         acct = try c.decodeIfPresent(String.self, forKey: .acct)
         time = try c.decodeIfPresent(Int.self, forKey: .time)
         thread = try c.decodeIfPresent(String.self, forKey: .thread)
+        favoritesCount = try c.decodeIfPresent(Int.self, forKey: .favoritesCount) ?? 0
+        boostsCount = try c.decodeIfPresent(Int.self, forKey: .boostsCount) ?? 0
     }
 }
 
@@ -115,6 +123,11 @@ struct TimelineUpdated: Decodable {
 
 /// The full movement-unit catalog (key + label), for the units picker.
 struct MovementCatalog: Decodable { let units: [SpeechField] }
+
+/// The full post-action catalog (key + label), for the mobile action-list
+/// editor and the interact / secondary-interact pickers. (SpeechField is just
+/// a {key,label} pair, reused here.)
+struct PostActionCatalog: Decodable { let actions: [SpeechField] }
 
 struct AuthResult: Decodable {
     let ok: Bool
@@ -550,6 +563,7 @@ enum CoreEvent {
     case urlPicker(URLPicker)
     case speechCatalog(SpeechCatalog)
     case movementCatalog(MovementCatalog)
+    case postActionCatalog(PostActionCatalog)
     case hashtagPrompt(HashtagPrompt)
     case followedHashtags(FollowedHashtags)
     case trendingHashtags(FollowedHashtags)
@@ -594,6 +608,8 @@ enum CoreEvent {
         case "speech_catalog": return decode(SpeechCatalog.self).map(CoreEvent.speechCatalog)
         case "movement_catalog":
             return decode(MovementCatalog.self).map(CoreEvent.movementCatalog)
+        case "post_action_catalog":
+            return decode(PostActionCatalog.self).map(CoreEvent.postActionCatalog)
         case "hashtag_prompt": return decode(HashtagPrompt.self).map(CoreEvent.hashtagPrompt)
         case "followed_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.followedHashtags)
         case "trending_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.trendingHashtags)

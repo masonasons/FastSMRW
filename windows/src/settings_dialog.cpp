@@ -768,15 +768,20 @@ INT_PTR CALLBACK UpdatesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
 }
 
 // Behavior page: what pressing Enter on a post / a user does by default.
-const char* const kEnterPostActions[] = {"post_info", "thread", "reply", "links"};
-const wchar_t* const kEnterPostLabels[] = {L"View post (info)", L"View thread", L"Reply",
-                                           L"Open links"};
+// The actions offered for Enter / secondary interact — a curated subset of the
+// post-action catalog (the ones that make sense as a single tap). Enter and
+// secondary share the list; only their defaults differ.
+const char* const kEnterPostActions[] = {"post_info", "thread",  "reply",      "quote",
+                                         "favorite",  "boost",   "bookmark",   "play_media",
+                                         "links",     "browser", "copy"};
+const wchar_t* const kEnterPostLabels[] = {
+    L"View post (info)", L"View thread",     L"Reply",   L"Quote", L"Favorite", L"Boost",
+    L"Bookmark",         L"Play media",      L"Open links", L"Open in browser", L"Copy"};
 const char* const kEnterUserActions[] = {"actions", "profile", "timeline"};
 const wchar_t* const kEnterUserLabels[] = {L"User actions menu", L"View profile",
                                            L"View their timeline"};
-const char* const kSecondPostActions[] = {"play_media", "post_info", "thread", "reply", "links"};
-const wchar_t* const kSecondPostLabels[] = {L"Play media", L"View post (info)", L"View thread",
-                                            L"Reply", L"Open links"};
+const auto& kSecondPostActions = kEnterPostActions;
+const auto& kSecondPostLabels = kEnterPostLabels;
 
 INT_PTR CALLBACK BehaviorProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     switch (msg) {

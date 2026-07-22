@@ -505,6 +505,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_get_speech_catalog();
     else if (c == "get_movement_catalog")
         cmd_get_movement_catalog();
+    else if (c == "get_post_action_catalog")
+        cmd_get_post_action_catalog();
     else if (c == "set_client_filter")
         cmd_set_client_filter(cmd);
     else if (c == "clear_client_filter")
@@ -3298,6 +3300,76 @@ void CoreSession::cmd_get_layer_keymap() {
           {"help_message", input::layer_help_text()}});
 }
 
+bool CoreSession::run_post_action(const std::string& key, const std::string& row) {
+    // Keep in sync with post_action_catalog(). Reuses the same cmd_* handlers
+    // the UI calls, so behavior matches menus/shortcuts exactly.
+    if (key == "reply")
+        return cmd_compose_context({{"mode", "reply"}, {"id", row}}), true;
+    if (key == "quote")
+        return cmd_compose_context({{"mode", "quote"}, {"id", row}}), true;
+    if (key == "boost")
+        return cmd_toggle_boost({{"id", row}}), true;
+    if (key == "favorite")
+        return cmd_toggle_favorite({{"id", row}}), true;
+    if (key == "bookmark")
+        return cmd_toggle_bookmark({{"id", row}}), true;
+    if (key == "thread")
+        return cmd_open_thread({{"id", row}}), true;
+    if (key == "post_info")
+        return cmd_post_info({{"id", row}}), true;
+    if (key == "play_media")
+        return cmd_play_media({{"id", row}}), true;
+    if (key == "links")
+        return cmd_open_post_links({{"id", row}}), true;
+    if (key == "browser")
+        return cmd_open_status({{"id", row}}), true;
+    if (key == "copy")
+        return cmd_copy({{"id", row}}), true;
+    if (key == "user_profile")
+        return cmd_open_user_profile({{"id", row}, {"pick", true}}), true;
+    if (key == "user_timeline")
+        return cmd_open_user_timeline({{"id", row}, {"pick", true}}), true;
+    if (key == "followers")
+        return cmd_open_followers({{"id", row}}), true;
+    if (key == "following")
+        return cmd_open_following({{"id", row}}), true;
+    if (key == "alias")
+        return cmd_begin_alias({{"id", row}}), true;
+    if (key == "follow_hashtag")
+        return cmd_follow_hashtag_prompt({{"id", row}}), true;
+    if (key == "edit")
+        return cmd_compose_context({{"mode", "edit"}, {"id", row}}), true;
+    if (key == "pin_post")
+        return cmd_toggle_pin_post({{"id", row}}), true;
+    if (key == "mute_conversation")
+        return cmd_toggle_mute_conversation({{"id", row}}), true;
+    if (key == "favorited_by")
+        return cmd_open_status_actors({{"id", row}}, false), true;
+    if (key == "reblogged_by")
+        return cmd_open_status_actors({{"id", row}}, true), true;
+    if (key == "speak_user")
+        return cmd_speak_user({{"id", row}}), true;
+    if (key == "speak_reply")
+        return cmd_speak_reply({{"id", row}, {"jump", false}}), true;
+    if (key == "jump_reply")
+        return cmd_speak_reply({{"id", row}, {"jump", true}}), true;
+    if (key == "delete")
+        return cmd_delete_post({{"id", row}}), true;
+    // "report" needs the reporting dialog (category/comment) — front ends open
+    // it directly; it isn't a one-shot core action, so it's not handled here.
+    return false;
+}
+
+// The post-action catalog (key + base label), for the mobile action-list editor
+// and the interact / secondary-interact pickers. (Distinct from the invisible-
+// interface keymap's action_catalog.)
+void CoreSession::cmd_get_post_action_catalog() {
+    json actions = json::array();
+    for (const auto& def : store::post_action_catalog())
+        actions.push_back({{"key", def.key}, {"label", def.label}});
+    emit({{"event", "post_action_catalog"}, {"actions", std::move(actions)}});
+}
+
 void CoreSession::cmd_perform_action(const json& cmd) {
     const std::string a = cmd.value("action", std::string{});
     if (a.empty())
@@ -3348,9 +3420,16 @@ void CoreSession::cmd_perform_action(const json& cmd) {
             emit_announce(ac->me().acct);
         return;
     }
-    // Actions on the current row (reuse the same handlers the UI uses).
+    // Actions on a specific row: the caller may name one (the mobile action
+    // list acts on the post the action belongs to), else the current selection.
     TimelineController* tc = current();
-    const std::string row = tc ? tc->selected_id() : std::string{};
+    std::string row = cmd.value("id", std::string{});
+    if (row.empty())
+        row = tc ? tc->selected_id() : std::string{};
+    // Canonical post-action keys (shared with interact / secondary interact and
+    // the mobile action list). Checked first so a configured action runs here.
+    if (run_post_action(a, row))
+        return;
     if (a == "BoostToggle")
         return cmd_toggle_boost({{"id", row}});
     if (a == "LikeToggle")
@@ -3393,29 +3472,19 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         // The Conversations feed is a list of threads: Enter always opens the thread.
         if (tc->source().enter_opens_thread())
             return cmd_open_thread({{"id", row}});
-        const std::string& pa = settings_.enter_post_action;
-        if (pa == "thread")
-            return cmd_open_thread({{"id", row}});
-        if (pa == "reply")
-            return cmd_compose_context({{"mode", "reply"}, {"id", row}});
-        if (pa == "links")
-            return cmd_open_post_links({{"id", row}});
-        return cmd_post_info({{"id", row}}); // default: view the post
+        // The configured action, else the unchanged default: view the post.
+        if (run_post_action(settings_.enter_post_action, row))
+            return;
+        return cmd_post_info({{"id", row}});
     }
     if (a == "SecondaryAction") { // the configurable secondary interact (Shift+Enter); post-only
         const TimelineItem* it = tc ? find_item(tc, row) : nullptr;
         if (!it || it->is_user())
             return;
-        const std::string& sa = settings_.secondary_post_action;
-        if (sa == "post_info")
-            return cmd_post_info({{"id", row}});
-        if (sa == "thread")
-            return cmd_open_thread({{"id", row}});
-        if (sa == "reply")
-            return cmd_compose_context({{"mode", "reply"}, {"id", row}});
-        if (sa == "links")
-            return cmd_open_post_links({{"id", row}});
-        return cmd_play_media({{"id", row}}); // default: play media
+        // The configured action, else the unchanged default: play media.
+        if (run_post_action(settings_.secondary_post_action, row))
+            return;
+        return cmd_play_media({{"id", row}});
     }
     if (a == "Reply")
         return cmd_compose_context({{"mode", "reply"}, {"id", row}});

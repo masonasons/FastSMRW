@@ -297,6 +297,129 @@ final class MovementUnitsViewController: UITableViewController {
                             shouldIndentWhileEditingRowAt indexPath: IndexPath) -> Bool { false }
 }
 
+// MARK: - Post actions (mobile action-list) editor
+
+/// Choose which per-post actions appear in the VoiceOver action rotor (and the
+/// long-press menu), and their order. Tap toggles; the row's actions (or Edit)
+/// reorder. Writes the shared post_actions setting.
+@MainActor
+final class PostActionsViewController: UITableViewController {
+    private let state: AppState
+
+    private struct Action {
+        let key: String
+        let label: String
+        var enabled: Bool
+    }
+    private var actions: [Action]
+
+    init(state: AppState) {
+        self.state = state
+        // Merge saved order/enabled with the catalog labels; append any catalog
+        // action the saved list is missing — same shape as the core normalizes.
+        let labels = Dictionary(state.postActionCatalog.map { ($0.key, $0.label) },
+                                uniquingKeysWith: { a, _ in a })
+        var built: [Action] = []
+        var seen = Set<String>()
+        for item in state.postActionItems() {
+            guard let key = item["action"] as? String, let label = labels[key],
+                  seen.insert(key).inserted else { continue }
+            built.append(Action(key: key, label: label,
+                                enabled: item["enabled"] as? Bool ?? true))
+        }
+        for field in state.postActionCatalog where seen.insert(field.key).inserted {
+            built.append(Action(key: field.key, label: field.label, enabled: true))
+        }
+        actions = built
+        super.init(style: .insetGrouped)
+        title = "Post Actions"
+        navigationItem.rightBarButtonItem = editButtonItem
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private func save() {
+        state.setPostActionItems(actions.map { ["action": $0.key, "enabled": $0.enabled] })
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int { actions.count }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        "These are the actions VoiceOver offers on a post (swipe up or down to "
+            + "reach them). Tap an action to include or hide it; use its actions "
+            + "(or Edit) to reorder. Some only show when they apply — View Media "
+            + "on posts with media, Delete on your own posts."
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        guard actions.indices.contains(indexPath.row) else { return cell }
+        let action = actions[indexPath.row]
+        var content = cell.defaultContentConfiguration()
+        content.text = action.label
+        cell.contentConfiguration = content
+        cell.accessoryType = action.enabled ? .checkmark : .none
+        cell.isAccessibilityElement = true
+        cell.accessibilityLabel = action.label
+        cell.accessibilityValue = action.enabled ? "Shown" : "Hidden"
+        var rowActions: [UIAccessibilityCustomAction] = []
+        if indexPath.row > 0 {
+            rowActions.append(UIAccessibilityCustomAction(name: "Move Up") { [weak self] _ in
+                self?.move(from: indexPath.row, to: indexPath.row - 1)
+                return true
+            })
+        }
+        if indexPath.row < actions.count - 1 {
+            rowActions.append(UIAccessibilityCustomAction(name: "Move Down") { [weak self] _ in
+                self?.move(from: indexPath.row, to: indexPath.row + 1)
+                return true
+            })
+        }
+        cell.accessibilityCustomActions = rowActions
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: false)
+        guard actions.indices.contains(indexPath.row) else { return }
+        actions[indexPath.row].enabled.toggle()
+        save()
+        tableView.reloadRows(at: [indexPath], with: .none)
+    }
+
+    private func move(from: Int, to: Int) {
+        guard actions.indices.contains(from), actions.indices.contains(to) else { return }
+        actions.swapAt(from, to)
+        save()
+        tableView.reloadData()
+        let cell = tableView.cellForRow(at: IndexPath(row: to, section: 0))
+        UIAccessibility.post(notification: .layoutChanged, argument: cell)
+        UIAccessibility.post(notification: .announcement,
+                             argument: "\(actions[to].label), position \(to + 1) of \(actions.count)")
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            canMoveRowAt indexPath: IndexPath) -> Bool { true }
+
+    override func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath,
+                            to destinationIndexPath: IndexPath) {
+        let action = actions.remove(at: sourceIndexPath.row)
+        actions.insert(action, at: destinationIndexPath.row)
+        save()
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            editingStyleForRowAt indexPath: IndexPath)
+        -> UITableViewCell.EditingStyle { .none }
+
+    override func tableView(_ tableView: UITableView,
+                            shouldIndentWhileEditingRowAt indexPath: IndexPath) -> Bool { false }
+}
+
 // MARK: - Wrap text editor
 
 /// Edits one field's "speak before" / "speak after" text and the no-separator

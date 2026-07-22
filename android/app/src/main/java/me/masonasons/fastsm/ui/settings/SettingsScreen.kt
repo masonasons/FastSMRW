@@ -78,6 +78,21 @@ private val tabBarPositionOptions = listOf(
     "bottom" to "Bottom of the screen",
 )
 
+// Labels for the post-action editor, keyed by post_action_catalog() key.
+private val postActionLabels = mapOf(
+    "play_media" to "View media", "links" to "Open links", "reply" to "Reply",
+    "boost" to "Boost", "favorite" to "Favorite", "bookmark" to "Bookmark",
+    "quote" to "Quote", "thread" to "View conversation", "post_info" to "Post info",
+    "copy" to "Copy", "user_profile" to "Author's profile",
+    "user_timeline" to "Author's posts", "followers" to "Followers",
+    "following" to "Following", "mute_conversation" to "Mute conversation",
+    "favorited_by" to "See who favorited", "reblogged_by" to "See who boosted",
+    "alias" to "Add or edit alias", "follow_hashtag" to "Follow hashtag",
+    "speak_user" to "Speak user info", "speak_reply" to "Speak referenced reply",
+    "jump_reply" to "Jump to referenced reply", "edit" to "Edit", "pin_post" to "Pin to profile",
+    "report" to "Report post", "browser" to "Open in browser", "delete" to "Delete",
+)
+
 private val statusFieldLabels = mapOf(
     "boostedBy" to "Boosted by", "author" to "Author name", "handle" to "Handle (@user)",
     "contentWarning" to "Content warning", "text" to "Post text", "quote" to "Quoted post",
@@ -136,6 +151,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         panel == "advanced" -> "Advanced"
         panel == "confirmation" -> "Confirmation"
         panel == "behavior" -> "Behavior"
+        panel == "post_actions" -> "Post actions"
         panel == "updates" -> "Updates"
         else -> "Settings"
     }
@@ -170,6 +186,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
                 panel == "advanced" -> AdvancedPanel(s, viewModel)
                 panel == "confirmation" -> ConfirmationPanel(s, viewModel)
                 panel == "behavior" -> BehaviorPanel(s, viewModel)
+                panel == "post_actions" -> PostActionsPanel(s, viewModel)
                 panel == "updates" -> UpdatesPanel(s, viewModel)
                 else -> RootList { panel = it }
             }
@@ -187,6 +204,7 @@ private fun RootList(onOpen: (String) -> Unit) {
         "advanced" to "Advanced",
         "confirmation" to "Confirmation",
         "behavior" to "Behavior",
+        "post_actions" to "Post actions",
         "updates" to "Updates",
     ).forEach { (key, label) ->
         Text(
@@ -344,6 +362,56 @@ private fun ConfirmationPanel(s: JSONObject, vm: CoreViewModel) {
         "confirm_delete_post" to "Deleting a post",
     ).forEach { (key, label) ->
         SwitchRow(label, s.optBoolean(key)) { vm.updateSetting { put(key, it) } }
+    }
+}
+
+@Composable
+private fun PostActionsPanel(s: JSONObject, vm: CoreViewModel) {
+    val arr = s.optJSONArray("post_actions") ?: return
+    val n = arr.length()
+    HelpText("These are the actions TalkBack offers on a post (swipe up or down to reach them). Double-tap to show or hide an action; use its actions to move it up or down.")
+    for (i in 0 until n) {
+        val o = arr.getJSONObject(i)
+        val action = o.optString("action")
+        val enabled = o.optBoolean("enabled", true)
+        val label = postActionLabels[action] ?: action
+        // key(action) keeps this row's node identity stable across reordering so
+        // TalkBack focus follows the moved item (matches the speech editor).
+        key(action) {
+            val actions = buildList {
+                add(CustomAccessibilityAction(if (enabled) "Hide this action" else "Show this action") {
+                    vm.togglePostAction(i, !enabled); true
+                })
+                if (i > 0) add(CustomAccessibilityAction("Move up") { vm.movePostAction(i, -1); true })
+                if (i < n - 1) add(CustomAccessibilityAction("Move down") { vm.movePostAction(i, +1); true })
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clearAndSetSemantics {
+                        contentDescription =
+                            "$label, ${if (enabled) "shown" else "hidden"}, position ${i + 1} of $n"
+                        customActions = actions
+                        onClick { vm.togglePostAction(i, !enabled); true }
+                    }
+                    .padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Switch(checked = enabled, onCheckedChange = { vm.togglePostAction(i, it) })
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+                IconButton(onClick = { vm.movePostAction(i, -1) }, enabled = i > 0) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null)
+                }
+                IconButton(onClick = { vm.movePostAction(i, +1) }, enabled = i < n - 1) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                }
+            }
+            HorizontalDivider()
+        }
     }
 }
 

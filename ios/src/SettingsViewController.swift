@@ -10,8 +10,19 @@
 
 import UIKit
 
+/// The actions offered for the interact / secondary-interact pickers (a curated
+/// subset of the post-action catalog — the ones that make sense as a single
+/// tap). The full catalog is available in the reorderable Post Actions list.
+let interactActionOptions: [(String, Any)] = [
+    ("View post info", "post_info"), ("View thread", "thread"), ("Reply", "reply"),
+    ("Quote", "quote"), ("Favorite", "favorite"), ("Boost", "boost"),
+    ("Bookmark", "bookmark"), ("View media", "play_media"), ("Open links", "links"),
+    ("Open in browser", "browser"), ("Copy", "copy"),
+]
+
 enum SettingRow {
     case movement(String)
+    case postActions(String)
     case toggle(String, key: String, def: Bool)
     case picker(String, key: String, options: [(String, Any)], def: Any)
     case stepper(String, key: String, def: Int, min: Int, max: Int, step: Int)
@@ -132,18 +143,14 @@ final class SettingsViewController: UITableViewController {
             ]),
             SettingPanel(title: "Behavior", rows: [
                 .picker("Tap on a post", key: "enter_post_action",
-                        options: [("View post info", "post_info"), ("View thread", "thread"),
-                                  ("Reply", "reply"), ("Open links", "links")],
-                        def: "post_info"),
+                        options: interactActionOptions, def: "post_info"),
                 .picker("Tap on a user", key: "enter_user_action",
                         options: [("User actions", "actions"), ("View profile", "profile"),
                                   ("View their timeline", "timeline")],
                         def: "actions"),
                 .picker("Secondary action", key: "secondary_post_action",
-                        options: [("Play media", "play_media"), ("View post info", "post_info"),
-                                  ("View thread", "thread"), ("Reply", "reply"),
-                                  ("Open links", "links")],
-                        def: "play_media"),
+                        options: interactActionOptions, def: "play_media"),
+                .postActions("Post Actions"),
                 .toggle("Keep the media player in the background",
                         key: "media_background", def: false),
                 .toggle("Move extra mentions to the end of replies",
@@ -238,7 +245,7 @@ final class SettingsPanelViewController: UITableViewController {
                               min: min, max: max) { [weak self] value in
                 self?.state.updateSettings { $0[key] = value }
             }
-        case let .speech(title, _), let .movement(title):
+        case let .speech(title, _), let .movement(title), let .postActions(title):
             let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
             var content = cell.defaultContentConfiguration()
             content.text = title
@@ -274,6 +281,10 @@ final class SettingsPanelViewController: UITableViewController {
             guard !state.movementCatalog.isEmpty else { return }
             navigationController?.pushViewController(
                 MovementUnitsViewController(state: state), animated: true)
+        case .postActions:
+            guard !state.postActionCatalog.isEmpty else { return }
+            navigationController?.pushViewController(
+                PostActionsViewController(state: state), animated: true)
         default:
             break
         }

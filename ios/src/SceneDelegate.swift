@@ -16,7 +16,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
                options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
-        let window = UIWindow(windowScene: windowScene)
+        let window = MagicTapWindow(windowScene: windowScene)
 
         guard let state = AppState() else {
             // The core failed to start — nothing works without it; say so.
@@ -73,5 +73,24 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func sceneDidEnterBackground(_ scene: UIScene) {
         wasBackgrounded = true
+    }
+}
+
+/// Something that handles the VoiceOver magic tap (usually the root view
+/// controller, which knows whether a post is focused).
+@MainActor
+protocol MagicTapResponder: AnyObject {
+    func performMagicTap()
+}
+
+/// A window that handles the VoiceOver magic tap globally. Overriding it here —
+/// at the top of the responder chain, below UIApplication — means the gesture
+/// fires no matter which element has VoiceOver focus, rather than depending on
+/// a particular view controller being reached up the chain.
+final class MagicTapWindow: UIWindow {
+    override func accessibilityPerformMagicTap() -> Bool {
+        guard let responder = rootViewController as? MagicTapResponder else { return false }
+        responder.performMagicTap()
+        return true
     }
 }

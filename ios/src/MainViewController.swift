@@ -39,6 +39,10 @@ final class MainViewController: UIViewController {
     /// disturb VoiceOver's reading position).
     private var lastRenderedRows: [Row] = []
     private var lastRenderedKey = ""
+    /// The post row VoiceOver is currently on (nil when focus is elsewhere —
+    /// a bar button, the tab strip, …). Drives the magic-tap behavior.
+    private weak var focusedPostCell: PostCell?
+    var isPostFocused: Bool { focusedPostCell != nil }
     /// Reading position per timeline, tracked by post id so it survives leaving
     /// / returning and posts streaming in above — same pattern as Mac/Windows.
     private var selectionByKey: [String: String] = [:]
@@ -137,7 +141,7 @@ final class MainViewController: UIViewController {
             tabScroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
         ]
         applyTabBarPosition()
-        state.onSettings = { [weak self] in self?.applyTabBarPosition() }
+        state.onSettings = { [weak self] in self?.settingsChanged() }
 
         wireCallbacks()
         buildHardwareKeys()
@@ -418,12 +422,7 @@ final class MainViewController: UIViewController {
             if let cell = tableView.cellForRow(at: IndexPath(row: index, section: 0))
                 as? PostCell {
                 cell.configure(text: row.text)
-                cell.accessibilityCustomActions = actions(for: row).map { action in
-                    UIAccessibilityCustomAction(name: action.title) { _ in
-                        action.run()
-                        return true
-                    }
-                }
+                cell.accessibilityCustomActions = accessibilityActions(for: row)
                 heightsChanged = true
             }
         }
@@ -850,35 +849,115 @@ final class MainViewController: UIViewController {
 
     // MARK: Post actions
 
-    private func actions(for row: Row) -> [(title: String, run: () -> Void)] {
-        let id = row.id
-        var actions: [(String, () -> Void)] = [
-            ("Reply", { [weak self] in self?.state.requestCompose(mode: "reply", id: id) }),
-            (row.boosted ? "Remove Boost" : "Boost",
-             { [weak self] in self?.state.toggleBoost(id: id) }),
-            (row.favorited ? "Remove Favorite" : "Favorite",
-             { [weak self] in self?.state.toggleFavorite(id: id) }),
-            ("Bookmark", { [weak self] in self?.state.toggleBookmark(id: id) }),
-            ("Quote", { [weak self] in self?.state.requestCompose(mode: "quote", id: id) }),
-            ("View Thread", { [weak self] in self?.state.openThread(id: id) }),
-        ]
-        if row.hasMedia {
-            actions.append(("View Media", { [weak self] in self?.state.playMedia(id: id) }))
+    /// A settings change arrived (echoed on update_settings): re-apply the tab
+    /// bar position, and refresh the visible cells' VoiceOver actions in place
+    /// (the post-action list may have been reordered/toggled) without a reload
+    /// that would disturb the reading position.
+    private func settingsChanged() {
+        applyTabBarPosition()
+        for cell in tableView.visibleCells {
+            guard let postCell = cell as? PostCell,
+                  let indexPath = tableView.indexPath(for: cell),
+                  rows.indices.contains(indexPath.row) else { continue }
+            postCell.accessibilityCustomActions = accessibilityActions(for: rows[indexPath.row])
         }
-        actions += [
-            ("Post Info", { [weak self] in self?.state.postInfo(id: id) }),
-            ("Copy", { [weak self] in self?.state.copy(id: id) }),
-            ("User Timeline", { [weak self] in self?.state.openUserTimeline(id: id) }),
-            ("User Profile", { [weak self] in self?.state.openUserProfile(id: id) }),
-            ("Followers", { [weak self] in self?.state.openFollowers(id: id) }),
-            ("Following", { [weak self] in self?.state.openFollowing(id: id) }),
-            ("Add or Edit Alias", { [weak self] in self?.state.beginAlias(id: id) }),
-            ("Follow Hashtag", { [weak self] in self?.state.followHashtagPrompt(id: id) }),
-            ("Open Link", { [weak self] in self?.state.openPostLinks(id: id) }),
-            ("Open in Browser", { [weak self] in self?.state.openStatus(id: id) }),
-        ]
-        if row.isMine {
-            actions.append(("Delete Post", { [weak self] in
+    }
+
+    private func accessibilityActions(for row: Row) -> [UIAccessibilityCustomAction] {
+        actions(for: row).map { action in
+            UIAccessibilityCustomAction(name: action.title) { _ in action.run(); return true }
+        }
+    }
+
+    /// The VoiceOver actions (and long-press menu) for a post: the user's
+    /// configured post-action list, in order, keeping only the ones that apply
+    /// to this particular post.
+    private func actions(for row: Row) -> [(title: String, run: () -> Void)] {
+        state.enabledPostActions.compactMap { postAction($0, row) }
+    }
+
+    /// One catalog key mapped to its live action on `row` (dynamic title +
+    /// effect), or nil when it doesn't apply (media on a text post, delete on
+    /// someone else's post). Keys match post_action_catalog() in the core.
+    private func postAction(_ key: String, _ row: Row) -> (title: String, run: () -> Void)? {
+        let id = row.id
+        switch key {
+        case "reply":
+            return ("Reply", { [weak self] in self?.state.requestCompose(mode: "reply", id: id) })
+        case "quote":
+            return ("Quote", { [weak self] in self?.state.requestCompose(mode: "quote", id: id) })
+        case "boost":
+            return (row.boosted ? "Remove Boost" : "Boost",
+                    { [weak self] in self?.state.toggleBoost(id: id) })
+        case "favorite":
+            return (row.favorited ? "Remove Favorite" : "Favorite",
+                    { [weak self] in self?.state.toggleFavorite(id: id) })
+        case "bookmark":
+            return ("Bookmark", { [weak self] in self?.state.toggleBookmark(id: id) })
+        case "thread":
+            return ("View Thread", { [weak self] in self?.state.openThread(id: id) })
+        case "post_info":
+            return ("Post Info", { [weak self] in self?.state.postInfo(id: id) })
+        case "play_media":
+            return row.hasMedia
+                ? ("View Media", { [weak self] in self?.state.playMedia(id: id) }) : nil
+        case "links":
+            return ("Open Links", { [weak self] in self?.state.openPostLinks(id: id) })
+        case "browser":
+            return ("Open in Browser", { [weak self] in self?.state.openStatus(id: id) })
+        case "copy":
+            return ("Copy", { [weak self] in self?.state.copy(id: id) })
+        case "user_profile":
+            return ("User Profile", { [weak self] in self?.state.openUserProfile(id: id) })
+        case "user_timeline":
+            return ("User Timeline", { [weak self] in self?.state.openUserTimeline(id: id) })
+        case "followers":
+            return ("Followers", { [weak self] in self?.state.openFollowers(id: id) })
+        case "following":
+            return ("Following", { [weak self] in self?.state.openFollowing(id: id) })
+        case "mute_conversation":
+            return ("Mute Conversation",
+                    { [weak self] in self?.state.toggleMuteConversation(id: id) })
+        case "favorited_by":
+            return row.favoritesCount > 0
+                ? ("See Who Favorited", { [weak self] in self?.state.openFavoritedBy(id: id) })
+                : nil
+        case "reblogged_by":
+            return row.boostsCount > 0
+                ? ("See Who Boosted", { [weak self] in self?.state.openRebloggedBy(id: id) })
+                : nil
+        case "alias":
+            return ("Add or Edit Alias", { [weak self] in self?.state.beginAlias(id: id) })
+        case "follow_hashtag":
+            return ("Follow Hashtag", { [weak self] in self?.state.followHashtagPrompt(id: id) })
+        case "speak_user":
+            return ("Speak User", { [weak self] in self?.state.speakUser(id: id) })
+        case "speak_reply":
+            return row.isReply
+                ? ("Speak Referenced Reply", { [weak self] in self?.state.speakReply(id: id) })
+                : nil
+        case "jump_reply":
+            return row.isReply
+                ? ("Jump to Referenced Reply", { [weak self] in self?.state.jumpToReply(id: id) })
+                : nil
+        case "edit":
+            return row.isMine
+                ? ("Edit Post", { [weak self] in self?.state.requestCompose(mode: "edit", id: id) })
+                : nil
+        case "pin_post":
+            return row.isMine
+                ? ("Pin to Profile", { [weak self] in self?.state.togglePinPost(id: id) })
+                : nil
+        case "report":
+            return ("Report", { [weak self] in
+                guard let self else { return }
+                let report = ReportViewController(state: self.state, id: id, accountId: nil,
+                                                  acct: "", remote: false)
+                self.push(report)
+            })
+        case "delete":
+            guard row.isMine else { return nil }
+            return ("Delete Post", { [weak self] in
                 guard let self else { return }
                 if self.state.confirmDeletePost {
                     confirm("Delete Post", message: "Delete this post?",
@@ -888,9 +967,10 @@ final class MainViewController: UIViewController {
                 } else {
                     self.state.deletePost(id: id)
                 }
-            }))
+            })
+        default:
+            return nil
         }
-        return actions
     }
 
     /// The controller alerts/sheets should be presented on (a pushed detail
@@ -1024,11 +1104,9 @@ final class MainViewController: UIViewController {
 
     // MARK: VoiceOver app-level gestures
 
-    /// Magic tap (two-finger double-tap): compose a new post.
-    override func accessibilityPerformMagicTap() -> Bool {
-        state.requestCompose(mode: "new")
-        return true
-    }
+    // Magic tap (two-finger double-tap) performs the post's secondary action;
+    // it's handled at the window level (MagicTapWindow) so it fires from
+    // anywhere on screen, not just when a post row has focus.
 
     /// Escape (two-finger Z): close the focused timeline, when it's one that
     /// can be closed (a thread, a spawned user/hashtag timeline, …); a
@@ -1066,14 +1144,16 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
         postCell.onFocused = { [weak self, weak postCell] in
             guard let self, let cell = postCell,
                   let indexPath = self.tableView.indexPath(for: cell) else { return }
+            self.focusedPostCell = cell
             self.cursorMoved(to: indexPath.row)
         }
-        postCell.accessibilityCustomActions = actions(for: row).map { action in
-            UIAccessibilityCustomAction(name: action.title) { _ in
-                action.run()
-                return true
-            }
+        // Clear only if this exact cell is still the tracked one — focus often
+        // moves to the next cell (its become-focus fires first) before this
+        // one's lose-focus, and we must not stomp the newer focus.
+        postCell.onUnfocused = { [weak self, weak postCell] in
+            if self?.focusedPostCell === postCell { self?.focusedPostCell = nil }
         }
+        postCell.accessibilityCustomActions = accessibilityActions(for: row)
         return postCell
     }
 
@@ -1117,6 +1197,7 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
 final class PostCell: UITableViewCell {
     static let reuseIdentifier = "PostCell"
     var onFocused: (() -> Void)?
+    var onUnfocused: (() -> Void)?
 
     func configure(text: String) {
         var content = defaultContentConfiguration()
@@ -1131,5 +1212,10 @@ final class PostCell: UITableViewCell {
     override func accessibilityElementDidBecomeFocused() {
         super.accessibilityElementDidBecomeFocused()
         onFocused?()
+    }
+
+    override func accessibilityElementDidLoseFocus() {
+        super.accessibilityElementDidLoseFocus()
+        onUnfocused?()
     }
 }

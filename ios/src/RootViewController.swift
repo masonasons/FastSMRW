@@ -14,6 +14,7 @@ import UIKit
 final class RootViewController: UIViewController {
     private let state: AppState
     private var mainNav: UINavigationController?
+    private weak var mainVC: MainViewController?
     private var addAccountNav: UINavigationController?
     /// Whichever add-account screen is frontmost (root child or modal sheet).
     private weak var activeAddAccount: AddAccountViewController?
@@ -51,6 +52,7 @@ final class RootViewController: UIViewController {
             if mainNav == nil {
                 let main = MainViewController(state: state)
                 main.onAddAccount = { [weak self] in self?.presentAddAccount() }
+                mainVC = main
                 mainNav = embed(main)
             }
         } else {
@@ -99,5 +101,16 @@ final class RootViewController: UIViewController {
         child.view.removeFromSuperview()
         child.removeFromParent()
         nav = nil
+    }
+}
+
+extension RootViewController: MagicTapResponder {
+    /// On a post → its configurable secondary action; anywhere else → compose.
+    func performMagicTap() {
+        if mainVC?.isPostFocused == true {
+            state.performAction("SecondaryAction")
+        } else {
+            state.requestCompose(mode: "new")
+        }
     }
 }

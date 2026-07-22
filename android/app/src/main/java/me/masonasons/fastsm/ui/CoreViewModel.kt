@@ -896,6 +896,27 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Show/hide a post action in the per-post TalkBack action list. */
+    fun togglePostAction(index: Int, enabled: Boolean) {
+        updateSetting {
+            val arr = optJSONArray("post_actions") ?: return@updateSetting
+            if (index in 0 until arr.length()) arr.getJSONObject(index).put("enabled", enabled)
+        }
+    }
+
+    /** Move a post action up (delta -1) or down (+1) in the action list. */
+    fun movePostAction(index: Int, delta: Int) {
+        updateSetting {
+            val arr = optJSONArray("post_actions") ?: return@updateSetting
+            val target = index + delta
+            if (index !in 0 until arr.length() || target !in 0 until arr.length()) return@updateSetting
+            val a = arr.getJSONObject(index)
+            val b = arr.getJSONObject(target)
+            arr.put(index, b)
+            arr.put(target, a)
+        }
+    }
+
     /**
      * Set the optional text spoken before/after a field's value, and whether the
      * separator is suppressed after this field.

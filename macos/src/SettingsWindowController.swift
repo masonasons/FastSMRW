@@ -107,19 +107,19 @@ final class SettingsWindowController: NSWindowController {
             }
         }
 
+        // The actions that make sense as a single Enter / secondary interact.
+        let postActions = [("View post info", "post_info"), ("View thread", "thread"),
+                           ("Reply", "reply"), ("Quote", "quote"), ("Favorite", "favorite"),
+                           ("Boost", "boost"), ("Bookmark", "bookmark"), ("Play media", "play_media"),
+                           ("Open links", "links"), ("Open in browser", "browser"), ("Copy", "copy")]
         tab("Behavior", "hand.tap") { p in
-            p.popup("Enter on a post:", options: [("View post info", "post_info"),
-                                                  ("View thread", "thread"), ("Reply", "reply"),
-                                                  ("Open links", "links")],
+            p.popup("Enter on a post:", options: postActions,
                     key: "enter_post_action", default: "post_info")
             p.popup("Enter on a user:", options: [("User actions", "actions"),
                                                   ("View profile", "profile"),
                                                   ("View their timeline", "timeline")],
                     key: "enter_user_action", default: "actions")
-            p.popup("Secondary action:", options: [("Play media", "play_media"),
-                                                   ("View post info", "post_info"),
-                                                   ("View thread", "thread"), ("Reply", "reply"),
-                                                   ("Open links", "links")],
+            p.popup("Secondary action:", options: postActions,
                     key: "secondary_post_action", default: "play_media")
             p.checkbox("Keep the media player in the background",
                        key: "media_background", default: false)

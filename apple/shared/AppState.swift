@@ -24,6 +24,7 @@ final class AppState {
     private(set) var selectedIdByIndex: [Int: String] = [:]
     private(set) var reversedByIndex: [Int: Bool] = [:]
     private(set) var movementCatalog: [SpeechField] = []
+    private(set) var postActionCatalog: [SpeechField] = []
     /// The full settings object from the last `settings` event, echoed back
     /// (with edits) on update_settings — the core re-applies defaults for any
     /// missing key, so we must always send the whole object.
@@ -111,6 +112,7 @@ final class AppState {
         client.send("start")
         client.send("get_speech_catalog") // labels for the Speech Details lists
         client.send("get_movement_catalog") // labels for the movement-units picker
+        client.send("get_post_action_catalog") // labels for the post-action editor
     }
 
     // MARK: Event routing
@@ -235,6 +237,8 @@ final class AppState {
             speechCatalog = e
         case let .movementCatalog(e):
             movementCatalog = e.units
+        case let .postActionCatalog(e):
+            postActionCatalog = e.actions
         case let .updateStatus(e):
             onUpdateStatus?(e)
         case .other:
@@ -251,6 +255,11 @@ final class AppState {
     /// settings (enter_post_action / enter_user_action / secondary_post_action)
     /// against the currently selected row, so the app doesn't duplicate that logic.
     func performAction(_ action: String) { client.send("perform_action", ["action": action]) }
+    /// Run a canonical post action (a post_action_catalog() key) on a specific
+    /// post — the mobile action list acts on the post the action belongs to.
+    func performAction(_ action: String, id: String) {
+        client.send("perform_action", ["action": action, "id": id])
+    }
     func refresh() { client.send("refresh") }
 
     // Settings: mutate the full object and echo it back so the core keeps every
@@ -329,6 +338,25 @@ final class AppState {
     }
     func setMovementItems(_ items: [[String: Any]]) {
         updateSettings { $0["movement_units"] = items }
+    }
+    // Mobile post-action list ({"action": key, "enabled": bool}, display order).
+    func postActionItems() -> [[String: Any]] {
+        settingsRaw["post_actions"] as? [[String: Any]] ?? []
+    }
+    func setPostActionItems(_ items: [[String: Any]]) {
+        updateSettings { $0["post_actions"] = items }
+    }
+    /// Enabled post-action keys in display order (nil-safe against the catalog).
+    var enabledPostActions: [String] {
+        let known = Set(postActionCatalog.map { $0.key })
+        let saved = postActionItems().compactMap { item -> String? in
+            guard let key = item["action"] as? String, known.contains(key),
+                  item["enabled"] as? Bool ?? true else { return nil }
+            return key
+        }
+        // Fall back to the full catalog order until settings arrive.
+        return saved.isEmpty && postActionItems().isEmpty
+            ? postActionCatalog.map { $0.key } : saved
     }
 
     // Followed hashtags (Mastodon)
@@ -425,7 +453,11 @@ final class AppState {
     // text we announce back. Arm a one-shot delay so our announcement lands just
     // after the title and wins.
     func speakUser(id: String) { delayNextAnnounce = true; client.send("speak_user", ["id": id]) }
-    func speakReply(id: String) { delayNextAnnounce = true; client.send("speak_reply", ["id": id]) }
+    func speakReply(id: String) {
+        delayNextAnnounce = true
+        client.send("speak_reply", ["id": id, "jump": false])
+    }
+    func jumpToReply(id: String) { client.send("speak_reply", ["id": id, "jump": true]) }
     func votePoll(id: String, choices: [Int]) { client.send("vote_poll", ["id": id, "choices": choices]) }
     func goBack() { client.send("go_back") }
     func refreshAll() { client.send("refresh_all") }

@@ -196,6 +196,7 @@ private:
     void cmd_get_client_filter();               // emit the current timeline's client filter
     void cmd_get_speech_catalog();              // -> speech_catalog event (field keys + labels)
     void cmd_get_movement_catalog();            // -> movement_catalog event (unit keys + labels)
+    void cmd_get_post_action_catalog();         // -> post_action_catalog event (post-action keys + labels)
     void cmd_set_client_filter(const nlohmann::json& cmd); // {filter} -> save + apply
     void cmd_clear_client_filter();             // drop the current timeline's client filter
     void cmd_list_server_filters();             // emit server_filters {supported, filters}
@@ -216,7 +217,12 @@ private:
     void cmd_delete_keymap(const nlohmann::json& cmd);
     // Atomically write a keymap file (temp + rename) so a partial write can't blank it.
     void write_keymap_file(const std::string& name, const std::string& contents);
-    void cmd_perform_action(const nlohmann::json& cmd); // {action}
+    void cmd_perform_action(const nlohmann::json& cmd); // {action, id?}
+    // Run one canonical post-action (a post_action_catalog() key) on `row`.
+    // Shared by the interact / secondary-interact settings and by the mobile
+    // action list. Returns false if the key isn't a post action. Keep in sync
+    // with post_action_catalog().
+    bool run_post_action(const std::string& key, const std::string& row);
     void cmd_get_layer_keymap();                        // layer bindings + activation combo
     void cmd_set_window_shown(const nlohmann::json& cmd); // persist window visibility
     void cmd_check_for_update(const nlohmann::json& cmd); // {silent} -> update_status event

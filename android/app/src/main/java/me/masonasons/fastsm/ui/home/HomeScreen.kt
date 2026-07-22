@@ -86,6 +86,15 @@ fun HomeScreen(
     val selectedIdByTab by viewModel.selectedIdByTab.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val tabsAtBottom = settings?.optString("tab_bar_position") == "bottom"
+    // Enabled post-action keys, in the user's configured order (drives each
+    // post's TalkBack actions + long-press menu). Empty until settings arrive;
+    // StatusRow falls back to its default order then.
+    val postActionOrder: List<String> = settings?.optJSONArray("post_actions")?.let { arr ->
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i)
+            if (o != null && o.optBoolean("enabled", true)) o.optString("action") else null
+        }.filter { it.isNotEmpty() }
+    } ?: emptyList()
 
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
@@ -202,6 +211,7 @@ fun HomeScreen(
                 rows = rowsByTab[pageIndex] ?: emptyList(),
                 isCurrent = pageIndex == pagerState.currentPage,
                 selectedId = selectedIdByTab[pageIndex].orEmpty(),
+                actionOrder = postActionOrder,
                 onLoadOlder = { viewModel.loadOlder(automatic = true) },
                 onNoteSelection = viewModel::noteSelection,
                 onOpenThread = viewModel::openThread,
@@ -500,6 +510,7 @@ private fun StatusList(
     rows: List<RowUi>,
     isCurrent: Boolean,
     selectedId: String,
+    actionOrder: List<String>,
     onLoadOlder: () -> Unit,
     onNoteSelection: (String) -> Unit,
     onOpenThread: (String) -> Unit,
@@ -569,6 +580,7 @@ private fun StatusList(
         items(rows, key = { it.id }) { row ->
             StatusRow(
                 row = row,
+                actionOrder = actionOrder,
                 onOpenThread = onOpenThread,
                 onOpenAuthor = onOpenAuthor,
                 onOpenProfile = onOpenProfile,
