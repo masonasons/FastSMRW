@@ -15,6 +15,7 @@
 #include "utf.hpp"
 
 #include "fastsm/presentation/speech_settings.hpp"
+#include "fastsm/timeline/movement.hpp"
 #include "fastsm/store/paths.hpp"
 
 using namespace fastsm;
@@ -103,7 +104,19 @@ std::wstring auto_refresh_label(int secs) {
     }
 }
 
-INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
+// One row of the reorderable checked-list modal (speech fields, movement
+// units). Defined up here because the Timelines page uses the movement picker.
+struct SpeechRow {
+    int id;
+    std::wstring label;
+    bool enabled;
+    std::wstring before;
+    std::wstring after;
+    bool no_sep_after = false;
+};
+bool show_movement_units(HWND parent, std::vector<SpeechRow>& rows);
+
+INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
         Ctx* ctx = on_init(dlg, lp);
@@ -127,6 +140,31 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         checked(dlg, IDC_SET_AUTOLOAD, ctx->settings.auto_load_older);
         return TRUE;
     }
+    case WM_COMMAND:
+        // Which movement units Ctrl+Left/Right cycle, and their order.
+        if (LOWORD(wp) == IDC_SET_MOVEMENT_UNITS) {
+            Ctx* ctx = ctx_of(dlg);
+            std::vector<SpeechRow> rows;
+            std::vector<std::string> keys;
+            for (const auto& pref : ctx->settings.movement_units) {
+                MovementUnit unit;
+                if (!MovementUnit::from_key(pref.unit, unit))
+                    continue;
+                rows.push_back({static_cast<int>(keys.size()), to_wide(unit.title()),
+                                pref.enabled});
+                keys.push_back(pref.unit);
+            }
+            if (show_movement_units(dlg, rows)) {
+                std::vector<AppSettings::MovementUnitPref> out;
+                for (const auto& r : rows)
+                    if (r.id >= 0 && r.id < static_cast<int>(keys.size()))
+                        out.push_back({keys[static_cast<size_t>(r.id)], r.enabled});
+                if (!out.empty())
+                    ctx->settings.movement_units = std::move(out);
+            }
+            return TRUE;
+        }
+        break;
     case WM_NOTIFY:
         if (is_apply(lp)) {
             Ctx* ctx = ctx_of(dlg);
@@ -280,14 +318,6 @@ LRESULT CALLBACK SpeechListProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR
 
 // One generic, orderable, toggleable row (id carries the field enum value), with
 // optional text wrapped around the field's value when spoken.
-struct SpeechRow {
-    int id;
-    std::wstring label;
-    bool enabled;
-    std::wstring before;
-    std::wstring after;
-    bool no_sep_after = false;
-};
 
 // Per-item wrap state kept by field id, so it survives list reordering.
 struct ItemWrap {
@@ -433,6 +463,15 @@ INT_PTR CALLBACK SpeechDetailProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 bool show_speech_detail(HWND parent, const std::wstring& title, std::vector<SpeechRow>& rows) {
     DetailCtx c{&title, &rows};
     return DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_SPEECH_DETAIL), parent,
+                           SpeechDetailProc, reinterpret_cast<LPARAM>(&c)) == IDOK;
+}
+
+// The movement-units picker rides the same proc on a slimmer template (no
+// wrap-text controls; the proc's wrap reads/writes no-op against missing ids).
+bool show_movement_units(HWND parent, std::vector<SpeechRow>& rows) {
+    const std::wstring title = L"Movement Units";
+    DetailCtx c{&title, &rows};
+    return DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_MOVEMENT_UNITS), parent,
                            SpeechDetailProc, reinterpret_cast<LPARAM>(&c)) == IDOK;
 }
 

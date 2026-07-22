@@ -125,6 +125,7 @@ BEGIN
     AUTOCHECKBOX "Show m&entions in the Notifications timeline", IDC_SET_SHOW_MENTIONS, 10, 120, 224, 12
     AUTOCHECKBOX "&Reverse timelines (newest at the bottom)", IDC_SET_REVERSE, 10, 136, 224, 12
     AUTOCHECKBOX "Automatically load &older posts when you reach the end", IDC_SET_AUTOLOAD, 10, 152, 224, 12
+    PUSHBUTTON "Mo&vement Units…", IDC_SET_MOVEMENT_UNITS, 10, 170, 100, 14
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 180
@@ -211,6 +212,21 @@ BEGIN
     AUTOCHECKBOX "&No separator after the selected item", IDC_SPEECH_DETAIL_NOSEP, 8, 230, 248, 10
     DEFPUSHBUTTON "OK", IDOK, 150, 248, 50, 14
     PUSHBUTTON "Cancel", IDCANCEL, 206, 248, 50, 14
+END
+
+IDD_MOVEMENT_UNITS DIALOGEX 0, 0, 264, 220
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Movement Units"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "Check which movement units are active, and order them:", -1, 8, 8, 248, 9
+    CONTROL    "", IDC_SPEECH_DETAIL_LIST, "SysListView32",
+               LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,
+               8, 22, 172, 168
+    PUSHBUTTON "Move &Up\n(Ctrl+Up)", IDC_SPEECH_DETAIL_UP, 188, 22, 68, 20, BS_MULTILINE
+    PUSHBUTTON "Move &Down\n(Ctrl+Down)", IDC_SPEECH_DETAIL_DOWN, 188, 46, 68, 20, BS_MULTILINE
+    DEFPUSHBUTTON "OK", IDOK, 150, 200, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 206, 200, 50, 14
 END
 
 IDD_SET_ADVANCED DIALOGEX 0, 0, 240, 160

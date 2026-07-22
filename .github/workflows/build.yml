@@ -202,3 +202,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/FastSMRW.dmg --clobber
+
+  ios:
+    # Compile check only: proves the iOS app + core still build. No artifact —
+    # distribution is TestFlight, set up separately.
+    runs-on: macos-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Fetch dependencies
+        run: ./macos/fetch-deps.sh
+
+      - name: Generate project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build for simulator
+        working-directory: ios
+        run: |
+          xcodebuild -project FastSMRW.xcodeproj -scheme FastSMRW \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build

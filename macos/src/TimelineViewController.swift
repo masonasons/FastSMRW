@@ -28,6 +28,10 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
     /// position but doesn't re-emit it), so leaving and returning to a timeline
     /// restores where you actually left off — not the core's last-emitted row.
     private var selectionByKey: [String: String] = [:]
+    /// What the table currently shows, for skipping no-op reloads (which would
+    /// make VoiceOver re-announce the focused row).
+    private var lastRenderedRows: [Row] = []
+    private var lastRenderedKey = ""
 
     private var rows: [Row] { state.currentRows }
     private var currentKey: String {
@@ -133,6 +137,30 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
 
     func reload() {
         loadPending = false // a fresh list arrived; allow loading again
+        // Auto-refresh and streaming re-emit timeline_updated even when nothing
+        // visible changed, and reloadData tears down the focused cell — which
+        // makes VoiceOver re-announce the row the user is sitting on, over and
+        // over. If the rows are identical and the selection is already where
+        // we'd restore it, there is nothing to do.
+        if currentKey == lastRenderedKey, rows == lastRenderedRows,
+           tableView.selectedRow >= 0 {
+            return
+        }
+        // Same timeline with a selection to protect: update incrementally so the
+        // focused cell view is never torn down. reloadData rebuilds every cell,
+        // and each rebuild makes VoiceOver re-read the row the user is sitting
+        // on — which happened constantly (every relative-timestamp re-render,
+        // every post streaming in). Insert/remove keeps surviving cells (and
+        // the selection, which AppKit shifts along) untouched, and content-only
+        // changes are written straight into the existing cell views.
+        if currentKey == lastRenderedKey, tableView.selectedRow >= 0,
+           tableView.numberOfRows == lastRenderedRows.count, !lastRenderedRows.isEmpty,
+           selectionSurvives() {
+            applyIncrementalUpdate()
+            return
+        }
+        lastRenderedKey = currentKey
+        lastRenderedRows = rows
         // Hold the programmatic-selection guard across this whole reload AND the next
         // runloop turn. reloadData + selectRow trigger selection-change notifications
         // that AppKit frequently delivers asynchronously — after this method returns
@@ -159,6 +187,62 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         }
         DispatchQueue.main.async { [weak self] in
             self?.isUpdatingSelectionProgrammatically = false
+        }
+    }
+
+    /// The row the user is reading still exists in the new row set (so an
+    /// incremental update can preserve it).
+    private func selectionSurvives() -> Bool {
+        let selected = tableView.selectedRow
+        guard lastRenderedRows.indices.contains(selected) else { return false }
+        let id = lastRenderedRows[selected].id
+        return rows.contains { $0.id == id }
+    }
+
+    /// Apply the new row set as insert/remove/edit-in-place against what the
+    /// table currently shows, without reloadData.
+    private func applyIncrementalUpdate() {
+        let old = lastRenderedRows
+        let new = rows
+        lastRenderedRows = new
+
+        // Structural changes (posts streamed in, gaps filled, deletions).
+        let diff = new.map(\.id).difference(from: old.map(\.id))
+        if !diff.isEmpty {
+            isUpdatingSelectionProgrammatically = true
+            tableView.beginUpdates()
+            for change in diff {
+                switch change {
+                case let .remove(offset, _, _):
+                    tableView.removeRows(at: IndexSet(integer: offset), withAnimation: [])
+                case let .insert(offset, _, _):
+                    tableView.insertRows(at: IndexSet(integer: offset), withAnimation: [])
+                }
+            }
+            tableView.endUpdates()
+            DispatchQueue.main.async { [weak self] in
+                self?.isUpdatingSelectionProgrammatically = false
+            }
+        }
+
+        // Content-only changes (relative timestamps, favorite/boost counts):
+        // write into the existing cell views; no cell replacement, no announce.
+        var oldById: [String: Row] = [:]
+        for row in old { oldById[row.id] = row }
+        for (index, row) in new.enumerated() where oldById[row.id] != row {
+            guard oldById[row.id] != nil else { continue } // freshly inserted; cell is current
+            if let cell = tableView.view(atColumn: 0, row: index, makeIfNecessary: false)
+                as? NSTableCellView, cell.textField?.stringValue != row.text {
+                cell.textField?.stringValue = row.text
+                cell.textField?.setAccessibilityLabel(row.text)
+                tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integer: index))
+            }
+        }
+        updateStatusLabel()
+        // Keep the reading row on screen (it may have shifted down as posts
+        // streamed in above), and keep our per-timeline anchor accurate.
+        if tableView.selectedRow >= 0 {
+            tableView.scrollRowToVisible(tableView.selectedRow)
         }
     }
 

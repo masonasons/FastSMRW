@@ -73,6 +73,10 @@ private val emojiOptions = listOf(
     "none" to "Off", "unicode" to "Unicode emoji",
     "mastodon" to "Custom (:shortcode:)", "both" to "Both",
 )
+private val tabBarPositionOptions = listOf(
+    "top" to "Top of the screen",
+    "bottom" to "Bottom of the screen",
+)
 
 private val statusFieldLabels = mapOf(
     "boostedBy" to "Boosted by", "author" to "Author name", "handle" to "Handle (@user)",
@@ -211,6 +215,11 @@ private fun TimelinesPanel(s: JSONObject, vm: CoreViewModel) {
     SwitchRow("Stream in real time (Mastodon)", s.optBoolean("streaming_enabled")) {
         vm.updateSetting { put("streaming_enabled", it) }
     }
+    ComboRow("Tab bar position", tabBarPositionOptions,
+        s.optString("tab_bar_position").ifEmpty { "top" }) {
+        vm.updateSetting { put("tab_bar_position", it) }
+    }
+    HelpText("Show the timeline tabs at the top or the bottom of the screen.")
     SwitchRow("Show mentions in the Notifications timeline", s.optBoolean("show_mentions_in_notifications")) {
         vm.updateSetting { put("show_mentions_in_notifications", it) }
     }

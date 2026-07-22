@@ -3,6 +3,9 @@
 #include <nlohmann/json.hpp>
 
 #include "fastsm/store/settings_json.hpp"
+#include "fastsm/timeline/movement.hpp"
+
+#include <unordered_set>
 
 using nlohmann::json;
 using namespace fastsm::present;
@@ -74,6 +77,27 @@ AppSettings settings_from_json(const json& root) {
     settings.confirm_delete_post = root.value("confirm_delete_post", true);
     settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 60);
     settings.streaming_enabled = root.value("streaming_enabled", true);
+    // Default comes from the struct (platform-dependent: bottom on iOS).
+    settings.tab_bar_position = root.value("tab_bar_position", settings.tab_bar_position);
+    {
+        // Movement units: keep the saved order, drop unknown keys, then append
+        // any catalog unit the saved list is missing (enabled) so new units
+        // show up for existing installs.
+        std::vector<AppSettings::MovementUnitPref> prefs;
+        std::unordered_set<std::string> seen;
+        if (auto it = root.find("movement_units"); it != root.end() && it->is_array()) {
+            for (const auto& e : *it) {
+                MovementUnit unit;
+                const std::string key = e.value("unit", std::string{});
+                if (MovementUnit::from_key(key, unit) && seen.insert(key).second)
+                    prefs.push_back({key, e.value("enabled", true)});
+            }
+        }
+        for (const auto& unit : MovementUnit::catalog())
+            if (seen.insert(unit.key()).second)
+                prefs.push_back({unit.key(), true});
+        settings.movement_units = std::move(prefs);
+    }
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.reverse_timelines = root.value("reverse_timelines", false);
     settings.auto_load_older = root.value("auto_load_older", true);
@@ -152,6 +176,17 @@ json settings_to_json(const AppSettings& settings) {
     root["confirm_delete_post"] = settings.confirm_delete_post;
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
+    root["tab_bar_position"] = settings.tab_bar_position;
+    // A default-constructed AppSettings has an empty list (it's normalized on
+    // parse, not in the header) — serialize the real default: the full catalog.
+    root["movement_units"] = json::array();
+    if (settings.movement_units.empty()) {
+        for (const auto& unit : MovementUnit::catalog())
+            root["movement_units"].push_back({{"unit", unit.key()}, {"enabled", true}});
+    } else {
+        for (const auto& pref : settings.movement_units)
+            root["movement_units"].push_back({{"unit", pref.unit}, {"enabled", pref.enabled}});
+    }
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["reverse_timelines"] = settings.reverse_timelines;
     root["auto_load_older"] = settings.auto_load_older;

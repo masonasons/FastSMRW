@@ -47,6 +47,7 @@ final class SettingsWindowController: NSWindowController {
             p.checkbox("Reverse order (newest posts at the bottom)",
                        key: "reverse_timelines", default: false)
             p.checkbox("Automatically load older posts", key: "auto_load_older", default: true)
+            p.button("Movement Units…") { [weak p] in p?.openMovementUnits() }
         }
 
         tab("Audio", "speaker.wave.2") { p in
@@ -159,6 +160,7 @@ final class SettingsPane: NSViewController {
     private let stack = NSStackView()
     private var handlers: [ObjectIdentifier: (NSControl) -> Void] = [:]
     private var speechDetailController: SpeechDetailsWindowController?
+    private var movementUnitsController: MovementUnitsWindowController?
 
     init(state: AppState) {
         self.state = state
@@ -251,14 +253,24 @@ final class SettingsPane: NSViewController {
         field.target = self
         field.action = #selector(controlChanged(_:))
 
+        // Parse digits only, and never display via integerValue: NSTextField
+        // localizes NSNumber with grouping ("1,000"), and re-parsing that stops
+        // at the comma (→ 1) — the same separator bug the Windows spin buddy
+        // had, which silently capped values at 999.
+        let parse: (String) -> Int? = { s in Int(s.filter { $0.isNumber }) }
         let apply: (Int) -> Void = { [weak self] v in
             let clamped = Swift.max(min, Swift.min(max, v))
-            field.integerValue = clamped
+            field.stringValue = String(clamped)
             stepper.integerValue = clamped
             self?.state.updateSettings { $0[key] = clamped }
         }
-        handlers[ObjectIdentifier(stepper)] = { s in apply((s as? NSStepper)?.integerValue ?? def) }
-        handlers[ObjectIdentifier(field)] = { s in apply((s as? NSTextField)?.integerValue ?? def) }
+        handlers[ObjectIdentifier(stepper)] = { s in
+            apply((s as? NSStepper)?.integerValue ?? def)
+        }
+        handlers[ObjectIdentifier(field)] = { s in
+            guard let f = s as? NSTextField else { return }
+            apply(parse(f.stringValue) ?? stepper.integerValue)
+        }
 
         let row = NSStackView(views: [field, stepper])
         row.spacing = 4
@@ -285,6 +297,18 @@ final class SettingsPane: NSViewController {
         let controller = SpeechDetailsWindowController(state: state, category: category, title: title)
         speechDetailController = controller
         controller.beginSheet(for: window) { [weak self] in self?.speechDetailController = nil }
+    }
+
+    /// Opens the movement-units sheet (which units Option+Left/Right cycle,
+    /// and their order).
+    func openMovementUnits() {
+        guard !state.movementCatalog.isEmpty, let window = view.window else {
+            NSSound.beep()
+            return
+        }
+        let controller = MovementUnitsWindowController(state: state)
+        movementUnitsController = controller
+        controller.beginSheet(for: window) { [weak self] in self?.movementUnitsController = nil }
     }
 
     func button(_ title: String, action: @escaping () -> Void) {

@@ -44,9 +44,13 @@ struct Row: Decodable, Equatable {
     var followRequest = false
     var accountId: String?
     var acct: String?
+    /// Author timestamp + conversation key, for synchronous movement-unit
+    /// jumps (the iOS rotor). Present on status rows.
+    var time: Int?
+    var thread: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, text, favorited, boosted, acct
+        case id, text, favorited, boosted, acct, time, thread
         case hasMedia = "has_media"
         case isReply = "is_reply"
         case isMine = "is_mine"
@@ -71,6 +75,8 @@ struct Row: Decodable, Equatable {
         followRequest = try c.decodeIfPresent(Bool.self, forKey: .followRequest) ?? false
         accountId = try c.decodeIfPresent(String.self, forKey: .accountId)
         acct = try c.decodeIfPresent(String.self, forKey: .acct)
+        time = try c.decodeIfPresent(Int.self, forKey: .time)
+        thread = try c.decodeIfPresent(String.self, forKey: .thread)
     }
 }
 
@@ -97,7 +103,18 @@ struct TimelineUpdated: Decodable {
         case index, reversed, rows
         case selectedId = "selected_id"
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        index = try c.decode(Int.self, forKey: .index)
+        selectedId = try c.decodeIfPresent(String.self, forKey: .selectedId) ?? ""
+        reversed = try c.decodeIfPresent(Bool.self, forKey: .reversed) ?? false
+        rows = try c.decode([Row].self, forKey: .rows)
+    }
 }
+
+/// The full movement-unit catalog (key + label), for the units picker.
+struct MovementCatalog: Decodable { let units: [SpeechField] }
 
 struct AuthResult: Decodable {
     let ok: Bool
@@ -411,6 +428,26 @@ struct Lists: Decodable {
     }
 }
 
+/// Per-account settings (today: the account's soundpack override). `soundpack`
+/// is the effective pack for pre-selection (the global one if no override).
+struct AccountSettings: Decodable {
+    var accountKey = ""
+    var acct = ""
+    var soundpack = "Default"
+    var soundpacks: [String] = []
+    enum CodingKeys: String, CodingKey {
+        case acct, soundpack, soundpacks
+        case accountKey = "account_key"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        accountKey = try c.decodeIfPresent(String.self, forKey: .accountKey) ?? ""
+        acct = try c.decodeIfPresent(String.self, forKey: .acct) ?? ""
+        soundpack = try c.decodeIfPresent(String.self, forKey: .soundpack) ?? "Default"
+        soundpacks = try c.decodeIfPresent([String].self, forKey: .soundpacks) ?? []
+    }
+}
+
 /// Result of a check_for_update. Mac uses the `dmg_url` (a .dmg release asset);
 /// falls back to opening `download_url` if none.
 struct UpdateStatus: Decodable {
@@ -512,12 +549,14 @@ enum CoreEvent {
     case mediaPicker(MediaPicker)
     case urlPicker(URLPicker)
     case speechCatalog(SpeechCatalog)
+    case movementCatalog(MovementCatalog)
     case hashtagPrompt(HashtagPrompt)
     case followedHashtags(FollowedHashtags)
     case trendingHashtags(FollowedHashtags)
     case aliasPrompt(AliasPrompt)
     case aliasesList(AliasesList)
     case lists(Lists)
+    case accountSettings(AccountSettings)
     case updateStatus(UpdateStatus)
     case serverFilters(ServerFilters)
     case userSuggestions(UserSuggestions)
@@ -553,12 +592,16 @@ enum CoreEvent {
         case "media_picker": return decode(MediaPicker.self).map(CoreEvent.mediaPicker)
         case "url_picker": return decode(URLPicker.self).map(CoreEvent.urlPicker)
         case "speech_catalog": return decode(SpeechCatalog.self).map(CoreEvent.speechCatalog)
+        case "movement_catalog":
+            return decode(MovementCatalog.self).map(CoreEvent.movementCatalog)
         case "hashtag_prompt": return decode(HashtagPrompt.self).map(CoreEvent.hashtagPrompt)
         case "followed_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.followedHashtags)
         case "trending_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.trendingHashtags)
         case "alias_prompt": return decode(AliasPrompt.self).map(CoreEvent.aliasPrompt)
         case "aliases_list": return decode(AliasesList.self).map(CoreEvent.aliasesList)
         case "lists": return decode(Lists.self).map(CoreEvent.lists)
+        case "account_settings":
+            return decode(AccountSettings.self).map(CoreEvent.accountSettings)
         case "update_status": return decode(UpdateStatus.self).map(CoreEvent.updateStatus)
         case "server_filters": return decode(ServerFilters.self).map(CoreEvent.serverFilters)
         case "user_suggestions": return decode(UserSuggestions.self).map(CoreEvent.userSuggestions)

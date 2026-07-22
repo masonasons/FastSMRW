@@ -110,17 +110,18 @@ final class SpeechDetailsWindowController: NSWindowController, NSTableViewDataSo
         scroll.borderType = .bezelBorder
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
-        let ok = NSButton(title: "OK", target: self, action: #selector(save))
-        ok.bezelStyle = .rounded
-        ok.keyEquivalent = "\r"
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(self.cancel))
-        cancel.bezelStyle = .rounded
-        cancel.keyEquivalent = "\u{1b}"
+        // Every change saves immediately (like the other apps), so closing the
+        // sheet any way — Close, Return, or Escape — keeps the edits. The old
+        // save-on-OK design silently discarded everything when the sheet was
+        // closed with Escape, which reads as "my changes did nothing".
+        let close = NSButton(title: "Close", target: self, action: #selector(save))
+        close.bezelStyle = .rounded
+        close.keyEquivalent = "\r"
         let up = NSButton(title: "Move Up", target: self, action: #selector(moveFieldUp))
         up.bezelStyle = .rounded
         let down = NSButton(title: "Move Down", target: self, action: #selector(moveFieldDown))
         down.bezelStyle = .rounded
-        let buttons = NSStackView(views: [up, down, NSView(), cancel, ok])
+        let buttons = NSStackView(views: [up, down, NSView(), close])
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
@@ -176,15 +177,22 @@ final class SpeechDetailsWindowController: NSWindowController, NSTableViewDataSo
 
     @objc private func commitWrap() {
         guard fields.indices.contains(wrapBoundRow) else { return }
-        fields[wrapBoundRow].before = beforeField.stringValue
-        fields[wrapBoundRow].after = afterField.stringValue
-        fields[wrapBoundRow].noSeparatorAfter = noSepCheck.state == .on
+        let before = beforeField.stringValue
+        let after = afterField.stringValue
+        let noSep = noSepCheck.state == .on
+        guard before != fields[wrapBoundRow].before || after != fields[wrapBoundRow].after
+            || noSep != fields[wrapBoundRow].noSeparatorAfter else { return }
+        fields[wrapBoundRow].before = before
+        fields[wrapBoundRow].after = after
+        fields[wrapBoundRow].noSeparatorAfter = noSep
+        writeThrough()
     }
 
     private func toggleSelected() {
         let row = tableView.selectedRow
         guard fields.indices.contains(row) else { return }
         fields[row].enabled.toggle()
+        writeThrough()
         tableView.reloadData(forRowIndexes: IndexSet(integer: row),
                              columnIndexes: IndexSet(integer: 0))
         select(row)
@@ -196,16 +204,23 @@ final class SpeechDetailsWindowController: NSWindowController, NSTableViewDataSo
         let target = row + delta
         guard fields.indices.contains(row), fields.indices.contains(target) else { return }
         fields.swapAt(row, target)
+        writeThrough()
         tableView.reloadData()
         select(target)
     }
 
     @objc private func moveFieldUp() { move(-1) }
     @objc private func moveFieldDown() { move(1) }
-    @objc private func cancel() { dismiss() }
 
-    @objc private func save() {
-        commitWrap() // capture edits to the currently-shown field
+    /// Escape closes the sheet; edits are already saved.
+    override func cancelOperation(_ sender: Any?) {
+        commitWrap()
+        dismiss()
+    }
+
+    /// Push the current field list into settings.speech.<category> — called on
+    /// every mutation, so the sheet can be closed any way without losing edits.
+    private func writeThrough() {
         let items: [[String: Any]] = fields.map { f in
             var item: [String: Any] = ["field": f.key, "enabled": f.enabled]
             if !f.before.isEmpty { item["before"] = f.before }
@@ -214,6 +229,10 @@ final class SpeechDetailsWindowController: NSWindowController, NSTableViewDataSo
             return item
         }
         state.setSpeechItems(items, for: category)
+    }
+
+    @objc private func save() {
+        commitWrap() // capture edits to the currently-shown field
         dismiss()
     }
 

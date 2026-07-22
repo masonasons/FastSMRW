@@ -503,6 +503,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_get_client_filter();
     else if (c == "get_speech_catalog")
         cmd_get_speech_catalog();
+    else if (c == "get_movement_catalog")
+        cmd_get_movement_catalog();
     else if (c == "set_client_filter")
         cmd_set_client_filter(cmd);
     else if (c == "clear_client_filter")
@@ -2855,7 +2857,13 @@ void CoreSession::cmd_move(const json& cmd) {
     TimelineController* tc = current();
     if (!tc || movement_units_.empty())
         return;
-    const int idx = tc->visible_index_of(cmd.value("from_id", std::string{}));
+    // Default to the core's own live cursor (kept fresh by every
+    // note_selection). A UI-side anchor goes stale between timeline_updated
+    // emissions — that made Same User jump from the wrong row on the Mac.
+    std::string from = cmd.value("from_id", std::string{});
+    if (from.empty())
+        from = tc->selected_id();
+    const int idx = tc->visible_index_of(from);
     if (idx < 0)
         return;
     if (movement_unit_ < 0 || movement_unit_ >= static_cast<int>(movement_units_.size()))
@@ -3700,6 +3708,20 @@ void CoreSession::apply_timeline_settings(TimelineController& tc) {
 }
 
 void CoreSession::apply_settings() {
+    // Active movement units (cycled on desktop, rotors on iOS) follow the
+    // movement_units setting: enabled entries, in the saved order. An empty
+    // list means "never configured" (normalization guarantees a configured
+    // list always names every catalog unit) — keep the full-catalog default.
+    if (!settings_.movement_units.empty()) {
+        movement_units_.clear();
+        for (const auto& pref : settings_.movement_units) {
+            MovementUnit unit;
+            if (pref.enabled && MovementUnit::from_key(pref.unit, unit))
+                movement_units_.push_back(unit);
+        }
+        if (movement_unit_ >= static_cast<int>(movement_units_.size()))
+            movement_unit_ = 0;
+    }
     sound_.set_enabled(settings_.sounds_enabled);
     sound_.set_volume(std::clamp(settings_.sound_volume, 0, 100) / 100.0f);
     apply_active_soundpack(); // the selected account's pack (or the global default)
@@ -3775,6 +3797,15 @@ void CoreSession::cmd_get_speech_catalog() {
           {"copy_status", build(status_fields)},
           {"copy_user", build(user_fields)},
           {"copy_notification", build(notif_fields)}});
+}
+
+// Every movement unit's stable key + human label, so a front end can build the
+// movement-units picker (which units are active, and their order).
+void CoreSession::cmd_get_movement_catalog() {
+    json units = json::array();
+    for (const auto& unit : MovementUnit::catalog())
+        units.push_back({{"key", unit.key()}, {"label", unit.title()}});
+    emit({{"event", "movement_catalog"}, {"units", std::move(units)}});
 }
 
 void CoreSession::cmd_set_client_filter(const json& cmd) {
@@ -4280,11 +4311,18 @@ void CoreSession::emit_timeline(int index) {
     std::set<std::string> gap_after;
     for (const auto& g : tc->gaps())
         gap_after.insert(g.after_id);
+    // Per-row thread keys, so a synchronous navigator (the iOS VoiceOver
+    // rotor) can compute thread jumps without a core round-trip.
+    const std::vector<std::string> threads = movement::thread_keys(tc->items());
     json rows = json::array();
+    size_t i = 0;
     for (const auto& item : tc->items()) {
         json r = row_json(item, now);
         if (gap_after.count(item.id()))
             r["gap_after"] = true; // unloaded posts follow this row
+        if (i < threads.size() && !threads[i].empty())
+            r["thread"] = threads[i];
+        ++i;
         rows.push_back(std::move(r));
     }
     emit({{"event", "timeline_updated"},
@@ -4323,6 +4361,11 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
             r["is_reply"] = true; // gates the "Speak referenced reply" actions
         if (SocialAccount* me = accounts_.selected())
             r["is_mine"] = s->account.id == me->me().id; // your own post -> deletable
+        // Author + timestamp, so front ends can compute movement-unit jumps
+        // synchronously (the iOS rotor). Keep in sync with movement.cpp.
+        r["account_id"] = s->account.id;
+        r["acct"] = s->account.acct.empty() ? s->account.username : s->account.acct;
+        r["time"] = s->created_at;
     }
     // A grouped like/boost notification: Enter opens the list of everyone in it.
     if (const Notification* n = item.notification();

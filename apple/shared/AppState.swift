@@ -1,11 +1,15 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 
-/// The app-wide view-model. Owns the `CoreClient`, holds the latest decoded
-/// state (accounts, timelines, rows), routes core events to UI callbacks, and
-/// exposes command helpers the view controllers call. This is the macOS
-/// equivalent of FastSMApple's `AppServices`, but backed by the command/event
-/// bus instead of a Swift core API. No engine logic lives here — it only
-/// forwards commands and renders events.
+/// The app-wide view-model, shared by the macOS and iOS apps. Owns the
+/// `CoreClient`, holds the latest decoded state (accounts, timelines, rows),
+/// routes core events to UI callbacks, and exposes command helpers the view
+/// controllers call. This is the equivalent of FastSMApple's `AppServices`,
+/// but backed by the command/event bus instead of a Swift core API. No engine
+/// logic lives here — it only forwards commands and renders events.
 @MainActor
 final class AppState {
     let client: CoreClient
@@ -19,6 +23,7 @@ final class AppState {
     private(set) var rowsByIndex: [Int: [Row]] = [:]
     private(set) var selectedIdByIndex: [Int: String] = [:]
     private(set) var reversedByIndex: [Int: Bool] = [:]
+    private(set) var movementCatalog: [SpeechField] = []
     /// The full settings object from the last `settings` event, echoed back
     /// (with edits) on update_settings — the core re-applies defaults for any
     /// missing key, so we must always send the whole object.
@@ -49,6 +54,7 @@ final class AppState {
     var onAliasPrompt: ((AliasPrompt) -> Void)?
     var onAliasesList: ((AliasesList) -> Void)?
     var onLists: ((Lists) -> Void)?
+    var onAccountSettings: ((AccountSettings) -> Void)?
     var onServerFilters: ((ServerFilters) -> Void)?
     var onUserSuggestions: ((UserSuggestions) -> Void)?
     var onUserLists: ((UserLists) -> Void)?
@@ -65,6 +71,17 @@ final class AppState {
     private var delayNextAnnounce = false
 
     var currentRows: [Row] { rowsByIndex[currentIndex] ?? [] }
+    /// The active movement units (enabled, in saved order) with display labels.
+    var activeMovementUnits: [(key: String, label: String)] {
+        let labels = Dictionary(movementCatalog.map { ($0.key, $0.label) },
+                                uniquingKeysWith: { a, _ in a })
+        return movementItems().compactMap { item in
+            guard let key = item["unit"] as? String,
+                  item["enabled"] as? Bool ?? true,
+                  let label = labels[key] else { return nil }
+            return (key, label)
+        }
+    }
     var currentSelectedId: String { selectedIdByIndex[currentIndex] ?? "" }
     var currentReversed: Bool { reversedByIndex[currentIndex] ?? false }
     var currentTimelineTitle: String? {
@@ -93,6 +110,7 @@ final class AppState {
     func start() {
         client.send("start")
         client.send("get_speech_catalog") // labels for the Speech Details lists
+        client.send("get_movement_catalog") // labels for the movement-units picker
     }
 
     // MARK: Event routing
@@ -106,12 +124,16 @@ final class AppState {
             if let packs = obj["soundpacks"] as? [String] { soundpacks = packs }
             onSettings?()
             // One silent update check at startup, once settings say it's wanted.
+            // iOS has no update flow at all (TestFlight / the App Store owns
+            // updates there), so this is macOS-only.
+#if os(macOS)
             if !didStartupUpdateCheck {
                 didStartupUpdateCheck = true
                 if settingsRaw["check_updates_on_startup"] as? Bool ?? true {
                     checkForUpdate(silent: true)
                 }
             }
+#endif
             return
         }
         // Copy the core-composed string to the system clipboard.
@@ -119,8 +141,12 @@ final class AppState {
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            obj["event"] as? String == "copy_to_clipboard" {
             if let text = obj["text"] as? String {
+#if canImport(AppKit)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
+#else
+                UIPasteboard.general.string = text
+#endif
             }
             return
         }
@@ -191,6 +217,8 @@ final class AppState {
             onAliasesList?(e)
         case let .lists(e):
             onLists?(e)
+        case let .accountSettings(e):
+            onAccountSettings?(e)
         case let .serverFilters(e):
             onServerFilters?(e)
         case let .userSuggestions(e):
@@ -205,6 +233,8 @@ final class AppState {
             onURLPicker?(e)
         case let .speechCatalog(e):
             speechCatalog = e
+        case let .movementCatalog(e):
+            movementCatalog = e.units
         case let .updateStatus(e):
             onUpdateStatus?(e)
         case .other:
@@ -275,10 +305,11 @@ final class AppState {
     func reorderTimeline(dir: String) { client.send("reorder_timeline", ["dir": dir]) }
     // Movement units: jump the cursor forward/back by the active unit ("prev"/"next"),
     // and cycle which unit is active. The core replies with select_row / an announce.
+    // No from_id: the core's own cursor is the anchor (a UI-side id here is only
+    // as fresh as the last timeline_updated, and jumping from a stale row made
+    // movement land in seemingly random places).
     func moveByUnit(dir: String) {
-        let from = currentSelectedId
-        guard !from.isEmpty else { return }
-        client.send("move", ["from_id": from, "dir": dir])
+        client.send("move", ["dir": dir])
     }
     func cycleMovement(dir: String) { client.send("cycle_movement", ["dir": dir]) }
     // Speech field order/enable (nested under settings.speech.<category>).
@@ -291,6 +322,13 @@ final class AppState {
             speech[category] = items
             s["speech"] = speech
         }
+    }
+    // Movement units ({"unit": key, "enabled": bool}, in cycle/rotor order).
+    func movementItems() -> [[String: Any]] {
+        settingsRaw["movement_units"] as? [[String: Any]] ?? []
+    }
+    func setMovementItems(_ items: [[String: Any]]) {
+        updateSettings { $0["movement_units"] = items }
     }
 
     // Followed hashtags (Mastodon)
@@ -413,6 +451,11 @@ final class AppState {
 
     // Accounts
     func selectAccount(dir: String) { client.send("select_account", ["dir": dir]) }
+    // Per-account settings (today: the soundpack override for the current account).
+    func getAccountSettings() { client.send("get_account_settings") }
+    func setAccountSettings(soundpack: String) {
+        client.send("set_account_settings", ["soundpack": soundpack])
+    }
     func beginMastodonLogin(instance: String) {
         client.send("begin_mastodon_login", ["instance": instance])
     }

@@ -272,7 +272,7 @@ HMENU build_menu() {
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_TIMELINE, L"Clea&r Timeline\tCtrl+Delete");
     AppendMenuW(timeline, MF_STRING, ID_CLEAR_ALL, L"Clear &All Timelines\tCtrl+Shift+Delete");
-    AppendMenuW(timeline, MF_STRING, ID_GO_BACK, L"Go &Back\tCtrl+Z");
+    AppendMenuW(timeline, MF_STRING, ID_GO_BACK, L"&Undo Navigation\tCtrl+Z");
     AppendMenuW(timeline, MF_SEPARATOR, 0, nullptr);
     for (int i = 1; i <= 9; ++i) {
         wchar_t label[40];

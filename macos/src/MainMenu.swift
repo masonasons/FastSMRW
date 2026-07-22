@@ -117,7 +117,7 @@ enum MainMenu {
                                               action: #selector(MainWindowController.refreshAll(_:)),
                                               keyEquivalent: "r")
         refreshAll.keyEquivalentModifierMask = [.command, .shift]
-        let goBack = timelineMenu.addItem(withTitle: "Go Back",
+        let goBack = timelineMenu.addItem(withTitle: "Undo Navigation",
                                           action: #selector(MainWindowController.goBack(_:)),
                                           keyEquivalent: "z")
         goBack.keyEquivalentModifierMask = [.command]
@@ -173,6 +173,11 @@ enum MainMenu {
                                              keyEquivalent: "a")
         addAccount.keyEquivalentModifierMask = [.command, .shift]
         accountMenu.addItem(.separator())
+        let accountSettings = accountMenu.addItem(
+            withTitle: "Account Settings…",
+            action: #selector(MainWindowController.accountSettings(_:)),
+            keyEquivalent: ",")
+        accountSettings.keyEquivalentModifierMask = [.command, .shift]
         accountMenu.addItem(withTitle: "Edit Profile…",
                             action: #selector(MainWindowController.editProfile(_:)),
                             keyEquivalent: "")

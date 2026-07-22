@@ -50,6 +50,22 @@ struct AppSettings {
     bool reply_mentions_at_end = false;
     int auto_refresh_seconds = 60; // 0 = off; otherwise poll interval
     bool streaming_enabled = true; // real-time streaming (Mastodon)
+    // Where the mobile apps (iOS/Android) place the timeline tab bar; the
+    // desktop apps use a sidebar and ignore this. Bottom by default on Apple
+    // (easier one-handed/VoiceOver reach on iPhone; macOS ignores it), top on
+    // Android (matches its tab conventions).
+#ifdef __APPLE__
+    std::string tab_bar_position = "bottom"; // "top" | "bottom"
+#else
+    std::string tab_bar_position = "top"; // "top" | "bottom"
+#endif
+    // The active movement units, in cycle/rotor order. Normalized on load:
+    // saved order first, any catalog unit not saved is appended enabled.
+    struct MovementUnitPref {
+        std::string unit; // MovementUnit::key()
+        bool enabled = true;
+    };
+    std::vector<MovementUnitPref> movement_units;
     // Invisible interface (Windows): control the client from any window.
     std::string invisible_mode = "off";       // "off" | "hotkey" | "keyhook" | "layer"
     std::string invisible_keymap = "default";  // active keymap name

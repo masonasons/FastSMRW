@@ -1,6 +1,10 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio/miniaudio.h>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #include "fastsm/sound/sound_manager.hpp"
 
 #include <algorithm>
@@ -115,10 +119,37 @@ struct SoundManager::Impl {
         last_revive = now;
         return true;
     }
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    ma_context context{};
+    bool context_ok = false;
+#endif
+
+    // Bring up the engine. On iOS, miniaudio's default takes over the app's
+    // audio session with PlayAndRecord — which grabs the microphone and routes
+    // output to the quiet earpiece speaker. The app owns the session there
+    // (playback, mixed with VoiceOver/music), so tell miniaudio to leave it
+    // alone; the context carrying that choice is reused across engine revives.
+    bool init_engine() {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        if (!context_ok) {
+            ma_context_config cfg = ma_context_config_init();
+            cfg.coreaudio.sessionCategory = ma_ios_session_category_none;
+            if (ma_context_init(nullptr, 0, &cfg, &context) != MA_SUCCESS)
+                return false;
+            context_ok = true;
+        }
+        ma_engine_config cfg = ma_engine_config_init();
+        cfg.pContext = &context;
+        return ma_engine_init(&cfg, &engine) == MA_SUCCESS;
+#else
+        return ma_engine_init(nullptr, &engine) == MA_SUCCESS;
+#endif
+    }
 };
 
 SoundManager::SoundManager() : impl_(new Impl) {
-    if (ma_engine_init(nullptr, &impl_->engine) == MA_SUCCESS)
+    if (impl_->init_engine())
         impl_->ok = true;
 }
 
@@ -127,6 +158,10 @@ SoundManager::~SoundManager() {
         impl_->stop_all();
         ma_engine_uninit(&impl_->engine);
     }
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    if (impl_->context_ok)
+        ma_context_uninit(&impl_->context);
+#endif
     delete impl_;
 }
 
@@ -140,7 +175,7 @@ void SoundManager::reinitialize() {
         impl_->ok = false;
     }
     impl_->engine = ma_engine{};
-    if (ma_engine_init(nullptr, &impl_->engine) == MA_SUCCESS)
+    if (impl_->init_engine())
         impl_->ok = true;
 }
 

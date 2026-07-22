@@ -1,0 +1,114 @@
+# XcodeGen spec — source of truth for ios/FastSMRW.xcodeproj.
+# Regenerate with:  cd ios && xcodegen generate
+#
+# Two targets, mirroring macos/project.yml: fastsm_core (the portable C++/
+# Obj-C++ core as a static lib, built for iOS) and FastSMRW (the UIKit app,
+# Swift, linking the core through its C ABI). The command/event bridge
+# (CoreClient/CoreEvents/AppState) is shared with the Mac app via ../apple/shared.
+name: FastSMRW
+options:
+  bundleIdPrefix: me.masonasons
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: "c++20"
+    GCC_C_LANGUAGE_STANDARD: c11
+    GCC_ENABLE_CPP_EXCEPTIONS: YES
+    GCC_ENABLE_CPP_RTTI: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: NO
+
+targets:
+  fastsm_core:
+    type: library.static
+    platform: iOS
+    sources:
+      # The whole portable core, minus the Windows-only WinHTTP transport —
+      # same spec as the macOS core target. The NSURLSession transport
+      # (darwin_http_client.mm) and the __APPLE__ C-ABI branch cover iOS too.
+      - path: ../core/src
+        excludes:
+          - net/winhttp_client.cpp
+          - sound/sound_manager.cpp
+      # miniaudio's iOS backend talks to AVAudioSession (Objective-C), so this
+      # one TU must be compiled as Objective-C++ here (plain C++ elsewhere).
+      - path: ../core/src/sound/sound_manager.cpp
+        compilerFlags: "-x objective-c++"
+      - path: ../deps/stb_vorbis/stb_vorbis.c
+    settings:
+      base:
+        HEADER_SEARCH_PATHS:
+          - ../core/include
+          - ../deps
+          - ../deps/stb_vorbis
+        # stb_vorbis.c is noisy; don't let its warnings clutter the build.
+        GCC_WARN_UNUSED_FUNCTION: NO
+        GCC_WARN_UNUSED_VARIABLE: NO
+
+  FastSMRW:
+    type: application
+    platform: iOS
+    sources:
+      - path: src
+      - path: ../apple/shared
+      - path: ../assets/soundpacks
+        type: folder
+        buildPhase: resources
+      - path: src/Assets.xcassets
+    dependencies:
+      - target: fastsm_core
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      # miniaudio's iOS backend (earcons play in the core).
+      - sdk: CoreAudio.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFoundation.framework
+      # Media playback (video/audio attachments).
+      - sdk: AVKit.framework
+      # In-app browser session for the Mastodon OAuth login.
+      - sdk: AuthenticationServices.framework
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: src/FastSMRW-Bridging-Header.h
+        # The app has no C++ sources, so Xcode won't auto-link the C++ runtime
+        # the static core needs. Pull it in explicitly.
+        OTHER_LDFLAGS: ["-lc++"]
+        HEADER_SEARCH_PATHS:
+          - ../core/include
+        DEVELOPMENT_TEAM: 9QBYDAX396
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_NAME: FastSMRW
+        # testflight.sh overrides both at archive time (marketing version from
+        # core/src/version.cpp, build number from the git commit count).
+        MARKETING_VERSION: "0.4.7"
+        CURRENT_PROJECT_VERSION: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
+    info:
+      path: src/Info.plist
+      properties:
+        CFBundleName: FastSMRW
+        CFBundleDisplayName: FastSMRW
+        LSApplicationCategoryType: public.app-category.social-networking
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        CFBundleURLTypes:
+          - CFBundleURLName: me.masonasons.FastSMRW.oauth
+            CFBundleURLSchemes:
+              - fastsm

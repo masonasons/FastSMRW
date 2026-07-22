@@ -40,7 +40,7 @@ CORE_SRC=(
     timeline/timeline_controller.cpp timeline/streaming_client.cpp
     timeline/movement.cpp timeline/client_filter.cpp
     presentation/status_presenter.cpp presentation/speech_settings.cpp
-    presentation/reply_helper.cpp
+    presentation/reply_helper.cpp presentation/alias_store.cpp
     sound/sound_manager.cpp
     input/keymap.cpp
     update/update_checker.cpp

@@ -25,6 +25,50 @@ std::string MovementUnit::title() const {
     return {};
 }
 
+std::string MovementUnit::key() const {
+    switch (kind) {
+    case Kind::SameUser:
+        return "same_user";
+    case Kind::Thread:
+        return "thread";
+    case Kind::Time:
+        return "time:" + std::to_string(seconds);
+    case Kind::Count:
+        return "count:" + std::to_string(count);
+    }
+    return {};
+}
+
+bool MovementUnit::from_key(const std::string& key, MovementUnit& out) {
+    auto number_after = [&](const char* prefix) -> int {
+        const size_t len = std::char_traits<char>::length(prefix);
+        if (key.rfind(prefix, 0) != 0)
+            return -1;
+        try {
+            return std::stoi(key.substr(len));
+        } catch (...) {
+            return -1;
+        }
+    };
+    if (key == "same_user") {
+        out = {Kind::SameUser, 0};
+        return true;
+    }
+    if (key == "thread") {
+        out = {Kind::Thread, 0};
+        return true;
+    }
+    if (int seconds = number_after("time:"); seconds > 0) {
+        out = {Kind::Time, seconds};
+        return true;
+    }
+    if (int count = number_after("count:"); count > 0) {
+        out = {Kind::Count, 0, count};
+        return true;
+    }
+    return false;
+}
+
 std::vector<MovementUnit> MovementUnit::catalog() {
     return {
         {MovementUnit::Kind::SameUser, 0}, {MovementUnit::Kind::Thread, 0},
@@ -36,7 +80,6 @@ std::vector<MovementUnit> MovementUnit::catalog() {
 }
 
 namespace movement {
-namespace {
 
 // Root-ancestor id per index (empty for non-status rows). Follows in_reply_to_id
 // among the loaded items so posts of one conversation share a key.
@@ -69,8 +112,6 @@ std::vector<std::string> thread_keys(const std::vector<TimelineItem>& items) {
     }
     return keys;
 }
-
-} // namespace
 
 int destination(const std::vector<TimelineItem>& items, int index, const MovementUnit& unit,
                 bool down) {

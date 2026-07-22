@@ -1,6 +1,19 @@
 FastSMRW changelog
 ==================
 
+0.5.0
+-----
+
+- New: FastSM now has an iPhone app (beta, via TestFlight): everything the other apps do — timelines with VoiceOver rotors and tab actions, full compose, settings, profiles, lists, filters, media, and full Bluetooth-keyboard support.
+- Fixed: on the Mac, number settings like the timeline cache size can now go above 999 (values with a thousands comma were being misread).
+- Fixed: on the Mac, the speech and copy field editors now actually save — every change applies immediately, and closing the window any way keeps your edits.
+- Fixed: VoiceOver no longer re-reads the post you're sitting on when timelines refresh, new posts stream in, or timestamps update in the background.
+- New: Account Settings (per-account soundpack) is now on the Mac (Command+Shift+Comma in the Account menu), matching Windows.
+- Changed: "Go Back" is now called "Undo Navigation" everywhere, which is what it actually does.
+- New: choose which movement units are active and their order — a Movement Units editor in Settings, Timelines on Windows and the Mac (it's the rotor ring on iPhone).
+- Fixed: on the Mac, movement-unit jumps now always start from the post you're on; they could previously jump from an old position and land somewhere surprising.
+- New: on Android, choose whether the timeline tab bar sits at the top or the bottom of the screen (Settings, Timelines).
+
 0.4.7
 -----
 

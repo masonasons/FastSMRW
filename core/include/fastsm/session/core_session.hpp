@@ -194,6 +194,7 @@ private:
     // --- filters (per-timeline client-side + Mastodon server-side) ---
     void cmd_get_client_filter();               // emit the current timeline's client filter
     void cmd_get_speech_catalog();              // -> speech_catalog event (field keys + labels)
+    void cmd_get_movement_catalog();            // -> movement_catalog event (unit keys + labels)
     void cmd_set_client_filter(const nlohmann::json& cmd); // {filter} -> save + apply
     void cmd_clear_client_filter();             // drop the current timeline's client filter
     void cmd_list_server_filters();             // emit server_filters {supported, filters}

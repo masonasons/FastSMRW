@@ -84,6 +84,8 @@ fun HomeScreen(
     val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
     val rowsByTab by viewModel.rowsByTab.collectAsStateWithLifecycle()
     val selectedIdByTab by viewModel.selectedIdByTab.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val tabsAtBottom = settings?.optString("tab_bar_position") == "bottom"
 
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
@@ -105,6 +107,20 @@ fun HomeScreen(
     // Back gesture closes the focused timeline when it's closable (else it falls
     // through to the system, exiting the app).
     BackHandler(enabled = currentClosable) { viewModel.closeTimeline(pagerState.currentPage) }
+
+    // The tab bar renders at the top or the bottom per the tab_bar_position
+    // setting (shared with iOS); one lambda so both slots stay identical.
+    val tabBar: @Composable () -> Unit = {
+        TimelineTabs(
+            tabs = tabs,
+            selectedIndex = pagerState.currentPage,
+            onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+            onClose = viewModel::closeTimeline,
+            onPin = viewModel::pinTimeline,
+            onMute = viewModel::muteTimeline,
+            onMove = viewModel::moveTimeline,
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -166,17 +182,10 @@ fun HomeScreen(
                     onLogOut = viewModel::removeAccount,
                     onAccountSettings = onOpenAccountSettings,
                 )
-                TimelineTabs(
-                    tabs = tabs,
-                    selectedIndex = pagerState.currentPage,
-                    onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
-                    onClose = viewModel::closeTimeline,
-                    onPin = viewModel::pinTimeline,
-                    onMute = viewModel::muteTimeline,
-                    onMove = viewModel::moveTimeline,
-                )
+                if (!tabsAtBottom) tabBar()
             }
         },
+        bottomBar = { if (tabsAtBottom) tabBar() },
         floatingActionButton = {
             FloatingActionButton(onClick = viewModel::composeNew) {
                 Icon(Icons.Filled.Edit, contentDescription = "New post")

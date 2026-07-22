@@ -37,3 +37,9 @@ build/release/fastsm_core.dll
 /macos/FastSMRW.xcodeproj/
 *.xcuserstate
 xcuserdata/
+
+# iOS app: the Xcode project is generated from ios/project.yml by XcodeGen
+/ios/FastSMRW.xcodeproj/
+
+# iOS TestFlight archive/export scratch (ios/testflight.sh)
+/ios/build/

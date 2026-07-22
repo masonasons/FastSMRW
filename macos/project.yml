@@ -46,6 +46,9 @@ targets:
     platform: macOS
     sources:
       - path: src
+      # The command/event bridge (CoreClient/CoreEvents/AppState) is shared
+      # with the iOS app.
+      - path: ../apple/shared
       - path: ../assets/soundpacks
         type: folder
         buildPhase: resources

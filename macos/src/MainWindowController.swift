@@ -188,6 +188,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
                                    in: window)
             }
         }
+        state.onAccountSettings = { [weak self] settings in
+            self?.presentAccountSettings(settings)
+        }
         state.onAliasPrompt = { [weak self] prompt in
             guard let self, let window = self.window else { return }
             AliasPromptSheet.run(handle: prompt.handle, current: prompt.current, in: window) { value in
@@ -270,6 +273,29 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func favoriteSelection(_ sender: Any?) { postsViewController.favoriteSelection(sender) }
     @objc func bookmarkSelection(_ sender: Any?) { postsViewController.bookmarkSelection(sender) }
     @objc func editProfile(_ sender: Any?) { state.openProfileEditor() }
+    @objc func accountSettings(_ sender: Any?) { state.getAccountSettings() }
+
+    /// Per-account settings (the soundpack this account's timelines play),
+    /// mirroring the Windows dialog: a popup preselected to the effective pack.
+    private func presentAccountSettings(_ settings: AccountSettings) {
+        let alert = NSAlert()
+        alert.messageText = settings.acct.isEmpty
+            ? "Account Settings" : "Account Settings for @\(settings.acct)"
+        alert.informativeText = "The soundpack used for this account's timelines."
+        let packs = settings.soundpacks.isEmpty ? ["Default"] : settings.soundpacks
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 25))
+        popup.addItems(withTitles: packs)
+        popup.setAccessibilityLabel("Soundpack")
+        if let index = packs.firstIndex(of: settings.soundpack) {
+            popup.selectItem(at: index)
+        }
+        alert.accessoryView = popup
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn,
+              packs.indices.contains(popup.indexOfSelectedItem) else { return }
+        state.setAccountSettings(soundpack: packs[popup.indexOfSelectedItem])
+    }
     @objc func toggleAutoRead(_ sender: Any?) { state.toggleAutoRead() }
     @objc func copy(_ sender: Any?) { postsViewController.copySelection(sender) }
     @objc func quoteSelection(_ sender: Any?) { postsViewController.quoteSelection(sender) }

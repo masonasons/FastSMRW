@@ -18,8 +18,12 @@ struct MovementUnit {
     int count = 0;   // number of items for Kind::Count
 
     std::string title() const;
+    // Stable settings key: "same_user" / "thread" / "time:<seconds>" / "count:<n>".
+    std::string key() const;
+    static bool from_key(const std::string& key, MovementUnit& out);
 
-    // Default set the user cycles through (config/reorder lands later).
+    // Every available unit; which are active (and their order) comes from the
+    // movement_units setting.
     static std::vector<MovementUnit> catalog();
 };
 
@@ -29,6 +33,11 @@ namespace movement {
 // older/higher indices), or -1 if there's nowhere to go.
 int destination(const std::vector<TimelineItem>& items, int index, const MovementUnit& unit,
                 bool down);
+
+// Root-ancestor id per index (empty for non-status rows), so posts of one
+// conversation share a key. Also emitted per row so a synchronous navigator
+// (the iOS VoiceOver rotor) can compute thread jumps without a round-trip.
+std::vector<std::string> thread_keys(const std::vector<TimelineItem>& items);
 
 } // namespace movement
 } // namespace fastsm
