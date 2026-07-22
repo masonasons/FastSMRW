@@ -94,6 +94,10 @@ targets:
       properties:
         CFBundleName: FastSMRW
         CFBundleDisplayName: FastSMRW
+        # Track the build settings (testflight.sh overrides both per upload);
+        # XcodeGen otherwise hardcodes 1.0/1 and every upload collides.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.social-networking
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
