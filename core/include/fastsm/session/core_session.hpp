@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -296,6 +297,13 @@ private:
     void apply_active_soundpack(); // point the mixer at the selected account's pack
     void emit_timelines();
     void emit_timeline(int index);
+    // Coalesce a controller's on_change (streaming/refresh) into one emit per
+    // loop batch: streaming a firehose fires on_change per post, and a full
+    // emit_timeline re-serializes every row — that flooded the loop thread.
+    // Marks the controller dirty and posts a single flush; bursts that arrive
+    // while the loop is busy collapse to one emit. See emit_dirty_timelines().
+    void schedule_timeline_emit(TimelineController* tc);
+    void emit_dirty_timelines();
     void emit_announce(const std::string& message);
     void emit_all_timelines();
     nlohmann::json row_json(const TimelineItem& item, std::int64_t now) const;
@@ -340,6 +348,12 @@ private:
     MastodonCredentials pending_mastodon_;
 
     std::vector<MovementUnit> movement_units_ = MovementUnit::catalog();
+
+    // Timelines whose rows changed and need re-emitting, drained by a single
+    // flush posted to loop_ (see schedule_timeline_emit). Pointers, not
+    // indices, so a close/reorder before the flush can't misdirect the emit.
+    std::unordered_set<TimelineController*> dirty_timelines_;
+    bool timeline_flush_pending_ = false;
     int movement_unit_ = 0; // currently selected unit (Ctrl+Left/Right cycles)
 
     // Double-press tracking for Speak-reply (Ctrl+Shift+;): the row spoken last and

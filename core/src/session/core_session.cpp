@@ -3593,11 +3593,7 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
     auto tc = std::make_unique<TimelineController>(account, src, &cache_, &worker_, &loop_, page);
     apply_timeline_settings(*tc); // refresh depth + Notifications mentions filter
     TimelineController* p = tc.get();
-    tc->on_change = [this, p] {
-        const int i = index_of(p);
-        if (i >= 0)
-            emit_timeline(i);
-    };
+    tc->on_change = [this, p] { schedule_timeline_emit(p); };
     tc->on_error = [this](std::string e) { emit_announce(e); };
     tc->on_received_new = [this, p](int n, bool has_direct) {
         if (n <= 0 || p->muted()) // muted tab: new items arrive silently
@@ -4301,6 +4297,27 @@ void CoreSession::emit_timelines() {
           {"timelines", tls},
           {"current", current_},
           {"account", accounts_.selected_key()}}); // so the UI won't carry a position across accounts
+}
+
+void CoreSession::schedule_timeline_emit(TimelineController* tc) {
+    dirty_timelines_.insert(tc);
+    if (timeline_flush_pending_)
+        return; // a flush is already queued; it will pick this up too
+    timeline_flush_pending_ = true;
+    loop_.post([this] { emit_dirty_timelines(); });
+}
+
+void CoreSession::emit_dirty_timelines() {
+    timeline_flush_pending_ = false;
+    // Snapshot + clear first: an emit could (in principle) re-dirty a timeline,
+    // which should schedule a fresh flush rather than mutate what we're draining.
+    std::unordered_set<TimelineController*> dirty;
+    dirty.swap(dirty_timelines_);
+    for (TimelineController* tc : dirty) {
+        const int i = index_of(tc); // re-resolve: the list may have shifted
+        if (i >= 0)
+            emit_timeline(i);
+    }
 }
 
 void CoreSession::emit_timeline(int index) {
