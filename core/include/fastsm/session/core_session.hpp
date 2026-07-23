@@ -365,6 +365,10 @@ private:
     // indices, so a close/reorder before the flush can't misdirect the emit.
     std::unordered_set<TimelineController*> dirty_timelines_;
     bool timeline_flush_pending_ = false;
+    // Include each post's links ({title,url}) in its row JSON, so a mobile app
+    // can offer one action per link. On only when the "expand_links" post
+    // action is enabled (link extraction per row isn't free). Set in apply_settings.
+    bool row_links_ = false;
     int movement_unit_ = 0; // currently selected unit (Ctrl+Left/Right cycles)
 
     // Double-press tracking for Speak-reply (Ctrl+Shift+;): the row spoken last and

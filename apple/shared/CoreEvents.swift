@@ -52,9 +52,12 @@ struct Row: Decodable, Equatable {
     /// "See who favorited / boosted" post actions.
     var favoritesCount = 0
     var boostsCount = 0
+    /// The post's links (title + url), present only when the "expand_links"
+    /// action is enabled — one per-link action is built from these.
+    var links: [PostLink] = []
 
     enum CodingKeys: String, CodingKey {
-        case id, text, favorited, boosted, acct, time, thread
+        case id, text, favorited, boosted, acct, time, thread, links
         case hasMedia = "has_media"
         case isReply = "is_reply"
         case isMine = "is_mine"
@@ -85,7 +88,14 @@ struct Row: Decodable, Equatable {
         thread = try c.decodeIfPresent(String.self, forKey: .thread)
         favoritesCount = try c.decodeIfPresent(Int.self, forKey: .favoritesCount) ?? 0
         boostsCount = try c.decodeIfPresent(Int.self, forKey: .boostsCount) ?? 0
+        links = try c.decodeIfPresent([PostLink].self, forKey: .links) ?? []
     }
+}
+
+/// A link inside a post (title from its preview card or anchor text, plus url).
+struct PostLink: Decodable, Equatable {
+    let title: String
+    let url: String
 }
 
 // MARK: Event payloads

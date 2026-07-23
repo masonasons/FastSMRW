@@ -147,9 +147,23 @@ final class UserProfileViewController: ActionListViewController {
                 state.setRelationship(accountId: accountId,
                                       action: blocking ? "unblock" : "block", acct: acct)
             })
+            if profile.canHideBoosts {
+                let showing = profile.showingReblogs ?? true
+                items.append(Item(title: showing ? "Hide Boosts" : "Show Boosts", pops: true) {
+                    state.setRelationship(accountId: accountId,
+                                          action: showing ? "hide_boosts" : "show_boosts",
+                                          acct: acct)
+                })
+            }
         }
         items.append(Item(title: "Open Timeline", pops: true) {
             state.openUserTimeline(accountId: accountId, acct: acct)
+        })
+        items.append(Item(title: "Followers", pops: true) {
+            state.openFollowers(accountId: accountId, acct: acct)
+        })
+        items.append(Item(title: "Following", pops: true) {
+            state.openFollowing(accountId: accountId, acct: acct)
         })
         if profile.canUseLists {
             items.append(Item(title: "Add to List…") {

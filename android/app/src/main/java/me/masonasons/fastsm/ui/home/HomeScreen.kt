@@ -220,6 +220,7 @@ fun HomeScreen(
                 isCurrent = pageIndex == pagerState.currentPage,
                 selectedId = selectedIdByTab[pageIndex].orEmpty(),
                 actionOrder = postActionOrder,
+                onOpenLink = viewModel::openLink,
                 onLoadOlder = { viewModel.loadOlder(automatic = true) },
                 onNoteSelection = viewModel::noteSelection,
                 onOpenThread = viewModel::openThread,
@@ -519,6 +520,7 @@ private fun StatusList(
     isCurrent: Boolean,
     selectedId: String,
     actionOrder: List<String>,
+    onOpenLink: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onNoteSelection: (String) -> Unit,
     onOpenThread: (String) -> Unit,
@@ -589,6 +591,7 @@ private fun StatusList(
             StatusRow(
                 row = row,
                 actionOrder = actionOrder,
+                onOpenLink = onOpenLink,
                 onOpenThread = onOpenThread,
                 onOpenAuthor = onOpenAuthor,
                 onOpenProfile = onOpenProfile,

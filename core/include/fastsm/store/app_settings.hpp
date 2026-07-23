@@ -104,6 +104,7 @@ struct AppSettings {
 struct PostActionDef {
     std::string key;
     std::string label;
+    bool default_on = true; // whether it's enabled in a fresh/normalized list
 };
 const std::vector<PostActionDef>& post_action_catalog();
 

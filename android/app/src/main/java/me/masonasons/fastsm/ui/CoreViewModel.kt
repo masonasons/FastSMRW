@@ -51,7 +51,13 @@ data class RowUi(
     val groupActors: String,
     val favoritesCount: Int, // >0 -> "See who favorited" is offered
     val boostsCount: Int,    // >0 -> "See who boosted" is offered
+    // The post's links (present only when the "expand_links" action is on) —
+    // one action per link, labeled by its preview title.
+    val links: List<LinkUi> = emptyList(),
 )
+
+/** A link inside a post (title from its preview card or anchor text, plus url). */
+data class LinkUi(val title: String, val url: String)
 
 /** A media attachment to view (media_open, or an item in a media_picker). */
 data class MediaItemUi(val url: String, val kind: String, val title: String)
@@ -401,6 +407,12 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                 groupActors = r.optString("group_actors"),
                                 favoritesCount = r.optInt("favorites_count"),
                                 boostsCount = r.optInt("boosts_count"),
+                                links = r.optJSONArray("links")?.let { la ->
+                                    (0 until la.length()).map { j ->
+                                        val lo = la.getJSONObject(j)
+                                        LinkUi(lo.optString("title"), lo.optString("url"))
+                                    }
+                                } ?: emptyList(),
                             )
                         )
                     }
@@ -842,6 +854,11 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Manually check GitHub for a newer release (announces the outcome). */
     fun checkForUpdate() =
         core.dispatch("check_for_update") { put("silent", false); put("branch", "stable") }
+
+    /** Open a specific URL (a per-post "expand links" action) in a Custom Tab. */
+    fun openLink(url: String) {
+        if (url.isNotEmpty()) _openUrls.tryEmit(url)
+    }
 
     /** Open the APK download for the pending update in the browser, then dismiss. */
     fun openUpdate() {

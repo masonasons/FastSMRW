@@ -18,7 +18,7 @@ final class ComposeViewController: StaticFormViewController {
     private let state: AppState
     private let context: ComposeContext
 
-    private let textView = UITextView()
+    private let textView = ComposeUITextView()
     private let textCell = UITableViewCell(style: .default, reuseIdentifier: nil)
     private var cwField: UITextField?
     private let counterLabel = UILabel()
@@ -128,6 +128,10 @@ final class ComposeViewController: StaticFormViewController {
         textView.isScrollEnabled = false
         textView.accessibilityLabel = "Post text"
         textView.delegate = self
+        // VoiceOver Braille Screen Input's "send" gesture (three-finger swipe up)
+        // and a hardware Return both fire the Return *key action* — catch it and
+        // post. The on-screen keyboard's Return still inserts a newline.
+        textView.onReturnKey = { [weak self] in self?.postTapped() }
         if let prefill = context.prefillText { textView.text = prefill }
         textView.translatesAutoresizingMaskIntoConstraints = false
         textCell.contentView.addSubview(textView)
@@ -504,6 +508,22 @@ final class ComposeViewController: StaticFormViewController {
 }
 
 // MARK: - Text view
+
+/// A UITextView that routes the Return/Enter *key action* to a closure. That key
+/// action is what VoiceOver Braille Screen Input's "send" gesture (three-finger
+/// swipe up) and a hardware Return produce; the on-screen keyboard's Return and
+/// the two-finger BSI "new line" gesture insert a literal "\n" instead and are
+/// left untouched, so multi-line posts still work.
+final class ComposeUITextView: UITextView {
+    var onReturnKey: (() -> Void)?
+    override var keyCommands: [UIKeyCommand]? {
+        let command = UIKeyCommand(input: "\r", modifierFlags: [],
+                                   action: #selector(handleReturnKey))
+        command.wantsPriorityOverSystemBehavior = true
+        return [command]
+    }
+    @objc private func handleReturnKey() { onReturnKey?() }
+}
 
 extension ComposeViewController: UITextViewDelegate {
     func textViewDidChange(_ textView: UITextView) {

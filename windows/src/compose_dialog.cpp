@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../resources/resource.h"
+#include "edit_util.hpp"
 #include "utf.hpp"
 
 #include "fastsm/util/base64.hpp"
@@ -344,6 +345,19 @@ LRESULT CALLBACK EditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWOR
         !(GetKeyState(VK_CONTROL) & 0x8000)) {
         run_mention_autocomplete(h, ctx);
         return 0; // swallow Alt+A (no menu-mnemonic beep)
+    }
+    // Ctrl+Backspace / Ctrl+Delete delete a word (plain EDIT controls don't).
+    if (msg == WM_CHAR && wp == 0x7F)
+        return 0; // Ctrl+Backspace's control char — the delete runs on WM_KEYDOWN
+    if (msg == WM_KEYDOWN && (GetKeyState(VK_CONTROL) & 0x8000)) {
+        if (wp == VK_BACK) {
+            edit_delete_word(h, false);
+            return 0;
+        }
+        if (wp == VK_DELETE) {
+            edit_delete_word(h, true);
+            return 0;
+        }
     }
     if (msg == WM_KEYDOWN && wp == VK_RETURN) {
         const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;

@@ -34,6 +34,8 @@ const char* field_key(StatusSpeechField f) {
         return "visibility";
     case StatusSpeechField::Source:
         return "source";
+    case StatusSpeechField::ReplyingTo:
+        return "replyingTo";
     }
     return "";
 }
@@ -68,12 +70,14 @@ const char* field_display_name(StatusSpeechField f) {
         return "Visibility";
     case StatusSpeechField::Source:
         return "Posting app / source";
+    case StatusSpeechField::ReplyingTo:
+        return "Replying to (Bluesky)";
     }
     return "";
 }
 
 bool status_field_from_key(std::string_view key, StatusSpeechField& out) {
-    for (int i = 0; i <= static_cast<int>(StatusSpeechField::Source); ++i) {
+    for (int i = 0; i <= static_cast<int>(StatusSpeechField::ReplyingTo); ++i) {
         const auto f = static_cast<StatusSpeechField>(i);
         if (key == field_key(f)) {
             out = f;
@@ -204,10 +208,10 @@ SpeechSettings SpeechSettings::defaults() {
     using U = UserSpeechField;
     SpeechSettings s;
     s.status = {
-        {S::BoostedBy}, {S::Author},     {S::Handle, false}, {S::ContentWarning},
-        {S::Text},      {S::Quote},      {S::Media},         {S::Poll},
-        {S::Time},      {S::Stats},      {S::Favorited},     {S::Boosted},
-        {S::Visibility, false},          {S::Source, false},
+        {S::BoostedBy},  {S::Author},   {S::Handle, false}, {S::ContentWarning},
+        {S::ReplyingTo}, {S::Text},     {S::Quote},         {S::Media},
+        {S::Poll},       {S::Time},     {S::Stats},         {S::Favorited},
+        {S::Boosted},    {S::Visibility, false},            {S::Source, false},
     };
     s.user = {
         {U::Author}, {U::Handle},  {U::Bot},            {U::Locked},

@@ -33,6 +33,9 @@ struct Status {
     int replies_count = 0;
     std::optional<std::string> in_reply_to_id;
     std::optional<std::string> in_reply_to_account_id;
+    // The replied-to author's handle, when known (Bluesky feeds carry the parent
+    // post's author) — spoken by the "Replying to" speech field.
+    std::optional<std::string> reply_to_handle;
     std::shared_ptr<Status> reblog; // the boosted status, when this is a boost
     std::shared_ptr<Status> quote;  // the quoted status
     std::vector<MediaAttachment> media_attachments;

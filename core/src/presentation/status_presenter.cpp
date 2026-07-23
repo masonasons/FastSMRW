@@ -217,6 +217,14 @@ std::optional<std::string> status_field_string(StatusSpeechField field, const St
         return d.visibility ? std::optional(visibility_name(*d.visibility)) : std::nullopt;
     case StatusSpeechField::Source:
         return d.application_name ? std::optional("via " + *d.application_name) : std::nullopt;
+    case StatusSpeechField::ReplyingTo:
+        // Bluesky reply posts: note it's a reply, and to whom when the feed
+        // gave us the parent's author.
+        if (d.platform != Platform::Bluesky || !d.in_reply_to_id)
+            return std::nullopt;
+        return d.reply_to_handle && !d.reply_to_handle->empty()
+                   ? std::optional("Replying to @" + *d.reply_to_handle)
+                   : std::optional<std::string>("Reply");
     }
     return std::nullopt;
 }

@@ -32,6 +32,9 @@ const std::vector<PostActionDef>& post_action_catalog() {
         {"jump_reply", "Jump to Referenced Reply"},
         {"edit", "Edit Post"},               {"pin_post", "Pin to Profile"},
         {"report", "Report"},                {"browser", "Open in Browser"},
+        // Expands into one action per link in the post (labeled by its preview
+        // title) — off by default since "Open Links" already covers links.
+        {"expand_links", "Expand Links", false},
         {"delete", "Delete Post"},
     };
     return catalog;
@@ -142,7 +145,7 @@ AppSettings settings_from_json(const json& root) {
         }
         for (const auto& def : post_action_catalog())
             if (seen.insert(def.key).second)
-                prefs.push_back({def.key, true});
+                prefs.push_back({def.key, def.default_on});
         settings.post_actions = std::move(prefs);
     }
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
@@ -237,7 +240,7 @@ json settings_to_json(const AppSettings& settings) {
     root["post_actions"] = json::array();
     if (settings.post_actions.empty()) {
         for (const auto& def : post_action_catalog())
-            root["post_actions"].push_back({{"action", def.key}, {"enabled", true}});
+            root["post_actions"].push_back({{"action", def.key}, {"enabled", def.default_on}});
     } else {
         for (const auto& pref : settings.post_actions)
             root["post_actions"].push_back({{"action", pref.action}, {"enabled", pref.enabled}});

@@ -379,9 +379,24 @@ final class UserProfileWindowController: DetailSheetController {
                 state.setRelationship(accountId: accountId,
                                       action: blocking ? "unblock" : "block", acct: acct)
             }))
+            if profile.canHideBoosts {
+                let showing = profile.showingReblogs ?? true
+                buttons.append((showing ? "Hide Boosts" : "Show Boosts", false, { [weak self] in
+                    self?.dismiss()
+                    state.setRelationship(accountId: accountId,
+                                          action: showing ? "hide_boosts" : "show_boosts",
+                                          acct: acct)
+                }))
+            }
         }
         buttons.append(("Open Timeline", false, { [weak self] in
             self?.dismiss(); state.openUserTimeline(accountId: accountId, acct: acct)
+        }))
+        buttons.append(("Followers", false, { [weak self] in
+            self?.dismiss(); state.openFollowers(accountId: accountId, acct: acct)
+        }))
+        buttons.append(("Following", false, { [weak self] in
+            self?.dismiss(); state.openFollowing(accountId: accountId, acct: acct)
         }))
         if profile.canUseLists {
             buttons.append(("Add to List…", false, { [weak self] in

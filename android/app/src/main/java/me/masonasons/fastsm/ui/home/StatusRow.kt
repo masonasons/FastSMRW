@@ -48,6 +48,7 @@ private val DEFAULT_POST_ACTION_ORDER = listOf(
 fun StatusRow(
     row: RowUi,
     actionOrder: List<String>,
+    onOpenLink: (String) -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -80,6 +81,10 @@ fun StatusRow(
     val order = actionOrder.ifEmpty { DEFAULT_POST_ACTION_ORDER }
     val menuActions = buildList {
         order.forEach { key ->
+            if (key == "expand_links") {
+                row.links.forEach { link -> add(MenuAction(link.title) { onOpenLink(link.url) }) }
+                return@forEach
+            }
             val action: MenuAction? = when (key) {
                 "reply" -> MenuAction("Reply") { onReply(row.id) }
                 "boost" -> MenuAction(if (row.boosted) "Unboost" else "Boost") { onToggleBoost(row.id) }

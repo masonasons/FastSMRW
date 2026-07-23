@@ -782,6 +782,12 @@ void CoreSession::cmd_select_timeline(const json& cmd) {
     current_ = target;
     emit_timelines();
     if (TimelineController* tc = current()) {
+        // Move the UI to this timeline's remembered reading position. The UI
+        // can't reconstruct it reliably: timeline_updated's selected_id goes
+        // stale as the user moves (note_selection doesn't re-emit), so a switch
+        // must be told the live position (selected_id_, kept current here).
+        if (const std::string pos = tc->selected_id(); !pos.empty())
+            emit_select_row(tc, pos);
         std::string msg = tc->source().title();
         if (cmd.value("speak_position", false)) // invisible interface: add "n of count"
             msg += ", " + timeline_position_text(tc);
@@ -1923,6 +1929,19 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
                        [this](const User& u) { emit_user_profile(u); });
         return;
     }
+    // A specific user was chosen (from the picker) — profile them by id directly.
+    // The picker doesn't carry the originating row, and emit_user_profile only
+    // needs the id (it fetches the full profile), so don't require the post.
+    if (cmd.contains("account_id")) {
+        const std::string aid = cmd.value("account_id", std::string{});
+        if (!aid.empty()) {
+            User u;
+            u.id = aid;
+            u.acct = cmd.value("acct", std::string{});
+            emit_user_profile(u);
+        }
+        return;
+    }
     TimelineController* tc = current();
     const std::string row_id = cmd.value("id", std::string{});
     const TimelineItem* item = tc ? find_item(tc, row_id) : nullptr;
@@ -1931,16 +1950,6 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
     const std::vector<User> users = users_in_post(*item);
     if (users.empty())
         return;
-    // A specific user was chosen from the picker menu.
-    if (cmd.contains("account_id")) {
-        const std::string aid = cmd.value("account_id", std::string{});
-        for (const User& u : users)
-            if (u.id == aid) {
-                emit_user_profile(u);
-                return;
-            }
-        return;
-    }
     // With "pick" the UI always wants the menu; otherwise a lone user opens straight.
     if (users.size() == 1 && !cmd.value("pick", false)) {
         emit_user_profile(users.front());
@@ -3869,6 +3878,14 @@ void CoreSession::apply_settings() {
         if (movement_unit_ >= static_cast<int>(movement_units_.size()))
             movement_unit_ = 0;
     }
+    // Emit per-row links only when the expand-links post action is enabled
+    // (extracting links per row isn't free).
+    row_links_ = false;
+    for (const auto& pref : settings_.post_actions)
+        if (pref.action == "expand_links" && pref.enabled) {
+            row_links_ = true;
+            break;
+        }
     sound_.set_enabled(settings_.sounds_enabled);
     sound_.set_volume(std::clamp(settings_.sound_volume, 0, 100) / 100.0f);
     apply_active_soundpack(); // the selected account's pack (or the global default)
@@ -3918,11 +3935,12 @@ void CoreSession::cmd_get_speech_catalog() {
     using namespace fastsm::present;
     auto status_fields = {StatusSpeechField::BoostedBy, StatusSpeechField::Author,
                           StatusSpeechField::Handle, StatusSpeechField::ContentWarning,
-                          StatusSpeechField::Text, StatusSpeechField::Quote,
-                          StatusSpeechField::Media, StatusSpeechField::Poll,
-                          StatusSpeechField::Time, StatusSpeechField::Stats,
-                          StatusSpeechField::Favorited, StatusSpeechField::Boosted,
-                          StatusSpeechField::Visibility, StatusSpeechField::Source};
+                          StatusSpeechField::ReplyingTo, StatusSpeechField::Text,
+                          StatusSpeechField::Quote, StatusSpeechField::Media,
+                          StatusSpeechField::Poll, StatusSpeechField::Time,
+                          StatusSpeechField::Stats, StatusSpeechField::Favorited,
+                          StatusSpeechField::Boosted, StatusSpeechField::Visibility,
+                          StatusSpeechField::Source};
     auto user_fields = {UserSpeechField::Author, UserSpeechField::Handle, UserSpeechField::Bot,
                         UserSpeechField::Locked, UserSpeechField::Bio, UserSpeechField::Followers,
                         UserSpeechField::Following, UserSpeechField::Posts};
@@ -4534,6 +4552,15 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
         r["account_id"] = s->account.id;
         r["acct"] = s->account.acct.empty() ? s->account.username : s->account.acct;
         r["time"] = s->created_at;
+        // The post's links (title + url), so a mobile app can offer one action
+        // per link (the "expand_links" action). Only when that action is on.
+        if (row_links_) {
+            json links = json::array();
+            for (const auto& l : present::post_links(*s))
+                links.push_back({{"title", l.title}, {"url", l.url}});
+            if (!links.empty())
+                r["links"] = std::move(links);
+        }
     }
     // A grouped like/boost notification: Enter opens the list of everyone in it.
     if (const Notification* n = item.notification();

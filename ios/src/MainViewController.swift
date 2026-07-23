@@ -877,9 +877,18 @@ final class MainViewController: UIViewController {
 
     /// The VoiceOver actions (and long-press menu) for a post: the user's
     /// configured post-action list, in order, keeping only the ones that apply
-    /// to this particular post.
+    /// to this particular post. "expand_links" turns into one action per link.
     private func actions(for row: Row) -> [(title: String, run: () -> Void)] {
-        state.enabledPostActions.compactMap { postAction($0, row) }
+        state.enabledPostActions.flatMap { key -> [(title: String, run: () -> Void)] in
+            if key == "expand_links" {
+                return row.links.map { link in
+                    (link.title, { if let url = URL(string: link.url) {
+                        UIApplication.shared.open(url)
+                    } })
+                }
+            }
+            return postAction(key, row).map { [$0] } ?? []
+        }
     }
 
     /// One catalog key mapped to its live action on `row` (dynamic title +

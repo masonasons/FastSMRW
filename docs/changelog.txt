@@ -1,6 +1,18 @@
 FastSMRW changelog
 ==================
 
+0.5.2
+-----
+
+- Fixed: choosing a user from the "which user?" list (View Profile on a post that mentions several people) now actually opens their profile.
+- New: an optional "Expand Links" post action (off by default) that lists each link in a post as its own action, labeled with the link's title — turn it on in the post-actions list on iPhone and Android.
+- New: Bluesky reply posts now say they're a reply, and who they're replying to when known — a "Replying to" speech detail you can reorder or turn off.
+- New: on iPhone and Android, save or share an image, video, or audio from the media viewer.
+- Fixed: on the Mac and iPhone, switching to a timeline now reliably returns you to where you were reading in it.
+- New: the user profile now offers Followers, Following, and Hide/Show Boosts on the Mac and iPhone, matching Windows.
+- New: on iPhone, a three-finger swipe up in the compose screen sends the post (for Braille Screen Input users).
+- New: on Windows, Control+Backspace (and Control+Delete) delete a word in the new-post box.
+
 0.5.1
 -----
 

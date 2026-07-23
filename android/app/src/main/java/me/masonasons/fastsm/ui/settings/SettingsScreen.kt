@@ -90,7 +90,8 @@ private val postActionLabels = mapOf(
     "alias" to "Add or edit alias", "follow_hashtag" to "Follow hashtag",
     "speak_user" to "Speak user info", "speak_reply" to "Speak referenced reply",
     "jump_reply" to "Jump to referenced reply", "edit" to "Edit", "pin_post" to "Pin to profile",
-    "report" to "Report post", "browser" to "Open in browser", "delete" to "Delete",
+    "report" to "Report post", "browser" to "Open in browser",
+    "expand_links" to "Expand links (one action per link)", "delete" to "Delete",
 )
 
 private val statusFieldLabels = mapOf(

@@ -25,6 +25,8 @@ enum class StatusSpeechField {
     Boosted,
     Visibility,
     Source,
+    ReplyingTo, // "Replying to @X" for Bluesky reply posts (kept last: enum
+                // order is the catalog-scan bound, not the spoken order)
 };
 
 enum class UserSpeechField {

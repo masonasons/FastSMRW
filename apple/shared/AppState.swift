@@ -400,6 +400,13 @@ final class AppState {
     func openThread(id: String) { client.send("open_thread", ["id": id]) }
     func openFollowers(id: String) { client.send("open_followers", ["id": id]) }
     func openFollowing(id: String) { client.send("open_following", ["id": id]) }
+    // Followers/following of a specific user (from the profile dialog).
+    func openFollowers(accountId: String, acct: String) {
+        client.send("open_followers", ["account_id": accountId, "acct": acct])
+    }
+    func openFollowing(accountId: String, acct: String) {
+        client.send("open_following", ["account_id": accountId, "acct": acct])
+    }
     func openUserTimeline(id: String) { client.send("open_user_timeline", ["id": id]) }
     func openUserProfile(id: String) { client.send("open_user_profile", ["id": id]) }
     func postInfo(id: String) { client.send("post_info", ["id": id]) }
