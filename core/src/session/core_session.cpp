@@ -1320,6 +1320,16 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
         spawn_source(TimelineSource::user_posts(accounts_.selected()->me().id, "Sent"));
         return;
     }
+    // Your own followers / following, reusing the standard user-list sources with
+    // your account id (titled plainly, since they're yours).
+    if (kind == "my_followers") {
+        spawn_source(TimelineSource::followers(accounts_.selected()->me().id, "Followers"));
+        return;
+    }
+    if (kind == "my_following") {
+        spawn_source(TimelineSource::following(accounts_.selected()->me().id, "Following"));
+        return;
+    }
     if (kind == "mutes" || kind == "blocks" || kind == "follow_requests") {
         if (accounts_.selected()->platform() != Platform::Mastodon) {
             emit_announce("Muted, blocked and follow-request lists are only available for "
@@ -3504,6 +3514,27 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_open_user_timeline({{"id", row}, {"pick", true}});
     if (a == "UserProfile")
         return cmd_open_user_profile({{"id", row}, {"pick", true}});
+    if (a == "OpenFollowers")
+        return cmd_open_followers({{"id", row}});
+    if (a == "OpenFollowing")
+        return cmd_open_following({{"id", row}});
+    if (a == "FavoritedBy")
+        return cmd_open_status_actors({{"id", row}}, false);
+    if (a == "BoostedBy")
+        return cmd_open_status_actors({{"id", row}}, true);
+    if (a == "OpenBrowser")
+        return cmd_open_status({{"id", row}});
+    if (a == "MuteToggle" || a == "BlockToggle") {
+        const TimelineItem* it = tc ? find_item(tc, row) : nullptr;
+        if (!it)
+            return;
+        const std::vector<User> users = users_in_post(*it);
+        if (users.empty())
+            return;
+        const User& u = users.front(); // the post author / focused user
+        return rel_toggle_user(accounts_.selected(), u.id,
+                               u.acct.empty() ? u.username : u.acct, a == "BlockToggle");
+    }
     if (a == "SpeakUser")
         return cmd_speak_user({{"id", row}});
     if (a == "AddAlias")
@@ -3516,15 +3547,65 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_close_timeline();
     if (a == "AccountSettings")
         return cmd_get_account_settings(); // emits account_settings -> UI opens the dialog
-    // UI-only actions the app carries out (window/dialogs/find/stop speech).
+    // Navigation / list views that live entirely in the core (spawn a timeline or
+    // emit a list event the UI renders); work with the window hidden.
+    if (a == "MyFollowers")
+        return cmd_spawn_timeline({{"kind", "my_followers"}});
+    if (a == "MyFollowing")
+        return cmd_spawn_timeline({{"kind", "my_following"}});
+    if (a == "Sent")
+        return cmd_spawn_timeline({{"kind", "sent"}});
+    if (a == "ViewMutes")
+        return cmd_spawn_timeline({{"kind", "mutes"}});
+    if (a == "ViewBlocks")
+        return cmd_spawn_timeline({{"kind", "blocks"}});
+    if (a == "FollowRequests")
+        return cmd_spawn_timeline({{"kind", "follow_requests"}});
+    if (a == "TrendingHashtags")
+        return cmd_list_trending_hashtags();
+    if (a == "ServerFilters")
+        return cmd_list_server_filters();
+    if (a == "LoadOlder")
+        return cmd_load_older({});
+    if (a == "ClearTimeline")
+        return cmd_clear_timeline();
+    // UI-only actions the app carries out (window/dialogs/find/stop speech). The
+    // focused row id rides along for the ones that act on a post (e.g. Report).
     if (a == "ToggleWindow" || a == "Options" || a == "KeymapManager" ||
         a == "StopMedia" || a == "Find" || a == "FindNext" || a == "FindPrev" ||
-        a == "EnterLayer" || a == "NewTimeline" || a == "Exit") {
-        emit({{"event", "invisible_ui_action"}, {"action", a}});
+        a == "EnterLayer" || a == "NewTimeline" || a == "Exit" || a == "Lists" ||
+        a == "ClientFilters" || a == "UserAnalysis" || a == "ManageAliases" ||
+        a == "AddAccount" || a == "CheckUpdates" || a == "About" || a == "Report") {
+        emit({{"event", "invisible_ui_action"}, {"action", a}, {"id", row}});
         return;
     }
-    // MuteToggle / BlockToggle need relationship round-trips; deferred to a later
-    // phase. (FollowToggle is handled above via cmd_follow_toggle.)
+}
+
+void CoreSession::rel_toggle_user(SocialAccount* acct, const std::string& id,
+                                  const std::string& handle, bool block) {
+    if (!acct || id.empty())
+        return;
+    worker_.post([this, acct, id, handle, block] {
+        // Look up the current relationship so we know which way to toggle. If we
+        // can't tell, assume "not muted / not blocked yet" and apply.
+        std::optional<Relationship> rel = acct->relationship(id);
+        const bool active = rel && (block ? rel->blocking : rel->muting);
+        const std::string action = block ? (active ? "unblock" : "block")
+                                         : (active ? "unmute" : "mute");
+        bool ok;
+        if (block)
+            ok = active ? acct->unblock(id) : acct->block(id);
+        else
+            ok = active ? acct->unmute(id) : acct->mute(id);
+        loop_.post([this, ok, action, handle] {
+            if (!ok) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Action failed");
+                return;
+            }
+            emit_announce(relationship_message(action, handle));
+        });
+    });
 }
 
 // --- helpers ---
@@ -3659,7 +3740,8 @@ void CoreSession::refresh_all_accounts() {
 std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* account,
                                                                  const TimelineSource& src) {
     const int page = account ? account->max_page_size() : 40;
-    auto tc = std::make_unique<TimelineController>(account, src, &cache_, &worker_, &loop_, page);
+    auto tc = std::make_unique<TimelineController>(account, src, &cache_, &worker_, &loop_, page,
+                                                   &action_worker_);
     apply_timeline_settings(*tc); // refresh depth + Notifications mentions filter
     TimelineController* p = tc.get();
     tc->on_change = [this, p] { schedule_timeline_emit(p); };

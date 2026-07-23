@@ -177,6 +177,14 @@ fun HomeScreen(
                                 onClick = { menuOpen = false; onEditProfile() },
                             )
                             DropdownMenuItem(
+                                text = { Text("View my followers") },
+                                onClick = { menuOpen = false; viewModel.spawnTimeline("my_followers") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("View my following") },
+                                onClick = { menuOpen = false; viewModel.spawnTimeline("my_following") },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Settings") },
                                 onClick = { menuOpen = false; onOpenSettings() },
                             )

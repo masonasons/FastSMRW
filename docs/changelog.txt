@@ -4,6 +4,13 @@ FastSMRW changelog
 0.5.1
 -----
 
+- New: view your own followers and following from the Me menu (Windows), the overflow menu (Android), the Manage menu (iPhone), and the Account menu (Mac).
+- New: on Windows, the invisible interface can now bind many more actions — muted/blocked users, follow requests, lists, trending hashtags, user analysis, aliases, filters, your Sent posts, who-liked/boosted a post, report, add account, check for updates, and more (all unbound by default).
+- New: on Windows, Alt+Win+Left/Right Bracket open your followers and following from anywhere.
+- New: on Windows, muting and blocking a user now work as invisible-interface hotkeys (they previously did nothing).
+- New: on Windows, the Keyboard Manager has a Duplicate button to copy any keymap (built-in or your own) for editing.
+- New: on Windows, editing or unbinding a key while on a built-in keymap now automatically makes an editable copy, switches to it, and applies your change.
+- Fixed: the sounds for sending a post, boosting, and liking now play promptly instead of sometimes lagging well behind the action when a timeline was refreshing.
 - New: the interact and secondary-interact actions can now be set to reply, favorite, boost, bookmark, quote, copy, and more — not just view, thread, media, or links.
 - New: on iPhone, choose which actions VoiceOver offers on a post, and their order, in Settings under Behavior (Post Actions) — with View Media and Open Links at the top by default.
 - Fixed: busy streaming timelines no longer bog the app down — new posts arriving in a flood are batched into one update instead of redrawing the whole timeline for every single post, so sounds and actions stay snappy even with a large cache.

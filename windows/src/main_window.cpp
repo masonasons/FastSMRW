@@ -103,6 +103,8 @@ enum {
     ID_FOLLOWED_HASHTAGS,
     ID_TRENDING_HASHTAGS,
     ID_USER_ANALYSIS,
+    ID_MY_FOLLOWERS,
+    ID_MY_FOLLOWING,
     ID_STOP_MEDIA,
     ID_GOTO_TIMELINE_1 = 40100, // .. +8 for timelines 1-9
 };
@@ -221,6 +223,8 @@ HMENU build_menu() {
 
     HMENU me = CreatePopupMenu();
     AppendMenuW(me, MF_STRING, ID_EDIT_PROFILE, L"&Edit Profile…");
+    AppendMenuW(me, MF_STRING, ID_MY_FOLLOWERS, L"View My &Followers");
+    AppendMenuW(me, MF_STRING, ID_MY_FOLLOWING, L"View My Follo&wing");
     AppendMenuW(me, MF_STRING, ID_LIST_MANAGER, L"&Lists…");
     AppendMenuW(me, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
     AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
@@ -1950,6 +1954,12 @@ void MainWindow::handle_command(int id) {
     case ID_LIST_MANAGER:
         dispatch_cmd({{"cmd", "list_lists"}}); // core replies with lists -> manager dialog
         break;
+    case ID_MY_FOLLOWERS:
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "my_followers"}});
+        break;
+    case ID_MY_FOLLOWING:
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "my_following"}});
+        break;
     case ID_VIEW_MUTES:
         dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "mutes"}});
         break;
@@ -2770,6 +2780,16 @@ void MainWindow::ev_aliases_list(const json& e) {
 
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string a = e.value("action", std::string{});
+    // Dialog-style actions fired from the invisible interface bring the window up
+    // first (if hidden) so the dialog isn't orphaned behind a hidden main window,
+    // matching the KeymapManager behavior.
+    auto surface_for_dialog = [this] {
+        if (!IsWindowVisible(hwnd_)) {
+            ShowWindow(hwnd_, SW_SHOW);
+            SetForegroundWindow(hwnd_);
+            dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", true}});
+        }
+    };
     if (a == "EnterLayer") {
         // Call the layer up on demand from hotkey/keyhook mode. No-op if the layer
         // is already the active mode, we're already in an overlay, or the layer map
@@ -2813,6 +2833,43 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
         show_user_actions(); // the Enter default on a user, from the invisible interface
     } else if (a == "StopMedia") {
         stop_media();
+    } else if (a == "Lists") {
+        surface_for_dialog();
+        handle_command(ID_LIST_MANAGER);
+    } else if (a == "ClientFilters") {
+        surface_for_dialog();
+        handle_command(ID_CLIENT_FILTER);
+    } else if (a == "UserAnalysis") {
+        surface_for_dialog();
+        handle_command(ID_USER_ANALYSIS);
+    } else if (a == "ManageAliases") {
+        surface_for_dialog();
+        handle_command(ID_MANAGE_ALIASES);
+    } else if (a == "AddAccount") {
+        surface_for_dialog();
+        handle_command(ID_ADD_ACCOUNT);
+    } else if (a == "CheckUpdates") {
+        surface_for_dialog();
+        handle_command(ID_CHECK_UPDATES);
+    } else if (a == "About") {
+        surface_for_dialog();
+        handle_command(ID_ABOUT);
+    } else if (a == "Report") {
+        // Report the focused post (the row id rode along on the event).
+        surface_for_dialog();
+        const std::string id = e.value("id", std::string{});
+        if (!id.empty()) {
+            auto g = enter_modal();
+            auto r = show_report_dialog(hwnd_, inst_, /*remote=*/false);
+            leave_modal(g);
+            if (r) {
+                json cmd = {{"cmd", "report"}, {"id", id},
+                            {"category", r->category}, {"forward", r->forward}};
+                if (!r->comment.empty())
+                    cmd["comment"] = r->comment;
+                dispatch_cmd(cmd);
+            }
+        }
     } else if (a == "Exit") {
         // Speak a confirmation, then quit after a beat so it isn't cut off (the
         // invisible-interface exit is otherwise silent). Same real quit as the

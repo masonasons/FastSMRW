@@ -181,6 +181,12 @@ enum MainMenu {
         accountMenu.addItem(withTitle: "Edit Profile…",
                             action: #selector(MainWindowController.editProfile(_:)),
                             keyEquivalent: "")
+        accountMenu.addItem(withTitle: "View My Followers",
+                            action: #selector(MainWindowController.viewMyFollowers(_:)),
+                            keyEquivalent: "")
+        accountMenu.addItem(withTitle: "View My Following",
+                            action: #selector(MainWindowController.viewMyFollowing(_:)),
+                            keyEquivalent: "")
         accountMenu.addItem(withTitle: "Followed Hashtags…",
                             action: #selector(MainWindowController.manageHashtags(_:)),
                             keyEquivalent: "")

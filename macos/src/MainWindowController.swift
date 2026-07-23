@@ -273,6 +273,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func favoriteSelection(_ sender: Any?) { postsViewController.favoriteSelection(sender) }
     @objc func bookmarkSelection(_ sender: Any?) { postsViewController.bookmarkSelection(sender) }
     @objc func editProfile(_ sender: Any?) { state.openProfileEditor() }
+    @objc func viewMyFollowers(_ sender: Any?) { state.spawnTimeline(kind: "my_followers") }
+    @objc func viewMyFollowing(_ sender: Any?) { state.spawnTimeline(kind: "my_following") }
     @objc func accountSettings(_ sender: Any?) { state.getAccountSettings() }
 
     /// Per-account settings (the soundpack this account's timelines play),

@@ -7,8 +7,10 @@ namespace fastsm {
 
 TimelineController::TimelineController(SocialAccount* account, TimelineSource source,
                                       store::TimelineCache* cache, runtime::WorkerQueue* worker,
-                                      runtime::IMainExecutor* main, int fetch_limit)
-    : account_(account), source_(source), cache_(cache), worker_(worker), main_(main),
+                                      runtime::IMainExecutor* main, int fetch_limit,
+                                      runtime::WorkerQueue* action_worker)
+    : account_(account), source_(source), cache_(cache), worker_(worker),
+      action_worker_(action_worker ? action_worker : worker), main_(main),
       fetch_limit_(fetch_limit) {}
 
 std::string TimelineController::cache_key() const {
@@ -650,7 +652,7 @@ bool TimelineController::toggle_mute_conversation(int visible_index,
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+    action_worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok =
             want ? account_->mute_conversation(target) : account_->unmute_conversation(target);
         main_->post([this, id, want, ok, done = std::move(done)] {
@@ -691,7 +693,7 @@ bool TimelineController::toggle_favorite(int visible_index,
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+    action_worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->favorite(target) : account_->unfavorite(target);
         main_->post([this, id, want, ok, done = std::move(done)] {
             if (!ok) {
@@ -733,7 +735,7 @@ bool TimelineController::toggle_bookmark(int visible_index,
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+    action_worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->bookmark(target) : account_->unbookmark(target);
         main_->post([this, id, want, ok, done = std::move(done)] {
             if (!ok) {
@@ -772,7 +774,7 @@ bool TimelineController::toggle_boost(int visible_index, std::function<void(bool
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+    action_worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->boost(target) : account_->unboost(target);
         main_->post([this, id, want, ok, done = std::move(done)] {
             if (!ok) {
@@ -816,7 +818,7 @@ int TimelineController::toggle_pin_post(int visible_index, std::function<void(bo
         on_change();
 
     const Status target = *s;
-    worker_->post([this, target, want, id, done = std::move(done)]() mutable {
+    action_worker_->post([this, target, want, id, done = std::move(done)]() mutable {
         const bool ok = want ? account_->pin_post(target) : account_->unpin_post(target);
         main_->post([this, id, want, ok, done = std::move(done)] {
             if (!ok) {
@@ -909,7 +911,7 @@ void TimelineController::set_poll(const std::string& row_id, const Poll& poll) {
 
 void TimelineController::edit_post(const std::string& id, const PostDraft& draft,
                                    std::function<void(bool)> done) {
-    worker_->post([this, id, draft, done = std::move(done)] {
+    action_worker_->post([this, id, draft, done = std::move(done)] {
         std::optional<Status> updated = account_->edit_post(id, draft);
         main_->post([this, updated = std::move(updated), done]() mutable {
             const bool ok = updated.has_value();
@@ -926,7 +928,7 @@ void TimelineController::edit_post(const std::string& id, const PostDraft& draft
 
 void TimelineController::post(const PostDraft& draft, std::function<void(bool)> done) {
     const bool is_reply = draft.reply_to_id.has_value();
-    worker_->post([this, draft, done = std::move(done), is_reply] {
+    action_worker_->post([this, draft, done = std::move(done), is_reply] {
         std::optional<Status> created = account_->post(draft);
         main_->post([this, created = std::move(created), done, is_reply]() mutable {
             const bool ok = created.has_value();

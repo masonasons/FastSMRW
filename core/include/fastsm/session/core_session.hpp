@@ -172,6 +172,11 @@ private:
     // target user the same way the u / Ctrl+U actions do (picker for multi-user posts).
     void cmd_follow_toggle(const nlohmann::json& cmd);
     void follow_toggle_user(SocialAccount* acct, const std::string& id, const std::string& handle);
+    // Toggle mute (block=false) or block (block=true) for a user, looking up the
+    // current relationship first to decide direction. Used by the invisible
+    // interface's MuteToggle / BlockToggle actions.
+    void rel_toggle_user(SocialAccount* acct, const std::string& id, const std::string& handle,
+                         bool block);
     // Resolve a typed handle to a User off-thread, then run `then` on the loop
     // thread; announces an error if the handle can't be found.
     void resolve_handle(const std::string& handle, std::function<void(const User&)> then);
@@ -377,7 +382,13 @@ private:
     // destructor before any member is torn down. loop_ precedes streams_ so the
     // stream clients can be constructed with &loop_.
     runtime::WorkerQueue loop_;   // owns engine state; the controllers' IMainExecutor
-    runtime::WorkerQueue worker_; // blocking network/cache I/O
+    runtime::WorkerQueue worker_; // blocking network/cache I/O (refresh, load-older, cache)
+    // A separate thread for user-initiated interactive actions (favorite/boost/post/…)
+    // so they fire immediately instead of queuing behind a slow background refresh on
+    // worker_. The WinHTTP client is stateless per call; concurrent same-account use is
+    // safe (Bluesky's token refresh is mutex-guarded). Declared after worker_ so it
+    // tears down alongside the other I/O threads before loop_.
+    runtime::WorkerQueue action_worker_;
     // One live streaming connection per streaming-capable account (keyed by
     // account_key), so all accounts stream at once, not just the displayed one.
     std::map<std::string, std::unique_ptr<StreamingClient>> streams_;

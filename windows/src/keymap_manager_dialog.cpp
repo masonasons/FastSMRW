@@ -327,6 +327,9 @@ INT_PTR KeymapManagerDialog::handle(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_KM_IMPORT:
             do_import();
             return TRUE;
+        case IDC_KM_DUPLICATE:
+            do_duplicate();
+            return TRUE;
         case IDCANCEL:
             if (dirty_ && !confirm_discard())
                 return TRUE;
@@ -431,8 +434,12 @@ void KeymapManagerDialog::refresh_list() {
 
 void KeymapManagerDialog::update_enabled() {
     const BOOL on = editable() ? TRUE : FALSE;
-    EnableWindow(GetDlgItem(dlg_, IDC_KM_SET), on);
-    EnableWindow(GetDlgItem(dlg_, IDC_KM_UNBIND), on);
+    // Set binding / Unbind stay available even on a read-only keymap: editing one
+    // auto-creates an editable copy (commit_edit_forking_if_needed). Duplicate is
+    // always available (copy a built-in or a custom keymap).
+    EnableWindow(GetDlgItem(dlg_, IDC_KM_SET), TRUE);
+    EnableWindow(GetDlgItem(dlg_, IDC_KM_UNBIND), TRUE);
+    EnableWindow(GetDlgItem(dlg_, IDC_KM_DUPLICATE), TRUE);
     EnableWindow(GetDlgItem(dlg_, IDC_KM_RESET), on);
     EnableWindow(GetDlgItem(dlg_, IDC_KM_SAVE), on);
     EnableWindow(GetDlgItem(dlg_, IDC_KM_DELETE), on);
@@ -441,7 +448,8 @@ void KeymapManagerDialog::update_enabled() {
 void KeymapManagerDialog::set_status() {
     std::wstring msg;
     if (!editable())
-        msg = L"This keymap is built-in and read-only. Create a new keymap to make changes.";
+        msg = L"This keymap is built-in. Editing or unbinding a key creates an editable copy "
+              L"you can change. Or use Duplicate to copy it yourself.";
     else
         msg = L"Editing '" + to_wide(current_name_) + L"'" + (dirty_ ? L" (unsaved)." : L".") +
               L" Save also makes it the active keymap.";
@@ -469,8 +477,6 @@ void KeymapManagerDialog::switch_keymap(const std::string& name) {
 }
 
 void KeymapManagerDialog::do_set_binding() {
-    if (!editable())
-        return;
     const std::string action = selected_action();
     if (action.empty())
         return;
@@ -500,12 +506,11 @@ void KeymapManagerDialog::do_set_binding() {
     unbinds_.erase(action);
     dirty_ = true;
     refresh_list();
-    set_status();
+    if (!commit_edit_forking_if_needed())
+        set_status();
 }
 
 void KeymapManagerDialog::do_unbind() {
-    if (!editable())
-        return;
     const std::string action = selected_action();
     if (action.empty())
         return;
@@ -514,7 +519,8 @@ void KeymapManagerDialog::do_unbind() {
         unbinds_.insert(action);
     dirty_ = true;
     refresh_list();
-    set_status();
+    if (!commit_edit_forking_if_needed())
+        set_status();
 }
 
 void KeymapManagerDialog::do_reset() {
@@ -622,6 +628,82 @@ void KeymapManagerDialog::do_import() {
     // The core converts FastSM/FastSMRW action tokens, drops defaults, writes the
     // file, and makes it active; then we adopt it (get_keymap refreshes the list).
     dispatch_({{"cmd", "import_keymap"}, {"name", name}, {"text", text}});
+    switch_keymap(name);
+}
+
+std::string KeymapManagerDialog::unique_fork_name() const {
+    auto taken = [&](const std::string& n) {
+        return n == "default" || std::find(keymaps_.begin(), keymaps_.end(), n) != keymaps_.end();
+    };
+    const std::string base = "My-Keymap";
+    if (!taken(base))
+        return base;
+    for (int i = 2; i < 1000; ++i) {
+        const std::string n = base + "-" + std::to_string(i);
+        if (!taken(n))
+            return n;
+    }
+    return base; // practically unreachable
+}
+
+bool KeymapManagerDialog::commit_edit_forking_if_needed() {
+    if (editable())
+        return false; // already a user keymap; caller keeps the normal dirty/save flow
+    const std::string name = unique_fork_name();
+    json ov = json::object();
+    for (const auto& [action, key] : overrides_)
+        ov[action] = key;
+    json ub = json::array();
+    for (const auto& a : unbinds_)
+        ub.push_back(a);
+    // Persist the forked + edited keymap (overrides_/unbinds_ already carry the edit)
+    // and make it active.
+    dispatch_({{"cmd", "save_keymap"}, {"name", name}, {"overrides", ov}, {"unbinds", ub}});
+    dispatch_({{"cmd", "set_active_keymap"}, {"name", name}});
+    // Adopt it locally right away; the keymap event the save triggers reconciles the
+    // lists (and refills overrides_ from the file, which matches what we just saved).
+    if (std::find(keymaps_.begin(), keymaps_.end(), name) == keymaps_.end())
+        keymaps_.push_back(name);
+    builtins_.erase(name); // it's an editable user keymap now
+    current_name_ = name;
+    requested_name_ = name;
+    dirty_ = false;
+    populate_keymap_combo();
+    update_enabled();
+    const std::wstring m = L"Created editable copy '" + to_wide(name) +
+                           L"', switched to it, and applied your change.";
+    SetDlgItemTextW(dlg_, IDC_KM_STATUS, m.c_str());
+    return true;
+}
+
+void KeymapManagerDialog::do_duplicate() {
+    NameCtx ctx;
+    if (DialogBoxParamW(inst_, MAKEINTRESOURCEW(IDD_KM_NEWNAME), dlg_, &name_proc,
+                        reinterpret_cast<LPARAM>(&ctx)) != IDOK ||
+        !ctx.ok)
+        return;
+    if (!valid_keymap_name(ctx.name)) {
+        MessageBoxW(dlg_, L"Use letters, digits, dashes, and underscores only.", L"Invalid name",
+                    MB_OK | MB_ICONERROR);
+        return;
+    }
+    const std::string name = to_utf8(ctx.name);
+    if (name == "default" ||
+        std::find(keymaps_.begin(), keymaps_.end(), name) != keymaps_.end()) {
+        MessageBoxW(dlg_, L"A keymap with that name already exists.", L"Name in use",
+                    MB_OK | MB_ICONERROR);
+        return;
+    }
+    // Save the CURRENT keymap's bindings (overrides + unbinds) under the new name,
+    // then switch to editing it. Works from a built-in (copy it to customize) or a
+    // custom keymap (branch a variant).
+    json ov = json::object();
+    for (const auto& [action, key] : overrides_)
+        ov[action] = key;
+    json ub = json::array();
+    for (const auto& a : unbinds_)
+        ub.push_back(a);
+    dispatch_({{"cmd", "save_keymap"}, {"name", name}, {"overrides", ov}, {"unbinds", ub}});
     switch_keymap(name);
 }
 

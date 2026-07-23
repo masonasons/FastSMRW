@@ -26,9 +26,12 @@ namespace fastsm {
 // set_filter() — fetch/cache/merge never change.
 class TimelineController {
 public:
+    // `worker` runs background I/O (refresh, load-older, cache writes); `action_worker`,
+    // if given, runs user-initiated interactive actions (favorite/boost/post/…) so they
+    // don't queue behind a slow refresh. When null, actions fall back to `worker`.
     TimelineController(SocialAccount* account, TimelineSource source, store::TimelineCache* cache,
                        runtime::WorkerQueue* worker, runtime::IMainExecutor* main,
-                       int fetch_limit = 40);
+                       int fetch_limit = 40, runtime::WorkerQueue* action_worker = nullptr);
 
     // Callbacks fire on the main thread.
     std::function<void()> on_change;            // the visible list changed
@@ -187,7 +190,8 @@ private:
     SocialAccount* account_;
     TimelineSource source_;
     store::TimelineCache* cache_;
-    runtime::WorkerQueue* worker_;
+    runtime::WorkerQueue* worker_;        // background I/O (refresh, load-older, cache)
+    runtime::WorkerQueue* action_worker_; // user-initiated interactive actions
     runtime::IMainExecutor* main_;
     int fetch_limit_;
 

@@ -322,6 +322,11 @@ const std::vector<ActionDef>& action_catalog() {
         // --- user actions ---
         {"UserTimeline", "Open user timeline", "alt+win+u"},
         {"UserProfile", "Open user profile", "alt+win+shift+u"},
+        {"OpenFollowers", "Open the user's followers", ""},  // unbound (focused user)
+        {"OpenFollowing", "Open who the user follows", ""},  // unbound (focused user)
+        {"FavoritedBy", "Who liked this post", ""},          // unbound
+        {"BoostedBy", "Who boosted this post", ""},          // unbound
+        {"Report", "Report the post or user", ""},           // unbound (opens the report dialog)
         // Speak the post's user(s); many users open a timeline of them. The win8.1
         // keymap rebinds these to plain Ctrl+; / Ctrl+Shift+; (Win+Alt is unreliable there).
         {"SpeakUser", "Speak user info", "alt+win+;"},
@@ -352,6 +357,26 @@ const std::vector<ActionDef>& action_catalog() {
         {"UpdateProfile", "Edit your profile", ""},  // unbound by default (in-app Me menu)
         {"KeymapManager", "Keyboard manager", "control+alt+win+k"},
         {"StopMedia", "Stop media playback", "control+alt+win+s"},
+        // --- your account / "Me" ---
+        {"MyFollowers", "View your followers", "alt+win+["},
+        {"MyFollowing", "View your following", "alt+win+]"},
+        {"Sent", "View your posts (Sent)", ""},              // unbound
+        {"Lists", "Open the lists manager", ""},             // unbound
+        {"ViewMutes", "View muted users", ""},               // unbound
+        {"ViewBlocks", "View blocked users", ""},            // unbound
+        {"FollowRequests", "View follow requests", ""},      // unbound
+        {"TrendingHashtags", "Trending hashtags", ""},       // unbound
+        {"UserAnalysis", "User analysis", ""},               // unbound
+        {"ManageAliases", "Manage user aliases", ""},        // unbound
+        {"ServerFilters", "Server filters", ""},             // unbound
+        {"ClientFilters", "Client filters", ""},             // unbound
+        {"AddAccount", "Add an account", ""},                // unbound
+        {"CheckUpdates", "Check for updates", ""},           // unbound
+        {"About", "About FastSMRW", ""},                     // unbound
+        // --- more timeline / post actions ---
+        {"LoadOlder", "Load older posts", ""},               // unbound (in-app Period)
+        {"ClearTimeline", "Clear the current timeline", ""}, // unbound (in-app Ctrl+Delete)
+        {"OpenBrowser", "Open the post in a browser", ""},   // unbound
     };
     return catalog;
 }

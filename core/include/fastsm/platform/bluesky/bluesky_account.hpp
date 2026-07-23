@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -98,6 +99,10 @@ private:
     BlueskySession session_;
     User me_;
     net::IHttpClient* http_;
+    // Guards session_.access_jwt / refresh_jwt during send_authed's token read and
+    // the (rare) refresh, so the interactive-action and background-refresh workers
+    // can call into this account concurrently without racing on the token.
+    std::mutex session_mtx_;
 };
 
 } // namespace fastsm

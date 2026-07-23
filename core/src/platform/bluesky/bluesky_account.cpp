@@ -86,11 +86,30 @@ net::HttpResponse BlueskyAccount::send_authed(const std::string& method, const s
         return req;
     };
 
-    net::HttpResponse res = http_->send(build(session_.access_jwt));
+    // The access token is read (and, on expiry, refreshed) under a lock so this is
+    // safe to call from two threads at once (the interactive-action worker and the
+    // background refresh worker share this account). The network sends happen
+    // outside the lock so concurrent requests don't serialize.
+    std::string token;
+    {
+        std::lock_guard<std::mutex> lk(session_mtx_);
+        token = session_.access_jwt;
+    }
+    net::HttpResponse res = http_->send(build(token));
     const bool expired = res.status == 401 ||
                          (res.status == 400 && res.body.find("ExpiredToken") != std::string::npos);
-    if (expired && refresh_session())
-        res = http_->send(build(session_.access_jwt));
+    if (expired) {
+        std::string refreshed;
+        {
+            std::lock_guard<std::mutex> lk(session_mtx_);
+            // If another thread already refreshed while we were in flight, reuse its
+            // new token instead of refreshing again.
+            if (session_.access_jwt == token && !refresh_session())
+                return res;
+            refreshed = session_.access_jwt;
+        }
+        res = http_->send(build(refreshed));
+    }
     return res;
 }
 

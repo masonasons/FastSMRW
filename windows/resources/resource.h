@@ -148,6 +148,7 @@
 #define IDC_KM_RESET        408
 #define IDC_KM_SAVE         409
 #define IDC_KM_IMPORT       410
+#define IDC_KM_DUPLICATE    411
 #define IDD_KM_BINDING      420
 #define IDC_KMB_CTRL        421
 #define IDC_KMB_ALT         422

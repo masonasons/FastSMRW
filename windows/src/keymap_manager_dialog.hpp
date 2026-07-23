@@ -63,8 +63,15 @@ private:
     void do_new();
     void do_delete();
     void do_save();
-    void do_import(); // import a FastSM / FastSMRW .keymap file as a new keymap
-    bool confirm_discard(); // true if OK to lose unsaved changes
+    void do_duplicate();      // copy the current keymap (built-in or custom) to a new one
+    void do_import();         // import a FastSM / FastSMRW .keymap file as a new keymap
+    bool confirm_discard();   // true if OK to lose unsaved changes
+    // If the current keymap is read-only, persist overrides_/unbinds_ (which already
+    // carry the just-applied edit) as a new editable keymap named by unique_fork_name()
+    // and switch to it. Returns true if it forked (it sets its own status), false if
+    // the keymap was already editable (the caller handles dirty/status normally).
+    bool commit_edit_forking_if_needed();
+    std::string unique_fork_name() const; // "My-Keymap", then "My-Keymap-2", ...
 
     HINSTANCE inst_;
     std::vector<KmAction> catalog_;

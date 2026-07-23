@@ -813,6 +813,12 @@ final class MainViewController: UIViewController {
                 UIAction(title: "Edit Profile…") { [weak self] _ in
                     self?.state.openProfileEditor()
                 },
+                UIAction(title: "View My Followers") { [weak self] _ in
+                    self?.state.spawnTimeline(kind: "my_followers")
+                },
+                UIAction(title: "View My Following") { [weak self] _ in
+                    self?.state.spawnTimeline(kind: "my_following")
+                },
                 UIAction(title: "Manage Lists…") { [weak self] _ in
                     self?.state.listLists()
                 },
