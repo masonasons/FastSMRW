@@ -44,6 +44,12 @@ public:
     // A network refresh finished (rows merged). The session uses this to restore
     // the server-synced home read position after new posts land.
     std::function<void()> on_refreshed;
+    // Fired after a *user-initiated* cursor move (note_selection) — GUI selection,
+    // invisible-interface stepping, movement-unit and edge jumps, first-letter nav.
+    // Core-driven restores (go-back, the sync pull, load-time position restore) set
+    // the position WITHOUT note_selection, so they deliberately don't fire this.
+    // The session uses it to push the home read position to the server.
+    std::function<void()> on_user_moved;
 
     // The filtered rows the UI should display.
     const std::vector<TimelineItem>& items() const { return visible_; }

@@ -863,22 +863,8 @@ void CoreSession::cmd_note_selection(const json& cmd) {
     if (!tc)
         return;
     const std::string id = cmd.value("id", std::string{});
-    tc->note_selection(id);
+    tc->note_selection(id); // fires on_user_moved -> home-position push (see make_controller)
     remember_position(tc, id);
-    // Home-position sync: the user moving the cursor is what we push to the
-    // server (Mastodon markers), and it stops a later refresh from yanking them
-    // back to the server position.
-    if (sync_enabled_for(tc)) {
-        tc->mark_user_moved();
-        const auto sid = tc->selected_status_id();
-        log::write("sync: moved(home) status_id=" + (sid ? *sid : std::string("<none>")));
-        if (sid)
-            schedule_home_marker_save(tc->account(), *sid);
-    } else if (tc->source().kind == TimelineSource::Kind::Home) {
-        log::write(std::string("sync: moved(home) but disabled setting=") +
-                   (settings_.sync_home_position ? "1" : "0") + " markers=" +
-                   (tc->account() && tc->account()->supports_position_sync() ? "1" : "0"));
-    }
 }
 
 bool CoreSession::sync_enabled_for(const TimelineController* tc) const {
@@ -3845,6 +3831,23 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
         }
         if (!speech.empty())
             emit_announce(speech);
+    };
+    // Home-position sync: any user-initiated move (GUI, invisible interface,
+    // movement units, first-letter jumps — every path routes through
+    // note_selection) pushes the read position to the server and marks the move so
+    // a refresh won't pull the user off where they're reading.
+    tc->on_user_moved = [this, p] {
+        if (sync_enabled_for(p)) {
+            p->mark_user_moved();
+            const auto sid = p->selected_status_id();
+            log::write("sync: moved(home) status_id=" + (sid ? *sid : std::string("<none>")));
+            if (sid)
+                schedule_home_marker_save(p->account(), *sid);
+        } else if (p->source().kind == TimelineSource::Kind::Home) {
+            log::write(std::string("sync: moved(home) but disabled setting=") +
+                       (settings_.sync_home_position ? "1" : "0") + " markers=" +
+                       (p->account() && p->account()->supports_position_sync() ? "1" : "0"));
+        }
     };
     // Home-position sync: after new posts land, move to the server-synced read
     // position — unless the user has already moved the cursor themselves this

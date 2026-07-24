@@ -41,6 +41,8 @@ void TimelineController::note_selection(const std::string& id) {
         }
     }
     selected_id_ = id;
+    if (on_user_moved)
+        on_user_moved();
 }
 
 std::string TimelineController::undo_navigation() {
