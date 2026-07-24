@@ -865,6 +865,54 @@ void CoreSession::cmd_note_selection(const json& cmd) {
     const std::string id = cmd.value("id", std::string{});
     tc->note_selection(id);
     remember_position(tc, id);
+    // Home-position sync: the user moving the cursor is what we push to the
+    // server (Mastodon markers), and it stops a later refresh from yanking them
+    // back to the server position.
+    if (sync_enabled_for(tc)) {
+        tc->mark_user_moved();
+        if (const auto sid = tc->selected_status_id())
+            schedule_home_marker_save(tc->account(), *sid);
+    }
+}
+
+bool CoreSession::sync_enabled_for(const TimelineController* tc) const {
+    return settings_.sync_home_position && tc &&
+           tc->source().kind == TimelineSource::Kind::Home && tc->account() &&
+           tc->account()->supports_position_sync();
+}
+
+// Debounced marker save: coalesce a burst of cursor moves into one server write
+// ~2s after the user settles, so arrowing through the timeline isn't one POST
+// per row. A generation counter cancels superseded saves.
+void CoreSession::schedule_home_marker_save(SocialAccount* account, const std::string& status_id) {
+    if (!account || status_id.empty())
+        return;
+    const std::string key = account->account_key();
+    if (marker_last_saved_[key] == status_id)
+        return;
+    marker_pending_key_ = key;
+    marker_pending_id_ = status_id;
+    const int gen = ++marker_gen_;
+    loop_.post_delayed(std::chrono::milliseconds(2000), [this, gen] {
+        if (gen != marker_gen_)
+            return; // a newer selection superseded this one
+        const std::string key = marker_pending_key_;
+        const std::string id = marker_pending_id_;
+        if (id.empty() || marker_last_saved_[key] == id)
+            return;
+        SocialAccount* account = account_by_key(key);
+        if (!account)
+            return; // the account was removed while pending
+        marker_last_saved_[key] = id;
+        worker_.post([account, id] { account->set_home_marker(id); });
+    });
+}
+
+SocialAccount* CoreSession::account_by_key(const std::string& key) const {
+    for (SocialAccount* a : accounts_.accounts())
+        if (a && a->account_key() == key)
+            return a;
+    return nullptr;
 }
 
 // Persist a timeline's reading position across restarts. This is the single
@@ -3791,7 +3839,36 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
         if (!speech.empty())
             emit_announce(speech);
     };
+    // Home-position sync: after new posts land, move to the server-synced read
+    // position — unless the user has already moved the cursor themselves this
+    // session (matches FastSM/FastSMApple).
+    tc->on_refreshed = [this, p] {
+        if (!sync_enabled_for(p) || p->user_moved_position())
+            return;
+        SocialAccount* account = p->account();
+        const std::string key = account->account_key();
+        worker_.post([this, account, key] {
+            const std::optional<std::string> marker = account->home_marker();
+            if (!marker || marker->empty())
+                return;
+            loop_.post([this, key, m = *marker] {
+                TimelineController* home = home_controller_for(key);
+                if (!home || !sync_enabled_for(home) || home->user_moved_position())
+                    return; // sync turned off, account gone, or user moved meanwhile
+                if (home->restore_marker_position(m))
+                    emit_select_row(home, home->selected_id());
+            });
+        });
+    };
     return tc;
+}
+
+TimelineController* CoreSession::home_controller_for(const std::string& key) const {
+    for (const auto& tc : timelines_)
+        if (tc && tc->source().kind == TimelineSource::Kind::Home && tc->account() &&
+            tc->account()->account_key() == key)
+            return tc.get();
+    return nullptr;
 }
 
 TimelineController* CoreSession::current() const {

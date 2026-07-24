@@ -138,6 +138,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         checked(dlg, IDC_SET_SHOW_MENTIONS, ctx->settings.show_mentions_in_notifications);
         checked(dlg, IDC_SET_REVERSE, ctx->settings.reverse_timelines);
         checked(dlg, IDC_SET_AUTOLOAD, ctx->settings.auto_load_older);
+        checked(dlg, IDC_SET_SYNCHOME, ctx->settings.sync_home_position);
         return TRUE;
     }
     case WM_COMMAND:
@@ -180,6 +181,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             ctx->settings.show_mentions_in_notifications = is_checked(dlg, IDC_SET_SHOW_MENTIONS);
             ctx->settings.reverse_timelines = is_checked(dlg, IDC_SET_REVERSE);
             ctx->settings.auto_load_older = is_checked(dlg, IDC_SET_AUTOLOAD);
+            ctx->settings.sync_home_position = is_checked(dlg, IDC_SET_SYNCHOME);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

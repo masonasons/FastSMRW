@@ -248,6 +248,9 @@ private fun TimelinesPanel(s: JSONObject, vm: CoreViewModel) {
     SwitchRow("Automatically load older posts when you reach the end", s.optBoolean("auto_load_older")) {
         vm.updateSetting { put("auto_load_older", it) }
     }
+    SwitchRow("Sync home position with the server (Mastodon)", s.optBoolean("sync_home_position")) {
+        vm.updateSetting { put("sync_home_position", it) }
+    }
 }
 
 @Composable

@@ -195,6 +195,15 @@ public:
     // clients). Runs on the worker thread. Default no-op; Bluesky calls updateSeen.
     virtual void mark_notifications_seen() {}
 
+    // Server-synced home-timeline read position (Mastodon markers). When the
+    // "sync home position" setting is on, the app stores the id of the row you're
+    // reading so another client — or your next session — resumes there. Both run
+    // synchronously on the worker thread. Default: unsupported (e.g. Bluesky has
+    // no markers API), so the feature is silently inert for those accounts.
+    virtual bool supports_position_sync() const { return false; }
+    virtual std::optional<std::string> home_marker() { return std::nullopt; }
+    virtual bool set_home_marker(const std::string& /*status_id*/) { return false; }
+
     // Refresh server-derived configuration (e.g. the instance character limit).
     // Runs synchronously on the worker thread; default is a no-op for platforms
     // with a fixed limit (Bluesky).

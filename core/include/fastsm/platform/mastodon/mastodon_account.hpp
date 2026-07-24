@@ -24,6 +24,10 @@ public:
     std::vector<TimelineSource> spawnable_timelines() const override;
     void load_configuration() override;
 
+    bool supports_position_sync() const override { return true; }
+    std::optional<std::string> home_marker() override;
+    bool set_home_marker(const std::string& status_id) override;
+
     TimelinePage items(const TimelineSource& source, int limit,
                        const PageCursor& cursor) override;
 

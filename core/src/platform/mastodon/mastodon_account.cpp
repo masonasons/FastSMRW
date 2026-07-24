@@ -735,6 +735,34 @@ std::optional<PostSource> MastodonAccount::post_source(const std::string& id) {
     }
 }
 
+std::optional<std::string> MastodonAccount::home_marker() {
+    const std::string url = credentials_.instance_url + "/api/v1/markers?timeline[]=home";
+    std::string body;
+    long status = 0;
+    if (!request("GET", url, "", "", body, status))
+        return std::nullopt;
+    try {
+        const json j = json::parse(body);
+        if (const auto it = j.find("home"); it != j.end() && it->is_object()) {
+            if (std::string id = it->value("last_read_id", std::string()); !id.empty())
+                return id;
+        }
+    } catch (...) {
+    }
+    return std::nullopt;
+}
+
+bool MastodonAccount::set_home_marker(const std::string& status_id) {
+    if (status_id.empty())
+        return false;
+    const std::string url = credentials_.instance_url + "/api/v1/markers";
+    const std::string form =
+        util::form_encode({{"home[last_read_id]", status_id}});
+    std::string body;
+    long status = 0;
+    return request("POST", url, form, "application/x-www-form-urlencoded", body, status);
+}
+
 bool MastodonAccount::status_action(const std::string& status_id, const char* verb) {
     const std::string url =
         credentials_.instance_url + "/api/v1/statuses/" + status_id + "/" + verb;

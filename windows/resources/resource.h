@@ -72,6 +72,7 @@
 #define IDC_SET_REVERSE       316
 #define IDC_SET_AUTOLOAD      317
 #define IDC_SET_MOVEMENT_UNITS 318
+#define IDC_SET_SYNCHOME      319
 #define IDD_MOVEMENT_UNITS    387
 #define IDD_SET_AUDIO       320
 #define IDC_SET_SOUNDS      321

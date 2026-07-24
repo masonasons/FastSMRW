@@ -280,6 +280,15 @@ private:
     TimelineController* current() const;
     int index_of(const TimelineController* tc) const;
     const TimelineItem* find_item(const TimelineController* tc, const std::string& id) const;
+
+    // Home-position sync (Mastodon markers). sync_enabled_for gates on the
+    // setting + a home timeline on an account that supports markers;
+    // schedule_home_marker_save debounces the server write; the lookups resolve
+    // an account / the home controller by account_key after an async hop.
+    bool sync_enabled_for(const TimelineController* tc) const;
+    void schedule_home_marker_save(SocialAccount* account, const std::string& status_id);
+    SocialAccount* account_by_key(const std::string& key) const;
+    TimelineController* home_controller_for(const std::string& key) const;
     void apply_settings();
     // Apply the per-timeline settings (refresh depth, the Notifications mentions
     // filter) to one controller. Called for every controller at creation and
@@ -365,6 +374,12 @@ private:
     // indices, so a close/reorder before the flush can't misdirect the emit.
     std::unordered_set<TimelineController*> dirty_timelines_;
     bool timeline_flush_pending_ = false;
+
+    // Home-position marker-save debounce (see schedule_home_marker_save).
+    std::string marker_pending_key_;                          // account_key of the pending save
+    std::string marker_pending_id_;                           // status id to push
+    std::unordered_map<std::string, std::string> marker_last_saved_; // key -> last id sent
+    int marker_gen_ = 0;                                      // cancels superseded saves
     // Include each post's links ({title,url}) in its row JSON, so a mobile app
     // can offer one action per link. On only when the "expand_links" post
     // action is enabled (link extraction per row isn't free). Set in apply_settings.

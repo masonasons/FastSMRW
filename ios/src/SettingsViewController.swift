@@ -94,6 +94,8 @@ final class SettingsViewController: UITableViewController {
                 .toggle("Reverse order (newest posts at the bottom)",
                         key: "reverse_timelines", def: false),
                 .toggle("Automatically load older posts", key: "auto_load_older", def: true),
+                .toggle("Sync home position with the server (Mastodon)",
+                        key: "sync_home_position", def: false),
                 .picker("Tab bar position", key: "tab_bar_position",
                         options: [("Top of the screen", "top"),
                                   ("Bottom of the screen", "bottom")],

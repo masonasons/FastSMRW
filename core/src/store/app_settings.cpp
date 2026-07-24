@@ -151,6 +151,7 @@ AppSettings settings_from_json(const json& root) {
     settings.show_mentions_in_notifications = root.value("show_mentions_in_notifications", true);
     settings.reverse_timelines = root.value("reverse_timelines", false);
     settings.auto_load_older = root.value("auto_load_older", true);
+    settings.sync_home_position = root.value("sync_home_position", false);
     settings.enter_post_action = root.value("enter_post_action", std::string("post_info"));
     settings.enter_user_action = root.value("enter_user_action", std::string("actions"));
     settings.secondary_post_action =
@@ -248,6 +249,7 @@ json settings_to_json(const AppSettings& settings) {
     root["show_mentions_in_notifications"] = settings.show_mentions_in_notifications;
     root["reverse_timelines"] = settings.reverse_timelines;
     root["auto_load_older"] = settings.auto_load_older;
+    root["sync_home_position"] = settings.sync_home_position;
     root["enter_post_action"] = settings.enter_post_action;
     root["enter_user_action"] = settings.enter_user_action;
     root["secondary_post_action"] = settings.secondary_post_action;

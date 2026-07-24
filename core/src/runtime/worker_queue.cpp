@@ -26,16 +26,40 @@ void WorkerQueue::post(std::function<void()> task) {
     cv_.notify_one();
 }
 
+void WorkerQueue::post_delayed(std::chrono::milliseconds delay, std::function<void()> task) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        delayed_.emplace(std::chrono::steady_clock::now() + delay, std::move(task));
+    }
+    cv_.notify_one();
+}
+
 void WorkerQueue::run() {
     for (;;) {
         std::function<void()> task;
         {
             std::unique_lock<std::mutex> lock(mutex_);
-            cv_.wait(lock, [this] { return stop_ || !tasks_.empty(); });
-            if (stop_ && tasks_.empty())
-                return;
-            task = std::move(tasks_.front());
-            tasks_.pop_front();
+            for (;;) {
+                // Promote any delayed tasks that have come due into the FIFO.
+                const auto now = std::chrono::steady_clock::now();
+                while (!delayed_.empty() && delayed_.begin()->first <= now) {
+                    tasks_.push_back(std::move(delayed_.begin()->second));
+                    delayed_.erase(delayed_.begin());
+                }
+                if (!tasks_.empty()) {
+                    task = std::move(tasks_.front());
+                    tasks_.pop_front();
+                    break;
+                }
+                // Nothing runnable. On shutdown, drop still-pending delayed tasks
+                // (debounce saves) and exit.
+                if (stop_)
+                    return;
+                if (!delayed_.empty())
+                    cv_.wait_until(lock, delayed_.begin()->first);
+                else
+                    cv_.wait(lock);
+            }
         }
         // A task must never take the whole app down: an unhandled exception
         // escaping here would unwind out of the thread and std::terminate the

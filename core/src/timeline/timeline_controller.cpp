@@ -517,8 +517,38 @@ void TimelineController::refresh() {
             loading_ = false;
             if (on_change)
                 on_change();
+            if (on_refreshed)
+                on_refreshed();
         });
     });
+}
+
+std::optional<std::string> TimelineController::selected_status_id() const {
+    if (selected_id_.empty())
+        return std::nullopt;
+    for (const auto& it : visible_)
+        if (it.id() == selected_id_) {
+            const Status* s = it.status();
+            if (s && !s->id.empty())
+                return s->id;
+            return std::nullopt;
+        }
+    return std::nullopt;
+}
+
+bool TimelineController::restore_marker_position(const std::string& status_id) {
+    if (status_id.empty())
+        return false;
+    for (const auto& it : visible_) {
+        const Status* s = it.status();
+        if (s && s->id == status_id) {
+            if (selected_id_ == it.id())
+                return false; // already there
+            selected_id_ = it.id();
+            return true;
+        }
+    }
+    return false;
 }
 
 void TimelineController::load_older(bool automatic) {

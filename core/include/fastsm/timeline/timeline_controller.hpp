@@ -41,6 +41,9 @@ public:
     // The newly-arrived visible rows themselves (for auto-read). Fires alongside
     // on_received_new when new visible rows arrive.
     std::function<void(const std::vector<TimelineItem>&)> on_new_items;
+    // A network refresh finished (rows merged). The session uses this to restore
+    // the server-synced home read position after new posts land.
+    std::function<void()> on_refreshed;
 
     // The filtered rows the UI should display.
     const std::vector<TimelineItem>& items() const { return visible_; }
@@ -166,6 +169,17 @@ public:
     const std::string& selected_id() const { return selected_id_; }
     int visible_index_of(const std::string& id) const;
 
+    // Home-position sync (Mastodon markers). The session marks that the user has
+    // moved the position themselves this session (so a later refresh won't yank
+    // them back to the server marker), reads the top-level status id under the
+    // cursor (to push as the marker), and restores a server marker to its row.
+    void mark_user_moved() { user_moved_position_ = true; }
+    bool user_moved_position() const { return user_moved_position_; }
+    std::optional<std::string> selected_status_id() const;
+    // Move the reading position to the row carrying `status_id`; returns true if
+    // such a row exists and the position actually changed.
+    bool restore_marker_position(const std::string& status_id);
+
     // Cache key of the timeline that was current when this one was spawned, so
     // closing it returns there instead of a neighbor (Mac parity). Empty for the
     // standing feeds.
@@ -204,6 +218,7 @@ private:
     bool pinned_ = false;               // user "pinned" this tab (locks dismissal)
     bool muted_ = false;                // user muted this tab's new-item earcon
     bool auto_read_ = false;            // user enabled auto-read for this tab
+    bool user_moved_position_ = false;  // user moved the home position this session (marker sync)
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     // Page-boundary cursors (row id -> cursor to fetch the page just below it),

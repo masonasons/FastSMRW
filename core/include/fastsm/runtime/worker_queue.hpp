@@ -1,8 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <thread>
 
@@ -23,6 +25,7 @@ public:
     WorkerQueue& operator=(const WorkerQueue&) = delete;
 
     void post(std::function<void()> task) override;
+    void post_delayed(std::chrono::milliseconds delay, std::function<void()> task) override;
 
 private:
     void run();
@@ -31,6 +34,9 @@ private:
     std::mutex mutex_;
     std::condition_variable cv_;
     std::deque<std::function<void()>> tasks_;
+    // Tasks due at or after a wall-clock time, ordered soonest-first. run() moves
+    // them into `tasks_` as they come due; a multimap allows several at one time.
+    std::multimap<std::chrono::steady_clock::time_point, std::function<void()>> delayed_;
     bool stop_ = false;
 };
 

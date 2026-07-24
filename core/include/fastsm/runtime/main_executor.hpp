@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <functional>
 
 // Bridge for marshalling work back onto the UI/main thread. The core runs
@@ -16,6 +17,13 @@ public:
 
     // Schedules fn to run on the main thread. Safe to call from any thread.
     virtual void post(std::function<void()> fn) = 0;
+
+    // Schedules fn to run on the main thread after at least `delay`. Used for
+    // debouncing (e.g. coalescing home-position marker saves). The default runs
+    // fn immediately; WorkerQueue overrides it with a real timer.
+    virtual void post_delayed(std::chrono::milliseconds /*delay*/, std::function<void()> fn) {
+        post(std::move(fn));
+    }
 };
 
 } // namespace fastsm::runtime

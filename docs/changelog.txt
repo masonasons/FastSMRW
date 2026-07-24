@@ -12,6 +12,7 @@ FastSMRW changelog
 - New: the user profile now offers Followers, Following, and Hide/Show Boosts on the Mac and iPhone, matching Windows.
 - New: on iPhone, a three-finger swipe up in the compose screen sends the post (for Braille Screen Input users).
 - New: on Windows, Control+Backspace (and Control+Delete) delete a word in the new-post box.
+- New: an option (Timelines settings, off by default) to sync your home reading position with your Mastodon server, so another client or your next session resumes where you left off.
 
 0.5.1
 -----

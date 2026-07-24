@@ -47,6 +47,8 @@ final class SettingsWindowController: NSWindowController {
             p.checkbox("Reverse order (newest posts at the bottom)",
                        key: "reverse_timelines", default: false)
             p.checkbox("Automatically load older posts", key: "auto_load_older", default: true)
+            p.checkbox("Sync home position with the server (Mastodon)",
+                       key: "sync_home_position", default: false)
             p.button("Movement Units…") { [weak p] in p?.openMovementUnits() }
         }
 

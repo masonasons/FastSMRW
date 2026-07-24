@@ -38,6 +38,7 @@ struct AppSettings {
     bool show_mentions_in_notifications = true;
     bool reverse_timelines = false; // newest at the bottom (oldest-first) for time-ordered feeds
     bool auto_load_older = true;    // auto-fetch older posts when you reach the timeline's end
+    bool sync_home_position = false; // sync the home read position to the server (Mastodon markers)
     // What pressing Enter (or the "Enter" invisible action) does by default.
     std::string enter_post_action = "post_info"; // post_info | thread | reply | links
     std::string enter_user_action = "actions";   // actions | profile | timeline

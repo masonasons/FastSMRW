@@ -106,7 +106,7 @@ BEGIN
                  IDC_SET_CMDRETURN, 10, 12, 220, 12
 END
 
-IDD_SET_TIMELINES DIALOGEX 0, 0, 240, 192
+IDD_SET_TIMELINES DIALOGEX 0, 0, 240, 208
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Timelines"
 FONT 9, "Segoe UI"
@@ -125,7 +125,8 @@ BEGIN
     AUTOCHECKBOX "Show m&entions in the Notifications timeline", IDC_SET_SHOW_MENTIONS, 10, 120, 224, 12
     AUTOCHECKBOX "&Reverse timelines (newest at the bottom)", IDC_SET_REVERSE, 10, 136, 224, 12
     AUTOCHECKBOX "Automatically load &older posts when you reach the end", IDC_SET_AUTOLOAD, 10, 152, 224, 12
-    PUSHBUTTON "Mo&vement Units…", IDC_SET_MOVEMENT_UNITS, 10, 170, 100, 14
+    AUTOCHECKBOX "S&ync home position with the server (Mastodon)", IDC_SET_SYNCHOME, 10, 168, 224, 12
+    PUSHBUTTON "Mo&vement Units…", IDC_SET_MOVEMENT_UNITS, 10, 186, 100, 14
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 180
