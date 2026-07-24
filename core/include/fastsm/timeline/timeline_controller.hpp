@@ -173,12 +173,13 @@ public:
     // moved the position themselves this session (so a later refresh won't yank
     // them back to the server marker), reads the top-level status id under the
     // cursor (to push as the marker), and restores a server marker to its row.
+    // "Moved since the last sync cycle." A refresh reads this to decide whether to
+    // pull the server position (only when the user has been idle) or leave the
+    // user where they are because their own moves are being pushed up; then it
+    // resets the window with reset_user_moved().
     void mark_user_moved() { user_moved_position_ = true; }
     bool user_moved_position() const { return user_moved_position_; }
-    // The one-shot launch restore has been claimed (so it fires once even if the
-    // slow marker fetch returns after the user has started reading).
-    bool marker_restore_done() const { return marker_restore_done_; }
-    void set_marker_restore_done() { marker_restore_done_ = true; }
+    void reset_user_moved() { user_moved_position_ = false; }
     std::optional<std::string> selected_status_id() const;
     // Move the reading position to the row carrying `status_id`; returns true if
     // such a row exists and the position actually changed.
@@ -222,8 +223,7 @@ private:
     bool pinned_ = false;               // user "pinned" this tab (locks dismissal)
     bool muted_ = false;                // user muted this tab's new-item earcon
     bool auto_read_ = false;            // user enabled auto-read for this tab
-    bool user_moved_position_ = false;  // user moved the home position this session (marker sync)
-    bool marker_restore_done_ = false;  // the one-shot launch marker restore was claimed
+    bool user_moved_position_ = false;  // user moved the home position since the last sync cycle
     std::optional<PageCursor> scrollback_cursor_;
     std::vector<store::CacheGap> gaps_; // tracked middle gaps (after_id -> cursor)
     // Page-boundary cursors (row id -> cursor to fetch the page just below it),

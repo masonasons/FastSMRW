@@ -3845,30 +3845,30 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
     tc->on_refreshed = [this, p] {
         if (!sync_enabled_for(p))
             return;
-        // The first restore after launch is a one-shot that ignores user_moved:
-        // the marker fetch can lag the refresh (it's a separate request), so by
-        // the time it lands the user may have started reading — we still want to
-        // land them where they left off. After that we only keep following the
-        // server position until the user deliberately moves.
-        const bool oneshot = !p->marker_restore_done();
-        if (oneshot)
-            p->set_marker_restore_done(); // claim it now so concurrent refreshes don't double-fetch
-        else if (p->user_moved_position())
+        // One sync cycle per refresh. If the user has actively moved since the
+        // last cycle, their position is already being pushed to the server by
+        // note_selection — do NOT pull the (now older) server position back and
+        // yank them mid-read (which is what made two clients fight each other).
+        // Only when they've been idle do we pull the server position, so an idle
+        // client follows an active one. The window resets each cycle.
+        const bool moved = p->user_moved_position();
+        p->reset_user_moved();
+        if (moved)
             return;
         SocialAccount* account = p->account();
         const std::string key = account->account_key();
         // Fetch on the interactive worker so it runs alongside the refresh's page
         // fetches instead of queuing behind them.
-        action_worker_.post([this, account, key, oneshot] {
+        action_worker_.post([this, account, key] {
             const std::optional<std::string> marker = account->home_marker();
-            loop_.post([this, key, marker, oneshot] {
+            loop_.post([this, key, marker] {
                 TimelineController* home = home_controller_for(key);
                 if (!home || !sync_enabled_for(home))
                     return;
+                if (home->user_moved_position())
+                    return; // the user started reading during the fetch — don't yank them
                 if (!marker || marker->empty())
                     return;
-                if (!oneshot && home->user_moved_position())
-                    return; // live-follow stops once the user takes over
                 if (home->restore_marker_position(*marker))
                     emit_select_row(home, home->selected_id());
             });
