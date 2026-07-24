@@ -1,6 +1,11 @@
 FastSMRW changelog
 ==================
 
+0.5.3
+-----
+
+- Fixed: home position sync now saves your spot no matter how you move through the timeline (including the invisible interface), and no longer tugs you around while you're actively reading.
+
 0.5.2
 -----
 
