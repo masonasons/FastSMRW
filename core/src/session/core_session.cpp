@@ -3843,19 +3843,33 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
     // position — unless the user has already moved the cursor themselves this
     // session (matches FastSM/FastSMApple).
     tc->on_refreshed = [this, p] {
-        if (!sync_enabled_for(p) || p->user_moved_position())
+        if (!sync_enabled_for(p))
+            return;
+        // The first restore after launch is a one-shot that ignores user_moved:
+        // the marker fetch can lag the refresh (it's a separate request), so by
+        // the time it lands the user may have started reading — we still want to
+        // land them where they left off. After that we only keep following the
+        // server position until the user deliberately moves.
+        const bool oneshot = !p->marker_restore_done();
+        if (oneshot)
+            p->set_marker_restore_done(); // claim it now so concurrent refreshes don't double-fetch
+        else if (p->user_moved_position())
             return;
         SocialAccount* account = p->account();
         const std::string key = account->account_key();
-        worker_.post([this, account, key] {
+        // Fetch on the interactive worker so it runs alongside the refresh's page
+        // fetches instead of queuing behind them.
+        action_worker_.post([this, account, key, oneshot] {
             const std::optional<std::string> marker = account->home_marker();
-            if (!marker || marker->empty())
-                return;
-            loop_.post([this, key, m = *marker] {
+            loop_.post([this, key, marker, oneshot] {
                 TimelineController* home = home_controller_for(key);
-                if (!home || !sync_enabled_for(home) || home->user_moved_position())
-                    return; // sync turned off, account gone, or user moved meanwhile
-                if (home->restore_marker_position(m))
+                if (!home || !sync_enabled_for(home))
+                    return;
+                if (!marker || marker->empty())
+                    return;
+                if (!oneshot && home->user_moved_position())
+                    return; // live-follow stops once the user takes over
+                if (home->restore_marker_position(*marker))
                     emit_select_row(home, home->selected_id());
             });
         });
