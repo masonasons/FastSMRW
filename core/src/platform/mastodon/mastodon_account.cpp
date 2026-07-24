@@ -760,7 +760,10 @@ bool MastodonAccount::set_home_marker(const std::string& status_id) {
         util::form_encode({{"home[last_read_id]", status_id}});
     std::string body;
     long status = 0;
-    return request("POST", url, form, "application/x-www-form-urlencoded", body, status);
+    const bool ok = request("POST", url, form, "application/x-www-form-urlencoded", body, status);
+    log::write("sync: set_home_marker POST http=" + std::to_string(status) + " ok=" +
+               (ok ? "1" : "0") + (ok ? "" : " body=" + body.substr(0, 160)));
+    return ok;
 }
 
 bool MastodonAccount::status_action(const std::string& status_id, const char* verb) {

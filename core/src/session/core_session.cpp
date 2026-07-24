@@ -870,8 +870,14 @@ void CoreSession::cmd_note_selection(const json& cmd) {
     // back to the server position.
     if (sync_enabled_for(tc)) {
         tc->mark_user_moved();
-        if (const auto sid = tc->selected_status_id())
+        const auto sid = tc->selected_status_id();
+        log::write("sync: moved(home) status_id=" + (sid ? *sid : std::string("<none>")));
+        if (sid)
             schedule_home_marker_save(tc->account(), *sid);
+    } else if (tc->source().kind == TimelineSource::Kind::Home) {
+        log::write(std::string("sync: moved(home) but disabled setting=") +
+                   (settings_.sync_home_position ? "1" : "0") + " markers=" +
+                   (tc->account() && tc->account()->supports_position_sync() ? "1" : "0"));
     }
 }
 
@@ -904,6 +910,7 @@ void CoreSession::schedule_home_marker_save(SocialAccount* account, const std::s
         if (!account)
             return; // the account was removed while pending
         marker_last_saved_[key] = id;
+        log::write("sync: firing save POST id=" + id);
         worker_.post([account, id] { account->set_home_marker(id); });
     });
 }
@@ -3853,6 +3860,7 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
         // client follows an active one. The window resets each cycle.
         const bool moved = p->user_moved_position();
         p->reset_user_moved();
+        log::write(std::string("sync: home refresh moved=") + (moved ? "1 (push, skip pull)" : "0 (pull)"));
         if (moved)
             return;
         SocialAccount* account = p->account();
@@ -3869,7 +3877,9 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
                     return; // the user started reading during the fetch — don't yank them
                 if (!marker || marker->empty())
                     return;
-                if (home->restore_marker_position(*marker))
+                const bool ok = home->restore_marker_position(*marker);
+                log::write("sync: pull marker=" + *marker + " applied=" + (ok ? "1" : "0"));
+                if (ok)
                     emit_select_row(home, home->selected_id());
             });
         });
