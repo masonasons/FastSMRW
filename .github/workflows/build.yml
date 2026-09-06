@@ -125,9 +125,14 @@ jobs:
 
       # Firebase config for push notifications. Without the secret the APK still
       # builds and runs; push is simply unavailable in it (see PushManager).
+      # Strip whitespace first: a secret set from a Windows shell can carry a
+      # trailing carriage return, which base64 rejects as invalid input.
       - name: Write google-services.json
         if: env.GOOGLE_SERVICES_B64 != ''
-        run: echo "$GOOGLE_SERVICES_B64" | base64 -d > android/app/google-services.json
+        run: |
+          printf '%s' "$GOOGLE_SERVICES_B64" | tr -d '[:space:]' | base64 -d > android/app/google-services.json
+          # Fail loudly here rather than in a confusing Gradle error later.
+          python3 -c "import json;json.load(open('android/app/google-services.json'))"
 
       - name: Build release APK
         working-directory: android
