@@ -1,16 +1,18 @@
 // FastSMRW push relay.
 //
-// Bridges Mastodon Web Push to Apple Push Notification service (APNs). iOS can
-// only be woken by APNs; Mastodon can only deliver Web Push. This tiny service
-// sits between them:
+// Bridges Mastodon Web Push to the phone vendors' push services: Apple's APNs
+// for iOS and Firebase Cloud Messaging for Android. Neither platform can be
+// woken by Web Push directly, and Mastodon speaks nothing else, so this tiny
+// service sits between them:
 //
-//   1. The app registers its APNs device token (POST /register) and gets back a
-//      unique, unguessable endpoint URL (/push/<id>).
+//   1. The app registers its push token (POST /register, naming its platform)
+//      and gets back a unique, unguessable endpoint URL (/push/<id>).
 //   2. The app subscribes that URL with its Mastodon server.
 //   3. Mastodon POSTs an ENCRYPTED Web Push body to /push/<id> on each event.
-//   4. We forward the (still-encrypted) body to APNs for the device's token, as
-//      a mutable-content alert. The app's Notification Service Extension
-//      decrypts it on-device.
+//   4. We forward the (still-encrypted) body to that device's push service --
+//      APNs as a mutable-content alert, FCM as a data-only message. The app
+//      decrypts it on-device (a Notification Service Extension on iOS, a
+//      messaging service on Android).
 //
 // The relay never holds the Web Push decryption keys and never sees notification
 // contents — it is a blind forwarder. Standard library only (ES256 JWT via
@@ -47,6 +49,8 @@ type config struct {
 	apnsKeyID     string // the APNs key id (10 chars)
 	apnsTeamID    string // Apple developer Team id
 	apnsBundleID  string // the app's bundle id -> apns-topic
+	fcmProjectID  string // Firebase project id (defaults to the one in the key file)
+	fcmKeyPath    string // path to the Firebase service-account JSON key
 	storePath     string // JSON file mapping endpoint id -> device
 	registerToken string // optional shared secret required on /register (Bearer)
 }
@@ -65,18 +69,28 @@ func loadConfig() config {
 		apnsKeyID:     env("APNS_KEY_ID", ""),
 		apnsTeamID:    env("APNS_TEAM_ID", ""),
 		apnsBundleID:  env("APNS_BUNDLE_ID", "me.masonasons.FastSMRW"),
+		fcmProjectID:  env("FCM_PROJECT_ID", ""),
+		fcmKeyPath:    env("FCM_SERVICE_ACCOUNT", ""),
 		storePath:     env("RELAY_STORE", "/var/lib/fastsm-push-relay/devices.json"),
 		registerToken: env("RELAY_REGISTER_TOKEN", ""),
 	}
 }
 
-// ---- device store (endpoint id -> APNs device) ------------------------------
+// ---- device store (endpoint id -> device) -----------------------------------
 
 type device struct {
-	Token   string `json:"token"`       // APNs device token (hex)
-	Env     string `json:"env"`         // "sandbox" or "production"
-	Updated int64  `json:"updated"`     // unix seconds
+	// APNs device token (hex) or FCM registration token, per Platform.
+	Token string `json:"token"`
+	// "apns" (the default, so subscriptions made before Android existed keep
+	// working) or "fcm".
+	Platform string `json:"platform,omitempty"`
+	Env      string `json:"env"`     // APNs only: "sandbox" or "production"
+	Updated  int64  `json:"updated"` // unix seconds
 }
+
+// isFCM reports whether this device is reached through Firebase rather than
+// APNs. An empty Platform means APNs (pre-Android store entries).
+func (d device) isFCM() bool { return d.Platform == "fcm" }
 
 type store struct {
 	mu   sync.Mutex
@@ -239,7 +253,8 @@ func (a *apns) send(d device, payload []byte) (int, string, error) {
 type server struct {
 	cfg   config
 	store *store
-	apns  *apns
+	apns  *apns // nil when APNs isn't configured
+	fcm   *fcm  // nil when FCM isn't configured
 }
 
 func randomID() string {
@@ -248,7 +263,8 @@ func randomID() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// POST /register {device_token, environment, endpoint_id?} -> {endpoint}
+// POST /register {device_token, platform?, environment?, endpoint_id?} -> {endpoint}
+// platform is "apns" (the default) or "fcm"; environment applies to APNs only.
 func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -262,6 +278,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		DeviceToken string `json:"device_token"`
+		Platform    string `json:"platform"`
 		Environment string `json:"environment"`
 		EndpointID  string `json:"endpoint_id"`
 	}
@@ -273,6 +290,19 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "device_token required", http.StatusBadRequest)
 		return
 	}
+	platform := body.Platform
+	if platform == "" {
+		platform = "apns" // the iOS app predates the field and sends none
+	}
+	if platform != "apns" && platform != "fcm" {
+		http.Error(w, "unknown platform", http.StatusBadRequest)
+		return
+	}
+	// Refuse rather than hand back an endpoint that could never deliver.
+	if (platform == "apns" && s.apns == nil) || (platform == "fcm" && s.fcm == nil) {
+		http.Error(w, platform+" is not configured on this relay", http.StatusServiceUnavailable)
+		return
+	}
 	env := body.Environment
 	if env != "production" {
 		env = "sandbox"
@@ -281,7 +311,8 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = randomID()
 	}
-	if err := s.store.put(id, device{Token: body.DeviceToken, Env: env, Updated: time.Now().Unix()}); err != nil {
+	d := device{Token: body.DeviceToken, Platform: platform, Env: env, Updated: time.Now().Unix()}
+	if err := s.store.put(id, d); err != nil {
 		http.Error(w, "store error", http.StatusInternalServerError)
 		return
 	}
@@ -304,44 +335,49 @@ func (s *server) handlePush(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r) // unknown endpoint -> Mastodon eventually drops the subscription
 		return
 	}
-	encrypted, err := io.ReadAll(io.LimitReader(r.Body, 6144)) // APNs payload cap is ~4KB
+	encrypted, err := io.ReadAll(io.LimitReader(r.Body, 6144)) // both services cap payloads at ~4KB
 	if err != nil {
 		http.Error(w, "read error", http.StatusBadRequest)
 		return
 	}
 
-	// The full payload carries the encrypted blob so the on-device Notification
-	// Service Extension can decrypt it. "aps.alert" is a fallback shown if the
-	// extension can't run or times out. "ce" is the content-encoding; for the
-	// older "aesgcm" scheme the salt and server key travel in the Encryption /
-	// Crypto-Key headers, so forward those too ("enc" / "ck").
-	contentEncoding := r.Header.Get("Content-Encoding")
-	enc := r.Header.Get("Encryption")
-	ck := r.Header.Get("Crypto-Key")
-	payload := map[string]any{
-		"aps": map[string]any{
-			"alert":           map[string]string{"title": "FastSM", "body": "New notification"},
-			"mutable-content": 1,
-			"sound":           "default",
-		},
-		"m":  base64.RawURLEncoding.EncodeToString(encrypted),
-		"ce": contentEncoding,
+	// What the device needs to decrypt: the blob itself plus the content
+	// encoding. For the older "aesgcm" scheme the salt and the server's key
+	// travel in the Encryption / Crypto-Key headers, so forward those too.
+	p := pushBits{
+		blob:            base64.RawURLEncoding.EncodeToString(encrypted),
+		contentEncoding: r.Header.Get("Content-Encoding"),
+		encryption:      r.Header.Get("Encryption"),
+		cryptoKey:       r.Header.Get("Crypto-Key"),
 	}
-	if enc != "" {
-		payload["enc"] = enc
-	}
-	if ck != "" {
-		payload["ck"] = ck
-	}
-	body, _ := json.Marshal(payload)
 
-	status, reason, err := s.apns.send(d, body)
+	var (
+		status int
+		reason string
+		gone   bool
+	)
+	if d.isFCM() {
+		if s.fcm == nil {
+			http.Error(w, "fcm not configured", http.StatusServiceUnavailable)
+			return
+		}
+		status, reason, err = s.fcm.send(d, p.fcmData())
+		// FCM reports a reinstalled or wiped app as UNREGISTERED / NOT_FOUND.
+		gone = status == http.StatusNotFound || reason == "UNREGISTERED"
+	} else {
+		if s.apns == nil {
+			http.Error(w, "apns not configured", http.StatusServiceUnavailable)
+			return
+		}
+		status, reason, err = s.apns.send(d, p.apnsPayload())
+		gone = status == http.StatusGone || reason == "BadDeviceToken" || reason == "Unregistered"
+	}
 	if err != nil {
-		log.Printf("push %s: apns error: %v", id, err)
+		log.Printf("push %s: %s error: %v", id, serviceName(d), err)
 		http.Error(w, "upstream error", http.StatusBadGateway)
 		return
 	}
-	if status == http.StatusGone || reason == "BadDeviceToken" || reason == "Unregistered" {
+	if gone {
 		// The device token is dead — forget it so we stop trying.
 		_ = s.store.delete(id)
 		log.Printf("push %s: device gone (%s), removed", id, reason)
@@ -349,11 +385,72 @@ func (s *server) handlePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status >= 300 {
-		log.Printf("push %s: apns rejected: %d %s", id, status, reason)
+		log.Printf("push %s: %s rejected: %d %s", id, serviceName(d), status, reason)
 		http.Error(w, reason, http.StatusBadGateway)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+// pushBits is one incoming Web Push, in the form both services need to carry.
+type pushBits struct {
+	blob            string // the encrypted body, base64url
+	contentEncoding string // "aes128gcm" or the older "aesgcm"
+	encryption      string // Encryption header (aesgcm only): salt=...
+	cryptoKey       string // Crypto-Key header (aesgcm only): dh=...
+}
+
+// serviceName is only for log lines, so a mistyped platform reads as apns.
+func serviceName(d device) string {
+	if d.isFCM() {
+		return "fcm"
+	}
+	return "apns"
+}
+
+// apnsPayload builds the APNs alert. "aps.alert" is a fallback shown if the
+// Notification Service Extension can't run or times out; mutable-content is
+// what lets the extension replace it with the decrypted text.
+func (p pushBits) apnsPayload() []byte {
+	payload := map[string]any{
+		"aps": map[string]any{
+			"alert":           map[string]string{"title": "FastSM", "body": "New notification"},
+			"mutable-content": 1,
+			"sound":           "default",
+		},
+		"m":  p.blob,
+		"ce": p.contentEncoding,
+	}
+	if p.encryption != "" {
+		payload["enc"] = p.encryption
+	}
+	if p.cryptoKey != "" {
+		payload["ck"] = p.cryptoKey
+	}
+	body, _ := json.Marshal(payload)
+	return body
+}
+
+// fcmData builds the data-only FCM payload. FCM caps a data message at 4KB, and
+// unlike APNs there is no fallback alert to fall back to — so if the blob would
+// blow the cap, send the keys without it and let the app show its generic text
+// rather than dropping the notification entirely.
+func (p pushBits) fcmData() map[string]string {
+	data := map[string]string{"m": p.blob, "ce": p.contentEncoding}
+	if p.encryption != "" {
+		data["enc"] = p.encryption
+	}
+	if p.cryptoKey != "" {
+		data["ck"] = p.cryptoKey
+	}
+	size := 0
+	for k, v := range data {
+		size += len(k) + len(v)
+	}
+	if size > 3800 {
+		delete(data, "m")
+	}
+	return data
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -370,18 +467,34 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func main() {
 	cfg := loadConfig()
-	if cfg.publicBase == "" || cfg.apnsKeyPath == "" || cfg.apnsKeyID == "" || cfg.apnsTeamID == "" {
-		log.Fatal("missing required config: RELAY_PUBLIC_BASE, APNS_KEY_PATH, APNS_KEY_ID, APNS_TEAM_ID")
+	if cfg.publicBase == "" {
+		log.Fatal("missing required config: RELAY_PUBLIC_BASE")
 	}
 	st, err := newStore(cfg.storePath)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
-	ap, err := newAPNS(cfg)
-	if err != nil {
-		log.Fatalf("apns: %v", err)
+	// Either service may be left unconfigured (a relay serving only Android
+	// needs no APNs key, and vice versa), but at least one must work.
+	var ap *apns
+	if cfg.apnsKeyPath != "" {
+		if cfg.apnsKeyID == "" || cfg.apnsTeamID == "" {
+			log.Fatal("APNS_KEY_PATH is set but APNS_KEY_ID / APNS_TEAM_ID are missing")
+		}
+		if ap, err = newAPNS(cfg); err != nil {
+			log.Fatalf("apns: %v", err)
+		}
 	}
-	s := &server{cfg: cfg, store: st, apns: ap}
+	var fc *fcm
+	if cfg.fcmKeyPath != "" {
+		if fc, err = newFCM(cfg); err != nil {
+			log.Fatalf("fcm: %v", err)
+		}
+	}
+	if ap == nil && fc == nil {
+		log.Fatal("no push service configured: set APNS_KEY_PATH and/or FCM_SERVICE_ACCOUNT")
+	}
+	s := &server{cfg: cfg, store: st, apns: ap, fcm: fc}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/register", s.handleRegister)
@@ -393,6 +506,7 @@ func main() {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Printf("fastsm-push-relay listening on %s (public %s)", cfg.listen, cfg.publicBase)
+	log.Printf("fastsm-push-relay listening on %s (public %s; apns=%t fcm=%t)",
+		cfg.listen, cfg.publicBase, ap != nil, fc != nil)
 	log.Fatal(srv.ListenAndServe())
 }

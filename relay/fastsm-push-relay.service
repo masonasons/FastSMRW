@@ -1,5 +1,5 @@
 [Unit]
-Description=FastSMRW push relay (Mastodon Web Push -> APNs)
+Description=FastSMRW push relay (Mastodon Web Push -> APNs / FCM)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,10 +7,14 @@ Wants=network-online.target
 Type=simple
 DynamicUser=true
 EnvironmentFile=/etc/fastsm-push-relay/relay.env
-# The APNs key stays root-only (mode 600) on disk; systemd copies it into the
-# per-service credentials dir that only this (dynamic) service user can read.
+# The APNs key and the Firebase service-account key stay root-only (mode 600)
+# on disk; systemd copies them into the per-service credentials dir that only
+# this (dynamic) service user can read. Drop the pair you don't use — the relay
+# starts with either service alone.
 LoadCredential=apns.p8:/etc/fastsm-push-relay/AuthKey_DA36MM9RZR.p8
 Environment=APNS_KEY_PATH=%d/apns.p8
+LoadCredential=fcm.json:/etc/fastsm-push-relay/fcm-service-account.json
+Environment=FCM_SERVICE_ACCOUNT=%d/fcm.json
 ExecStart=/usr/local/bin/fastsm-push-relay
 Restart=on-failure
 RestartSec=3

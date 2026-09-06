@@ -3,4 +3,6 @@
 /fastsm-push-relay
 # Never commit secrets or local config.
 *.p8
+*service-account*.json
+google-services.json
 relay.env
