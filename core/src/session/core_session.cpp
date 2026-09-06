@@ -1577,12 +1577,43 @@ void CoreSession::cmd_unfollow_hashtag(const json& cmd) {
     });
 }
 
+// Emit a push subscribe/unsubscribe outcome. When the user asked for the change
+// (rather than the app renewing it quietly at startup) also say how it went --
+// composed here so every front end speaks the same words.
+void CoreSession::emit_push_result(const char* event, bool ok, const std::string& reason,
+                                   bool announce) {
+    json e = {{"event", event}, {"ok", ok}};
+    if (!reason.empty())
+        e["reason"] = reason;
+    emit(std::move(e));
+    if (!announce)
+        return;
+    if (!ok)
+        sound_.play(sound::Earcon::Error);
+    if (std::string(event) == "push_unsubscribe_result") {
+        emit_announce(ok ? "Push notifications are off."
+                         : "Couldn't turn push notifications off.");
+        return;
+    }
+    if (ok) {
+        emit_announce("Push notifications are on.");
+    } else if (reason == "unsupported") {
+        emit_announce("Push notifications need a Mastodon account.");
+    } else if (reason == "reauth") {
+        emit_announce("Push notifications need a newer sign-in. Remove your Mastodon account "
+                      "and add it again.");
+    } else {
+        emit_announce("Couldn't turn push notifications on.");
+    }
+}
+
 void CoreSession::cmd_push_subscribe(const json& cmd) {
     const std::string endpoint = cmd.value("endpoint", std::string{});
     const std::string p256dh = cmd.value("p256dh", std::string{});
     const std::string auth = cmd.value("auth", std::string{});
+    const bool announce = cmd.value("announce", false);
     if (endpoint.empty() || p256dh.empty() || auth.empty()) {
-        emit({{"event", "push_subscribe_result"}, {"ok", false}, {"reason", "missing"}});
+        emit_push_result("push_subscribe_result", false, "missing", announce);
         return;
     }
     // Subscribe EVERY push-capable (Mastodon) account to the same device endpoint
@@ -1592,31 +1623,50 @@ void CoreSession::cmd_push_subscribe(const json& cmd) {
         if (a && a->features().web_push)
             targets.push_back(a);
     if (targets.empty()) {
-        emit({{"event", "push_subscribe_result"}, {"ok", false}, {"reason", "unsupported"}});
+        emit_push_result("push_subscribe_result", false, "unsupported", announce);
         return;
     }
-    worker_.post([this, targets, endpoint, p256dh, auth] {
-        bool any = false;
-        for (SocialAccount* a : targets)
-            any = a->subscribe_push(endpoint, p256dh, auth) || any;
-        loop_.post([this, any] { emit({{"event", "push_subscribe_result"}, {"ok", any}}); });
+    worker_.post([this, targets, endpoint, p256dh, auth, announce] {
+        bool any_ok = false;
+        bool any_reauth = false;
+        for (SocialAccount* a : targets) {
+            switch (a->subscribe_push(endpoint, p256dh, auth)) {
+            case PushSubscribe::Ok:
+                any_ok = true;
+                break;
+            case PushSubscribe::NeedsReauth:
+                any_reauth = true;
+                break;
+            case PushSubscribe::Failed:
+                break;
+            }
+        }
+        // One working account is enough to call it on; otherwise report the most
+        // actionable thing that went wrong.
+        const std::string reason = any_ok ? std::string{} : (any_reauth ? "reauth" : "failed");
+        loop_.post([this, any_ok, reason, announce] {
+            emit_push_result("push_subscribe_result", any_ok, reason, announce);
+        });
     });
 }
 
-void CoreSession::cmd_push_unsubscribe(const json&) {
+void CoreSession::cmd_push_unsubscribe(const json& cmd) {
+    const bool announce = cmd.value("announce", false);
     std::vector<SocialAccount*> targets;
     for (SocialAccount* a : accounts_.accounts())
         if (a && a->features().web_push)
             targets.push_back(a);
     if (targets.empty()) {
-        emit({{"event", "push_unsubscribe_result"}, {"ok", false}, {"reason", "unsupported"}});
+        emit_push_result("push_unsubscribe_result", false, "unsupported", announce);
         return;
     }
-    worker_.post([this, targets] {
+    worker_.post([this, targets, announce] {
         bool any = false;
         for (SocialAccount* a : targets)
             any = a->unsubscribe_push() || any;
-        loop_.post([this, any] { emit({{"event", "push_unsubscribe_result"}, {"ok", any}}); });
+        loop_.post([this, any, announce] {
+            emit_push_result("push_unsubscribe_result", any, std::string{}, announce);
+        });
     });
 }
 

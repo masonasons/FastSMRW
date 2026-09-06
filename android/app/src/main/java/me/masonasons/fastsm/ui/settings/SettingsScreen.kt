@@ -1,6 +1,8 @@
 package me.masonasons.fastsm.ui.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -49,9 +52,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.masonasons.fastsm.core.FastSmCore
+import me.masonasons.fastsm.push.PushManager
 import me.masonasons.fastsm.ui.CoreViewModel
 import org.json.JSONObject
 import kotlin.math.roundToInt
@@ -148,6 +153,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         speechList == "copy_user" -> "Copy: Users"
         speechList == "copy_notification" -> "Copy: Notifications"
         panel == "general" -> "General"
+        panel == "notifications" -> "Notifications"
         panel == "timelines" -> "Timelines"
         panel == "audio" -> "Audio"
         panel == "earcons" -> "Earcons"
@@ -184,6 +190,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
             when {
                 speechList != null -> SpeechFieldEditor(s, speechList!!, viewModel)
                 panel == "general" -> GeneralPanel(s, viewModel)
+                panel == "notifications" -> NotificationsPanel(viewModel)
                 panel == "timelines" -> TimelinesPanel(s, viewModel)
                 panel == "audio" -> AudioPanel(s, soundpacks, viewModel)
                 panel == "earcons" -> EarconsPanel(s, viewModel)
@@ -203,6 +210,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
 private fun RootList(onOpen: (String) -> Unit) {
     listOf(
         "general" to "General",
+        "notifications" to "Notifications",
         "timelines" to "Timelines",
         "audio" to "Audio",
         "earcons" to "Earcons",
@@ -232,6 +240,46 @@ private fun GeneralPanel(s: JSONObject, vm: CoreViewModel) {
     }
     HelpText("With this on, Return sends the post and Shift+Return starts a new line. "
         + "With it off, Return starts a new line and Ctrl+Return sends.")
+}
+
+/**
+ * Push notifications. The switch is a device-side preference (PushManager), not
+ * a core setting, so it doesn't come through the settings JSON like the others.
+ */
+@Composable
+private fun NotificationsPanel(vm: CoreViewModel) {
+    val enabled by vm.pushEnabled.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // The stored preference is the truth; pick it up when the panel opens.
+    LaunchedEffect(Unit) { vm.syncPushEnabled() }
+
+    if (!vm.pushAvailable) {
+        HelpText(
+            "Push notifications aren't available in this build of FastSMRW. " +
+                "Install a release build from GitHub to use them."
+        )
+        return
+    }
+
+    // Android 13 and later must be asked before an app can show a notification,
+    // so the permission prompt is part of turning the switch on.
+    val askPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) vm.setPushEnabled(true) }
+
+    SwitchRow("Push notifications", enabled) { on ->
+        val permission = PushManager.notificationPermission()
+        if (on && permission != null && !PushManager.hasNotificationPermission(context)) {
+            askPermission.launch(permission)
+        } else {
+            vm.setPushEnabled(on)
+        }
+    }
+    HelpText(
+        "Get notified of mentions, boosts, favorites, follows and more while FastSMRW " +
+            "is closed. Mastodon accounts only."
+    )
 }
 
 @Composable

@@ -30,6 +30,16 @@ struct PlatformFeatures {
     bool web_push = false;           // Web Push notification subscriptions (Mastodon)
 };
 
+// How a push subscription attempt went. NeedsReauth is worth telling the user
+// apart from a plain failure: the "push" OAuth scope was added after some
+// accounts were authorized, and a token issued without it gets a 403 forever
+// until the account is signed in again.
+enum class PushSubscribe {
+    Ok,
+    NeedsReauth,
+    Failed,
+};
+
 // A moderation report. account_id is required; status_ids optionally names specific
 // posts. category is "spam" | "violation" | "legal" | "other"; forward sends the
 // report on to the user's remote instance (Mastodon). rule_ids apply only when
@@ -318,10 +328,11 @@ public:
     // --- Web Push (optional; Mastodon /api/v1/push/subscription) ---
     // Register/replace this account's push subscription: the relay endpoint URL
     // plus the on-device Web Push public key (p256dh) and auth secret, both
-    // base64url. Return success. Runs synchronously on the worker thread.
-    virtual bool subscribe_push(const std::string& /*endpoint*/, const std::string& /*p256dh*/,
-                                const std::string& /*auth*/) {
-        return false;
+    // base64url. Runs synchronously on the worker thread.
+    virtual PushSubscribe subscribe_push(const std::string& /*endpoint*/,
+                                         const std::string& /*p256dh*/,
+                                         const std::string& /*auth*/) {
+        return PushSubscribe::Failed;
     }
     // Remove this account's push subscription. Return success.
     virtual bool unsubscribe_push() { return false; }

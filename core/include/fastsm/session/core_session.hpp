@@ -121,8 +121,12 @@ private:
     // --- Followed hashtags (Mastodon) ---
     void cmd_follow_hashtag_prompt(const nlohmann::json& cmd); // {id} -> hashtag_prompt event
     void cmd_follow_hashtag(const nlohmann::json& cmd);        // {name}
-    void cmd_push_subscribe(const nlohmann::json& cmd);   // {endpoint,p256dh,auth}
-    void cmd_push_unsubscribe(const nlohmann::json& cmd); // {}
+    // {endpoint,p256dh,auth,announce?} -- announce is set when the user flipped
+    // the setting, so a quiet renewal at startup says nothing.
+    void cmd_push_subscribe(const nlohmann::json& cmd);
+    void cmd_push_unsubscribe(const nlohmann::json& cmd); // {announce?}
+    // Emit a push result event and, when announce is set, speak the outcome.
+    void emit_push_result(const char* event, bool ok, const std::string& reason, bool announce);
     // {id} -> spawns the post's only hashtag timeline, or emits a
     // hashtag_timeline_picker event when the post has several.
     void cmd_open_hashtag_timeline_prompt(const nlohmann::json& cmd);

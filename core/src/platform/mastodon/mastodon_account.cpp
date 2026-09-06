@@ -1262,8 +1262,9 @@ bool MastodonAccount::unfollow_hashtag(const std::string& name) {
     return request("POST", url, "", "", body, status);
 }
 
-bool MastodonAccount::subscribe_push(const std::string& endpoint, const std::string& p256dh,
-                                     const std::string& auth) {
+PushSubscribe MastodonAccount::subscribe_push(const std::string& endpoint,
+                                             const std::string& p256dh,
+                                             const std::string& auth) {
     // POST /api/v1/push/subscription. Replaces any existing subscription for
     // this access token. Subscribe to every alert type; the UI can refine later.
     const std::vector<std::pair<std::string, std::string>> params = {
@@ -1282,8 +1283,15 @@ bool MastodonAccount::subscribe_push(const std::string& endpoint, const std::str
     const std::string url = credentials_.instance_url + "/api/v1/push/subscription";
     std::string body;
     long status = 0;
-    return request("POST", url, util::form_encode(params), "application/x-www-form-urlencoded",
-                   body, status);
+    if (request("POST", url, util::form_encode(params), "application/x-www-form-urlencoded", body,
+                status))
+        return PushSubscribe::Ok;
+    // 403 means the access token carries no "push" scope. That scope was added
+    // after this account was authorized, and no retry will ever fix it -- only
+    // signing in again will -- so say so rather than blaming the network.
+    if (status == 403)
+        return PushSubscribe::NeedsReauth;
+    return PushSubscribe::Failed;
 }
 
 bool MastodonAccount::unsubscribe_push() {

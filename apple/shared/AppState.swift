@@ -406,10 +406,17 @@ final class AppState {
     // Web Push (Mastodon). The app generates the keypair (platform crypto) and
     // registers the device with the relay; the core does the Mastodon
     // /api/v1/push/subscription call with the account's credentials.
-    func pushSubscribe(endpoint: String, p256dh: String, auth: String) {
-        client.send("push_subscribe", ["endpoint": endpoint, "p256dh": p256dh, "auth": auth])
+    //
+    // announce is set when the user flipped the setting: the core then speaks
+    // the outcome (including "sign in again" when the account's token predates
+    // the push scope). A quiet renewal at launch leaves it off and says nothing.
+    func pushSubscribe(endpoint: String, p256dh: String, auth: String, announce: Bool = false) {
+        client.send("push_subscribe", ["endpoint": endpoint, "p256dh": p256dh, "auth": auth,
+                                       "announce": announce])
     }
-    func pushUnsubscribe() { client.send("push_unsubscribe") }
+    func pushUnsubscribe(announce: Bool = false) {
+        client.send("push_unsubscribe", ["announce": announce])
+    }
 
     // Followed hashtags (Mastodon)
     func followHashtagPrompt(id: String) { client.send("follow_hashtag_prompt", ["id": id]) }

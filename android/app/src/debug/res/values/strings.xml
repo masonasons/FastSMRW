@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The debug build installs alongside the real app (applicationIdSuffix
+    ".debug"), so it needs its own name too. Without this both show up in the
+    launcher as plain "FastSMRW" and a screen reader reads them identically.
+-->
+<resources>
+    <string name="app_name">FastSMRW (debug)</string>
+</resources>

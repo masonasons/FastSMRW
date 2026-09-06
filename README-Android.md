@@ -152,6 +152,7 @@ Open Settings from the overflow menu. It is organized into sections that mirror
 the other versions of FastSM:
 
 - General — whether the Return key sends the post.
+- Notifications — turn push notifications on or off (Mastodon).
 - Timelines — cache size, auto-refresh interval, real-time streaming (Mastodon),
   tab-bar position, showing mentions in Notifications, reversing timelines,
   auto-loading older posts, and syncing your Home reading position (Mastodon).
@@ -172,3 +173,16 @@ the other versions of FastSM:
 
 Per-account settings (from the account picker) let you set that account's
 soundpack.
+
+## Push notifications
+
+Turn on Push notifications under Settings, Notifications and FastSMRW will
+notify you of mentions, boosts, favorites, follows and other activity even when
+the app is closed. Android asks for permission to show notifications the first
+time you turn it on. Tapping a notification opens FastSMRW.
+
+Notifications cover every Mastodon account you are signed in to. Bluesky does
+not offer them, so accounts there are skipped.
+
+The text of a notification is encrypted by your Mastodon server and only
+decrypted on your phone — the relay that wakes the app never sees it.

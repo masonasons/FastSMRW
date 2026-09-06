@@ -43,3 +43,6 @@ xcuserdata/
 
 # iOS TestFlight archive/export scratch (ios/testflight.sh)
 /ios/build/
+
+# Firebase config for the Android push build (injected by CI, never committed).
+android/app/google-services.json

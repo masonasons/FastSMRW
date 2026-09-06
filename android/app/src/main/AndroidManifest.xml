@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Push notifications (Android 13+ asks the user; older versions grant it). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"
@@ -26,5 +28,15 @@
                 <data android:scheme="fastsm" android:host="oauth" />
             </intent-filter>
         </activity>
+
+        <!-- Receives the relay's data-only pushes from Firebase and shows them.
+             Android starts the process for this even when the app is closed. -->
+        <service
+            android:name=".push.FastSmMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

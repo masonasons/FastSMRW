@@ -5,8 +5,10 @@ FastSMRW changelog
 -----
 
 - New: on iPhone, get notified of mentions, boosts, favorites, follows and more while the app is closed — turn on Push notifications in Settings (Mastodon).
+- New: on Android, get notified of mentions, boosts, favorites, follows and more while the app is closed — turn on Push notifications in Settings (Mastodon).
 - New: open a timeline for a hashtag in a post — the new "Open Hashtag Timeline" action lists the post's hashtags and opens the one you pick.
 - New: on iPhone with VoiceOver, a three-finger swipe left or right on the timeline moves to the next or previous timeline.
+- Fixed: on Android, FastSMRW now runs on newer phones that use a larger memory page size, which could refuse to load it.
 
 0.5.6
 -----

@@ -79,5 +79,13 @@ target_compile_options(fastsm PRIVATE -fexceptions -frtti)
 
 # miniaudio (compiled inside sound_manager.cpp) dynamically loads AAudio/OpenSL,
 # so no direct audio link is needed; log/android are handy for diagnostics.
-find_library(log-lib log)
-target_link_libraries(fastsm ${log-lib} android)
+# Link these by name, not via find_library: an absolute path to the NDK's
+# sysroot copy makes AGP treat it as a runtime dependency and package it, and
+# those sysroot files are link-time stubs with no implementation behind them.
+target_link_libraries(fastsm log android)
+
+# Align the loadable segments to 16 KB. Newer Android devices use a 16 KB page
+# size and refuse to load a library laid out for 4 KB pages; NDK r28 does this
+# by default but r27 (what we build with) still needs telling. Harmless on
+# 4 KB devices -- it only pads the file.
+target_link_options(fastsm PRIVATE "-Wl,-z,max-page-size=16384")

@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.masonasons.fastsm.push.FastSmMessagingService
 import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.ProfileEditorDialog
 import me.masonasons.fastsm.ui.compose.ComposeScreen
@@ -48,6 +49,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The channel must exist before the first push arrives, and a push can
+        // land while the app is closed -- so create it now, not when the
+        // Notifications setting is opened. Renewing the subscription itself
+        // waits for the accounts to load (see CoreViewModel).
+        FastSmMessagingService.ensureChannel(this)
         handleOAuthRedirect(intent)
         setContent {
             FastSmTheme {

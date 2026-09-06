@@ -4,6 +4,21 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Firebase Cloud Messaging (push notifications) is configured by a
+// google-services.json, which isn't committed. Apply the plugin only when one is
+// present so a build without it still succeeds -- the app runs normally, push is
+// just unavailable (PushManager.isAvailable() reports false and the setting says
+// so). CI writes the file from a secret; see .github/workflows/build.yml.
+//
+// The file must contain a client for EVERY application id built, which means
+// both me.masonasons.fastsmrw and the debug build's me.masonasons.fastsmrw.debug
+// (see applicationIdSuffix below) -- register both as Android apps in the
+// Firebase project. With only the release one, the debug build fails with
+// "No matching client found for package name".
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "me.masonasons.fastsm"
     compileSdk = 35
@@ -119,8 +134,15 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    // Backs the core's IHttpClient over JNI (Phase 0b).
+    // Backs the core's IHttpClient over JNI (Phase 0b), and the relay
+    // registration in push/PushManager.kt.
     implementation(libs.okhttp)
+
+    // Push notifications: Firebase delivers the relay's data-only messages.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
+    testImplementation(libs.junit)
 
     // In-app media viewer: Coil for images, Media3/ExoPlayer for video/audio.
     implementation(libs.coil.compose)

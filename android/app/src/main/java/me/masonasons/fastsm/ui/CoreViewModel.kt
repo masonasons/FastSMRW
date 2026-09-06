@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import me.masonasons.fastsm.core.FastSmCore
+import me.masonasons.fastsm.push.PushManager
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -313,6 +314,11 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     private val _mediaPicker = MutableStateFlow<List<MediaItemUi>?>(null)
     val mediaPicker: StateFlow<List<MediaItemUi>?> = _mediaPicker.asStateFlow()
 
+    // Push notifications: whether the user has them on. PushManager owns the
+    // persisted value and the device-side plumbing; this mirrors it for the UI.
+    private val _pushEnabled = MutableStateFlow(false)
+    val pushEnabled: StateFlow<Boolean> = _pushEnabled.asStateFlow()
+
     // The hashtags in a post, to pick which one's timeline to open (the core
     // sends this only when a post has several; one tag opens directly).
     private val _hashtagTimelinePicker = MutableStateFlow<List<String>?>(null)
@@ -395,6 +401,12 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _accounts.value = list
                 _selectedAccount.value = e.optString("selected")
+                // Renew the push subscription once the accounts exist (doing it
+                // any earlier would find none), and again whenever one is added,
+                // so a newly signed-in account starts notifying too. A plain
+                // account switch doesn't change the count and so doesn't re-ask.
+                if (list.isNotEmpty() && list.size > pushAccountCount) refreshPush()
+                pushAccountCount = list.size
             }
 
             "timelines_changed" -> {
@@ -570,6 +582,26 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                         add(MediaItemUi(m.optString("url"), m.optString("kind"), m.optString("title")))
                     }
                 }
+            }
+
+            // The core has (or hasn't) registered our endpoint with every
+            // Mastodon account. It speaks the outcome itself when we asked it to,
+            // so there is nothing to say here -- only the switch to correct.
+            "push_subscribe_result" -> {
+                if (pushToggleInFlight) {
+                    pushToggleInFlight = false
+                    // Don't leave the switch claiming push is on when it isn't.
+                    // A silent renewal that fails is left alone instead, so a
+                    // temporary outage can't opt the user out behind their back.
+                    if (!e.optBoolean("ok")) {
+                        PushManager.setEnabled(getApplication(), false)
+                        _pushEnabled.value = false
+                    }
+                }
+            }
+
+            "push_unsubscribe_result" -> {
+                pushToggleInFlight = false
             }
 
             "hashtag_timeline_picker" -> {
@@ -793,6 +825,74 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissHashtagTimelinePicker() {
         _hashtagTimelinePicker.value = null
+    }
+
+    // ---- Push notifications ----------------------------------------------
+    // The device side (Firebase token, relay endpoint, keypair) is PushManager;
+    // the core owns the Mastodon subscription for every signed-in account. This
+    // is only the join between them.
+
+    /** False in a build with no Firebase configuration: push can't work there. */
+    val pushAvailable: Boolean get() = PushManager.isAvailable(getApplication())
+
+    /**
+     * Whether the user just flipped the switch, as opposed to the app renewing
+     * the subscription quietly. Decides whether a failure turns the switch back
+     * off, and (via the "announce" flag on the command) whether the core speaks.
+     * Written from the UI thread and read on the core's event thread.
+     */
+    @Volatile
+    private var pushToggleInFlight = false
+
+    /**
+     * How many accounts the last accounts_changed reported, so the subscription
+     * is renewed on launch and on a new sign-in but not on every switch.
+     */
+    private var pushAccountCount = -1
+
+    /** Reflect the stored preference into the UI (called when Settings opens). */
+    fun syncPushEnabled() {
+        _pushEnabled.value = PushManager.isEnabled(getApplication())
+    }
+
+    /** The Notifications switch. */
+    fun setPushEnabled(on: Boolean) {
+        val app = getApplication<Application>()
+        pushToggleInFlight = true
+        _pushEnabled.value = on
+        if (!on) {
+            PushManager.disable(app)
+            core.dispatch("push_unsubscribe") { put("announce", true) }
+            return
+        }
+        PushManager.enable(app) { sub ->
+            // Send whatever we got, including nothing: no Firebase token or a
+            // relay that wouldn't answer means an empty endpoint, and the core
+            // turns that into the same spoken failure as any other, so no
+            // message is composed out here.
+            core.dispatch("push_subscribe") {
+                put("endpoint", sub?.endpoint.orEmpty())
+                put("p256dh", sub?.p256dh.orEmpty())
+                put("auth", sub?.auth.orEmpty())
+                put("announce", true)
+            }
+        }
+    }
+
+    /**
+     * Re-register at startup if push was left on: Mastodon subscriptions can
+     * lapse, and the subscribe call simply replaces an existing one.
+     */
+    fun refreshPush() {
+        syncPushEnabled()
+        PushManager.refreshIfEnabled(getApplication()) { sub ->
+            if (sub == null) return@refreshIfEnabled
+            core.dispatch("push_subscribe") {
+                put("endpoint", sub.endpoint)
+                put("p256dh", sub.p256dh)
+                put("auth", sub.auth)
+            }
+        }
     }
 
     /** Close a tab: select it (so it's current), then dismiss it. */

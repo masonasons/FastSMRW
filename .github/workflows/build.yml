@@ -86,6 +86,7 @@ jobs:
     needs: build
     env:
       KEYSTORE_B64: ${{ secrets.FASTSMRW_RELEASE_STORE_FILE_B64 }}
+      GOOGLE_SERVICES_B64: ${{ secrets.FASTSMRW_GOOGLE_SERVICES_B64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -122,11 +123,20 @@ jobs:
             echo "FASTSMRW_RELEASE_KEY_PASSWORD=${{ secrets.FASTSMRW_RELEASE_KEY_PASSWORD }}"
           } >> "$GITHUB_ENV"
 
+      # Firebase config for push notifications. Without the secret the APK still
+      # builds and runs; push is simply unavailable in it (see PushManager).
+      - name: Write google-services.json
+        if: env.GOOGLE_SERVICES_B64 != ''
+        run: echo "$GOOGLE_SERVICES_B64" | base64 -d > android/app/google-services.json
+
       - name: Build release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon
+          # The release variant, so CI never configures the debug one -- its
+          # application id carries a .debug suffix that needs its own client in
+          # google-services.json. The unit tests are plain JVM either way.
+          ./gradlew :app:testReleaseUnitTest :app:assembleRelease --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
