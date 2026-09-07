@@ -1,5 +1,8 @@
 FastSMRW changelog
 ==================
+0.5.8
+-----
+- Fixed: Open Links now finds Bluesky links hidden behind descriptive text, not just web addresses written out in the post.
 
 0.5.7
 -----

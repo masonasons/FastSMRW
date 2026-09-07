@@ -314,6 +314,22 @@ void test_post_links() {
     CHECK_EQ(links[3].url, std::string("https://x.social/@me/123"));
     CHECK_EQ(links[3].title, std::string("Open this post in browser"));
 
+    // Mastodon HTML is authoritative: URL-looking anchor text must not become a
+    // second destination distinct from the anchor's href.
+    Status deceptive_anchor;
+    deceptive_anchor.content =
+        "<a href=\"https://actual.example\">https://displayed.example</a>";
+    deceptive_anchor.text = "https://displayed.example";
+    const std::vector<present::PostLink> anchor_links = present::post_links(deceptive_anchor);
+    CHECK_EQ(anchor_links.size(), static_cast<size_t>(1));
+    if (!anchor_links.empty())
+        CHECK_EQ(anchor_links[0].url, std::string("https://actual.example"));
+    const std::vector<std::string> anchor_urls =
+        present::post_text_link_urls(deceptive_anchor);
+    CHECK_EQ(anchor_urls.size(), static_cast<size_t>(1));
+    if (!anchor_urls.empty())
+        CHECK_EQ(anchor_urls[0], std::string("https://actual.example"));
+
     // A boost unwraps to the boosted post's links.
     Status boost;
     boost.reblog = std::make_shared<Status>(s);
@@ -327,6 +343,23 @@ void test_post_links() {
     CHECK_EQ(bl.size(), static_cast<size_t>(2));
     CHECK_EQ(bl[0].url, std::string("https://bsky.example/x"));
     CHECK_EQ(bl[1].title, std::string("Open this post in browser"));
+
+    // Bluesky facets can link ordinary display text whose destination is not
+    // visible in the post body.
+    Status faceted;
+    faceted.text = "read this article, https://other.example/page and https://example.com/article";
+    faceted.text_links.push_back({"this article", "https://example.com/article"});
+    std::vector<present::PostLink> fl = present::post_links(faceted);
+    CHECK_EQ(fl.size(), static_cast<size_t>(2));
+    CHECK_EQ(fl[0].title, std::string("this article"));
+    CHECK_EQ(fl[0].url, std::string("https://example.com/article"));
+    CHECK_EQ(fl[1].url, std::string("https://other.example/page"));
+    const std::vector<std::string> facet_urls = present::post_text_link_urls(faceted);
+    CHECK_EQ(facet_urls.size(), static_cast<size_t>(2));
+    if (facet_urls.size() == 2) {
+        CHECK_EQ(facet_urls[0], std::string("https://example.com/article"));
+        CHECK_EQ(facet_urls[1], std::string("https://other.example/page"));
+    }
 
     // A post with only its own URL still offers that one link.
     Status plain;

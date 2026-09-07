@@ -20,6 +20,13 @@ struct StatusFilterMatch {
     bool hide = false;  // filter_action: true = "hide", false = "warn"
 };
 
+// A semantically linked span in a post's plain text. Bluesky carries these as
+// rich-text facets, where the visible label may differ from the destination.
+struct StatusTextLink {
+    std::string text;
+    std::string url;
+};
+
 // A post/status. Boosts and quotes reference another Status via shared_ptr to
 // break the recursion (the Swift core uses a boxed indirect enum).
 struct Status {
@@ -51,6 +58,7 @@ struct Status {
     std::shared_ptr<Status> quote;  // the quoted status
     std::vector<MediaAttachment> media_attachments;
     std::vector<Mention> mentions;
+    std::vector<StatusTextLink> text_links;
     std::vector<std::string> tags; // hashtag names in this post (no '#'), Mastodon
     std::optional<Visibility> visibility; // Mastodon only
     std::optional<std::string> spoiler_text;

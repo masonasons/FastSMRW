@@ -10,7 +10,8 @@ namespace {
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url. v6 added Notification group_key + notifications_count.
 // v7 added Status::filtered + tags. v9 added Bluesky reply-parent metadata.
-constexpr char kMagic[4] = {'F', 'S', 'C', 'A'};
+// v11 added Status::text_links.
+constexpr char kMagic[4] = {'F', 'S', 'C', 'B'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -289,6 +290,11 @@ void write_status(Writer& w, const Status& s) {
     w.u32(static_cast<std::uint32_t>(s.tags.size()));
     for (const auto& t : s.tags)
         w.str(t); // else "Follow hashtag" pre-fills blank for cached posts
+    w.u32(static_cast<std::uint32_t>(s.text_links.size()));
+    for (const auto& link : s.text_links) {
+        w.str(link.text);
+        w.str(link.url);
+    }
 }
 
 Status read_status(Reader& r, int depth = 0) {
@@ -359,6 +365,9 @@ Status read_status(Reader& r, int depth = 0) {
     const std::uint32_t tag_n = r.u32();
     for (std::uint32_t i = 0; i < tag_n && r.ok; ++i)
         s.tags.push_back(r.str());
+    const std::uint32_t link_n = r.u32();
+    for (std::uint32_t i = 0; i < link_n && r.ok; ++i)
+        s.text_links.push_back({r.str(), r.str()});
     return s;
 }
 

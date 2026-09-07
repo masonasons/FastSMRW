@@ -31,6 +31,7 @@ static Status sample_inner() {
     s.platform = Platform::Mastodon;
     s.tags.push_back("cats");
     s.tags.push_back("welcome");
+    s.text_links.push_back({"welcome", "https://example.com/article"});
     s.filtered.push_back({"Spoilers", true}); // a "hide" filter match
     s.filtered.push_back({"Politics", false}); // a "warn" filter match
 
@@ -85,6 +86,9 @@ void test_status_roundtrip() {
     CHECK(back.reblog->filtered[1].hide == false);
     CHECK_EQ(back.reblog->tags.size(), size_t(2));
     CHECK_EQ(back.reblog->tags[1], std::string("welcome"));
+    CHECK_EQ(back.reblog->text_links.size(), size_t(1));
+    CHECK_EQ(back.reblog->text_links[0].text, std::string("welcome"));
+    CHECK_EQ(back.reblog->text_links[0].url, std::string("https://example.com/article"));
     CHECK(back.reblog->visibility.value() == Visibility::Unlisted);
     CHECK_EQ(back.reblog->media_attachments.size(), size_t(1));
     CHECK(back.reblog->media_attachments[0].type == MediaAttachment::Kind::Image);

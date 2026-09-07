@@ -142,36 +142,52 @@ void test_bluesky_notification_mapping() {
     CHECK_EQ(like.account.display_name, std::string("Dana"));
     CHECK(like.status == nullptr); // like/repost carry no incoming post
 
-    // A reply notification reads as a Mention and carries the incoming post text.
+    // A reply notification reads as a Mention and carries the incoming post text
+    // and rich-text link facets.
     const char* kReply = R"JSON({
       "uri": "at://did:plc:eve/app.bsky.feed.post/r1", "cid": "c2",
       "author": { "did": "did:plc:eve", "handle": "eve.test", "displayName": "Eve" },
       "reason": "reply",
-      "record": { "text": "@me hi there", "createdAt": "2024-06-28T13:00:00.000Z" },
+      "record": {
+        "text": "@me read this",
+        "createdAt": "2024-06-28T13:00:00.000Z",
+        "facets": [
+          { "index": { "byteStart": 9, "byteEnd": 13 },
+            "features": [ { "$type": "app.bsky.richtext.facet#link", "uri": "https://example.com/notification" } ] }
+        ]
+      },
       "indexedAt": "2024-06-28T13:00:01.000Z"
     })JSON";
     const Notification reply = bluesky::map_notification(json::parse(kReply));
     CHECK(reply.type == Notification::Kind::Mention); // reply/quote read as mention
     CHECK(reply.status != nullptr);
     if (reply.status) {
-        CHECK_EQ(reply.status->text, std::string("@me hi there"));
+        CHECK_EQ(reply.status->text, std::string("@me read this"));
         CHECK_EQ(reply.status->id, std::string("at://did:plc:eve/app.bsky.feed.post/r1"));
+        CHECK_EQ(reply.status->text_links.size(), size_t(1));
+        if (!reply.status->text_links.empty()) {
+            CHECK_EQ(reply.status->text_links[0].text, std::string("this"));
+            CHECK_EQ(reply.status->text_links[0].url,
+                     std::string("https://example.com/notification"));
+        }
     }
 }
 
 void test_bluesky_facet_mapping() {
-    // A post whose record carries mention + tag facets populates mentions/tags.
+    // A post whose record carries link + mention + tag facets preserves all three.
     const char* kFaceted = R"JSON({
       "post": {
         "uri": "at://did:plc:x/app.bsky.feed.post/2", "cid": "cid2",
         "author": { "did": "did:plc:x", "handle": "bob.test", "displayName": "Bob" },
         "record": {
-          "text": "hi @alice.bsky.social #a11y",
+          "text": "😀 read this hi @alice.bsky.social #a11y",
           "createdAt": "2024-06-28T10:00:00Z",
           "facets": [
-            { "index": { "byteStart": 3, "byteEnd": 21 },
+            { "index": { "byteStart": 10, "byteEnd": 14 },
+              "features": [ { "$type": "app.bsky.richtext.facet#link", "uri": "https://example.com/article" } ] },
+            { "index": { "byteStart": 18, "byteEnd": 36 },
               "features": [ { "$type": "app.bsky.richtext.facet#mention", "did": "did:plc:alice" } ] },
-            { "index": { "byteStart": 22, "byteEnd": 27 },
+            { "index": { "byteStart": 37, "byteEnd": 42 },
               "features": [ { "$type": "app.bsky.richtext.facet#tag", "tag": "a11y" } ] }
           ]
         },
@@ -179,6 +195,11 @@ void test_bluesky_facet_mapping() {
       }
     })JSON";
     const Status s = bluesky::map_feed_item(json::parse(kFaceted));
+    CHECK_EQ(s.text_links.size(), size_t(1));
+    if (!s.text_links.empty()) {
+        CHECK_EQ(s.text_links[0].text, std::string("this"));
+        CHECK_EQ(s.text_links[0].url, std::string("https://example.com/article"));
+    }
     CHECK_EQ(s.mentions.size(), size_t(1));
     if (!s.mentions.empty()) {
         CHECK_EQ(s.mentions[0].id, std::string("did:plc:alice"));

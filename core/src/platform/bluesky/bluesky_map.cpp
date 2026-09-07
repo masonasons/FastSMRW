@@ -78,7 +78,7 @@ std::shared_ptr<Status> map_quote_record(const json& rec) {
     return std::make_shared<Status>(std::move(q));
 }
 
-// Populate mentions/tags from a post record's richtext `facets` (byte-range
+// Populate links/mentions/tags from a post record's richtext `facets` (byte-range
 // annotations over the plain text). Mention facets carry the DID; the handle is
 // the sliced display text ("@handle"). Tag facets carry the bare tag.
 void map_facets(const json& record, Status& s) {
@@ -113,6 +113,10 @@ void map_facets(const json& record, Status& s) {
                     tag = slice.substr(1);
                 if (!tag.empty())
                     s.tags.push_back(std::move(tag));
+            } else if (type == "app.bsky.richtext.facet#link") {
+                std::string uri = str(feat, "uri");
+                if (!uri.empty())
+                    s.text_links.push_back({slice, std::move(uri)});
             }
         }
     }
@@ -262,6 +266,7 @@ Notification map_notification(const json& j) {
         if (const json* record = obj(j, "record")) {
             s.text = str(*record, "text");
             s.created_at = util::parse_iso8601(str(*record, "createdAt")).value_or(n.created_at);
+            map_facets(*record, s);
         }
         if (s.created_at == 0)
             s.created_at = n.created_at;
