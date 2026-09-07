@@ -82,6 +82,14 @@ std::vector<SpeechItem<Field>> items_from_json(const json& arr, FromKey from_key
 
 AppSettings settings_from_json(const json& root) {
     AppSettings settings;
+	if (auto it = root.find("push_alerts"); it != root.end() && it->is_object()) {
+		for (const auto& def : push_alert_catalog) {
+			auto value = it->find(def.key);
+			if (value != it->end() && value->is_boolean()) {
+				settings.push_alerts.*(def.enabled) = value->get<bool>();
+			}
+		}
+	}
     settings.sounds_enabled = root.value("sounds_enabled", true);
     settings.sound_volume = root.value("sound_volume", 100);
     settings.media_volume = root.value("media_volume", 100);
@@ -207,6 +215,10 @@ AppSettings settings_from_json(const json& root) {
 
 json settings_to_json(const AppSettings& settings) {
     json root;
+	root["push_alerts"] = json::object();
+	for (const auto& def : push_alert_catalog) {
+		root["push_alerts"][def.key] = settings.push_alerts.*(def.enabled);
+	}
     root["sounds_enabled"] = settings.sounds_enabled;
     root["sound_volume"] = settings.sound_volume;
     root["media_volume"] = settings.media_volume;

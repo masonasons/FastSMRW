@@ -125,6 +125,9 @@ private:
     // the setting, so a quiet renewal at startup says nothing.
     void cmd_push_subscribe(const nlohmann::json& cmd);
     void cmd_push_unsubscribe(const nlohmann::json& cmd); // {announce?}
+	// {alerts:{type:bool,...}, apply_to_subscriptions?:false, announce?:true}
+	// Saves a patch; updates existing subscriptions only when the device enables push.
+	void cmd_push_update_alerts(const nlohmann::json& cmd);
     // Emit a push result event and, when announce is set, speak the outcome.
     void emit_push_result(const char* event, bool ok, const std::string& reason, bool announce);
     // {id} -> spawns the post's only hashtag timeline, or emits a

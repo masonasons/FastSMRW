@@ -4,12 +4,14 @@
 #include <string>
 
 #include "fastsm/presentation/speech_settings.hpp"
+#include "fastsm/models/push_alerts.hpp"
 
 namespace fastsm::store {
 
 // User preferences. Grows over time (Mac has many more); for now the pieces M1
 // needs plus the configurable speech field order/visibility.
 struct AppSettings {
+	PushAlerts push_alerts;
     bool sounds_enabled = true;
     int sound_volume = 100;     // master earcon/soundpack volume, 0-100 percent
     int media_volume = 100;     // audio-attachment playback volume, 0-100 percent

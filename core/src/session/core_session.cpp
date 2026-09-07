@@ -578,6 +578,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_push_subscribe(cmd);
     else if (c == "push_unsubscribe")
         cmd_push_unsubscribe(cmd);
+	else if (c == "push_update_alerts")
+		cmd_push_update_alerts(cmd);
     else if (c == "list_followed_hashtags")
         cmd_list_followed_hashtags();
     else if (c == "list_trending_hashtags")
@@ -1626,11 +1628,12 @@ void CoreSession::cmd_push_subscribe(const json& cmd) {
         emit_push_result("push_subscribe_result", false, "unsupported", announce);
         return;
     }
-    worker_.post([this, targets, endpoint, p256dh, auth, announce] {
+	const PushAlerts alerts = settings_.push_alerts;
+	worker_.post([this, targets, endpoint, p256dh, auth, announce, alerts] {
         bool any_ok = false;
         bool any_reauth = false;
         for (SocialAccount* a : targets) {
-            switch (a->subscribe_push(endpoint, p256dh, auth)) {
+            switch (a->subscribe_push(endpoint, p256dh, auth, alerts)) {
             case PushSubscribe::Ok:
                 any_ok = true;
                 break;
@@ -1668,6 +1671,75 @@ void CoreSession::cmd_push_unsubscribe(const json& cmd) {
             emit_push_result("push_unsubscribe_result", any, std::string{}, announce);
         });
     });
+}
+
+void CoreSession::cmd_push_update_alerts(const json& cmd) {
+	// Patch on the core loop: two quick toggles cannot overwrite one another
+	// with an older settings snapshot from a mobile UI.
+	if (auto it = cmd.find("alerts"); it != cmd.end() && it->is_object()) {
+		for (const auto& def : push_alert_catalog) {
+			auto value = it->find(def.key);
+			if (value != it->end() && value->is_boolean()) {
+				settings_.push_alerts.*(def.enabled) = value->get<bool>();
+			}
+		}
+	}
+	save_config();
+	emit_settings();
+	if (!cmd.value("apply_to_subscriptions", false)) {
+		emit({{"event", "push_update_alerts_result"}, {"ok", true},
+			{"accounts", json::array()}});
+		return;
+	}
+	const bool announce = cmd.value("announce", true);
+	const PushAlerts alerts = settings_.push_alerts;
+	// Own account snapshots so removing an account during an update cannot
+	// invalidate objects still in use by the worker. Push currently supports Mastodon.
+	std::vector<std::shared_ptr<MastodonAccount>> targets;
+	for (SocialAccount* a : accounts_.accounts()) {
+		if (a && a->platform() == Platform::Mastodon && a->features().web_push) {
+			const auto* mastodon = static_cast<MastodonAccount*>(a);
+			targets.push_back(std::make_shared<MastodonAccount>(
+				mastodon->credentials(), mastodon->me(), http_.get()));
+		}
+	}
+	if (targets.empty()) {
+		emit({{"event", "push_update_alerts_result"}, {"ok", false},
+			{"reason", "unsupported"}, {"accounts", json::array()}});
+		if (announce) {
+			emit_announce("Your choices are saved. Push notifications need a Mastodon account.");
+		}
+		return;
+	}
+	worker_.post([this, targets, alerts, announce] {
+		json results = json::array();
+		std::string failures;
+		for (const auto& a : targets) {
+			const auto result = a->update_push_alerts(alerts);
+			const bool ok = result == PushSubscribe::Ok;
+			const std::string reason = ok ? "" :
+				(result == PushSubscribe::NeedsReauth ? "reauth" : "failed");
+			results.push_back({{"account_key", a->account_key()}, {"ok", ok}, {"reason", reason}});
+			if (!ok) {
+				if (!failures.empty()) {
+					failures += " ";
+				}
+				failures += "Couldn't update push notification types for " + a->me().acct + ".";
+				if (result == PushSubscribe::NeedsReauth) {
+					failures += " Remove that account and add it again to allow push notifications.";
+				}
+			}
+		}
+		loop_.post([this, results = std::move(results), failures, announce] {
+			emit({{"event", "push_update_alerts_result"}, {"ok", failures.empty()},
+				{"accounts", results}});
+			if (announce && !failures.empty()) {
+				sound_.play(sound::Earcon::Error);
+				emit_announce("Your choices are saved and will be retried when push notifications "
+					"are renewed. " + failures);
+			}
+		});
+	});
 }
 
 void CoreSession::cmd_list_followed_hashtags() { emit_followed_hashtags(); }
@@ -4912,6 +4984,10 @@ void CoreSession::emit(const json& event) {
 }
 
 void CoreSession::emit_settings(bool refresh_devices) {
+	json push_types = json::array();
+	for (const auto& def : push_alert_catalog) {
+		push_types.push_back({{"key", def.key}, {"label", def.label}});
+	}
     json packs = json::array();
     for (const auto& p : sound_.list_soundpacks())
         packs.push_back(p);
@@ -4924,6 +5000,7 @@ void CoreSession::emit_settings(bool refresh_devices) {
     for (const auto& d : sound_devices_)
         devices.push_back(d);
     emit({{"event", "settings"},
+		  {"push_alert_types", std::move(push_types)},
           {"settings", store::settings_to_json(settings_)},
           {"soundpacks", packs},
           {"sound_devices", std::move(devices)}});

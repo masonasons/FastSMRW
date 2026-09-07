@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fastsm/models/push_alerts.hpp"
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -331,11 +333,15 @@ public:
     // base64url. Runs synchronously on the worker thread.
     virtual PushSubscribe subscribe_push(const std::string& /*endpoint*/,
                                          const std::string& /*p256dh*/,
-                                         const std::string& /*auth*/) {
+                                         const std::string& /*auth*/, const PushAlerts& /*alerts*/) {
         return PushSubscribe::Failed;
     }
     // Remove this account's push subscription. Return success.
     virtual bool unsubscribe_push() { return false; }
+	// Update only alert types, preserving the subscription endpoint and keys.
+	virtual PushSubscribe update_push_alerts(const PushAlerts& /*alerts*/) {
+		return PushSubscribe::Failed;
+	}
 
     // --- Server-side keyword filters (optional; Mastodon /api/v2/filters) ---
     // Whether this platform exposes managed server filters at all (Mastodon yes,

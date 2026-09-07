@@ -48,6 +48,16 @@ final class PushManager: NSObject {
     /// Set while an explicit enable is in flight, so the core speaks the result
     /// only for a change the user asked for -- not for the renewal at launch.
     private var announceNextResult = false
+	private var accountKeys: Set<String> = []
+
+	/// Renew after accounts have loaded, and whenever another account is added.
+	@MainActor
+	func accountsChanged(state: AppState) {
+		let keys = Set(state.accounts.filter { $0.platform == "mastodon" }.map { $0.key })
+		let added = !keys.subtracting(accountKeys).isEmpty
+		accountKeys = keys
+		if added { refreshIfEnabled(state: state) }
+	}
 
     /// Turn push on: remember the choice, ask permission, register with APNs,
     /// and (once the token arrives) subscribe with the relay + Mastodon.
@@ -64,6 +74,7 @@ final class PushManager: NSObject {
     func disable(state: AppState) {
         self.state = state
         UserDefaults.standard.set(false, forKey: Self.enabledKey)
+		announceNextResult = false
         state.pushUnsubscribe(announce: true)
         UIApplication.shared.unregisterForRemoteNotifications()
     }
@@ -134,9 +145,10 @@ final class PushManager: NSObject {
                 self.log.error("relay register: bad response (\(code, privacy: .public))")
                 return
             }
-            let announce = self.announceNextResult
-            self.announceNextResult = false
             Task { @MainActor in
+				guard self.isEnabled else { return }
+				let announce = self.announceNextResult
+				self.announceNextResult = false
                 self.state?.pushSubscribe(endpoint: endpoint, p256dh: keys.p256dh,
                                           auth: keys.auth, announce: announce)
             }

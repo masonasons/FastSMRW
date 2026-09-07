@@ -190,7 +190,7 @@ fun SettingsScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
             when {
                 speechList != null -> SpeechFieldEditor(s, speechList!!, viewModel)
                 panel == "general" -> GeneralPanel(s, viewModel)
-                panel == "notifications" -> NotificationsPanel(viewModel)
+                panel == "notifications" -> NotificationsPanel(s, viewModel)
                 panel == "timelines" -> TimelinesPanel(s, viewModel)
                 panel == "audio" -> AudioPanel(s, soundpacks, viewModel)
                 panel == "earcons" -> EarconsPanel(s, viewModel)
@@ -247,8 +247,9 @@ private fun GeneralPanel(s: JSONObject, vm: CoreViewModel) {
  * a core setting, so it doesn't come through the settings JSON like the others.
  */
 @Composable
-private fun NotificationsPanel(vm: CoreViewModel) {
+private fun NotificationsPanel(s: JSONObject, vm: CoreViewModel) {
     val enabled by vm.pushEnabled.collectAsStateWithLifecycle()
+	val types by vm.pushAlertTypes.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // The stored preference is the truth; pick it up when the panel opens.
@@ -278,8 +279,14 @@ private fun NotificationsPanel(vm: CoreViewModel) {
     }
     HelpText(
         "Get notified of mentions, boosts, favorites, follows and more while FastSMRW " +
-            "is closed. Mastodon accounts only."
+            "is closed. These choices apply to all Mastodon accounts on this device."
     )
+	val alerts = s.optJSONObject("push_alerts")
+	types.forEach { (key, label) ->
+		SwitchRow(label, alerts?.optBoolean(key, true) ?: true) { on ->
+			vm.setPushAlert(key, on)
+		}
+	}
 }
 
 @Composable
