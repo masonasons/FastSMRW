@@ -6,5 +6,10 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Lets the sandboxed app read files the user picks in an Open panel (post
+	     attachments). Without it the system refuses to show the panel at all, so
+	     the compose window's "Add…" button silently does nothing. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 </dict>
 </plist>
