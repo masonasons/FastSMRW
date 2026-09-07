@@ -73,7 +73,8 @@ public:
     std::vector<FollowedTag> trending_hashtags() override;
 
     PushSubscribe subscribe_push(const std::string& endpoint, const std::string& p256dh,
-                                 const std::string& auth) override;
+                                 const std::string& auth, const PushAlerts& alerts) override;
+	PushSubscribe update_push_alerts(const PushAlerts& alerts) override;
     bool unsubscribe_push() override;
 
     std::vector<TimelineList> lists() override;

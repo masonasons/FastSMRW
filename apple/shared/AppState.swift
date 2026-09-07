@@ -29,6 +29,7 @@ final class AppState {
     /// (with edits) on update_settings — the core re-applies defaults for any
     /// missing key, so we must always send the whole object.
     private(set) var settingsRaw: [String: Any] = [:]
+	private(set) var pushAlertTypes: [(key: String, label: String)] = []
     private(set) var soundpacks: [String] = []
     /// Output devices the core's mixer can play sound effects through (desktop
     /// settings; iOS routes audio itself and ignores this).
@@ -132,6 +133,12 @@ final class AppState {
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            obj["event"] as? String == "settings" {
             if let s = obj["settings"] as? [String: Any] { settingsRaw = s }
+			if let types = obj["push_alert_types"] as? [[String: String]] {
+				pushAlertTypes = types.compactMap { item in
+					guard let key = item["key"], let label = item["label"] else { return nil }
+					return (key: key, label: label)
+				}
+			}
             if let packs = obj["soundpacks"] as? [String] { soundpacks = packs }
             if let devices = obj["sound_devices"] as? [String] { soundDevices = devices }
             onSettings?()
@@ -235,6 +242,9 @@ final class AppState {
             onPushSubscribeResult?(e.ok)
         case let .pushUnsubscribeResult(e):
             onPushUnsubscribeResult?(e.ok)
+		case .pushUpdateAlertsResult:
+			// Saved choices remain selected on failure; the core announces details.
+			break
         case let .followedHashtags(e):
             onFollowedHashtags?(e)
         case let .trendingHashtags(e):
@@ -417,6 +427,14 @@ final class AppState {
     func pushUnsubscribe(announce: Bool = false) {
         client.send("push_unsubscribe", ["announce": announce])
     }
+
+	func setPushAlert(_ key: String, enabled: Bool, applyToSubscriptions: Bool) {
+		var alerts = settingsRaw["push_alerts"] as? [String: Bool] ?? [:]
+		alerts[key] = enabled
+		settingsRaw["push_alerts"] = alerts
+		client.send("push_update_alerts", ["alerts": [key: enabled],
+			"apply_to_subscriptions": applyToSubscriptions])
+	}
 
     // Followed hashtags (Mastodon)
     func followHashtagPrompt(id: String) { client.send("follow_hashtag_prompt", ["id": id]) }

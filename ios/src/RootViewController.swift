@@ -31,7 +31,11 @@ final class RootViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
 
-        state.onAccountsChanged = { [weak self] in self?.refreshChildren() }
+		state.onAccountsChanged = { [weak self] in
+			guard let self else { return }
+			self.refreshChildren()
+			PushManager.shared.accountsChanged(state: self.state)
+		}
         state.onAuthResult = { [weak self] result in self?.handleAuthResult(result) }
         state.onOpenURL = { [weak self] url in
             if let add = self?.activeAddAccount, add.handleOpenURL(url) { return }

@@ -594,6 +594,7 @@ enum CoreEvent {
     case hashtagTimelinePicker(HashtagTimelinePicker)
     case pushSubscribeResult(PushResult)
     case pushUnsubscribeResult(PushResult)
+	case pushUpdateAlertsResult(PushResult)
     case followedHashtags(FollowedHashtags)
     case trendingHashtags(FollowedHashtags)
     case aliasPrompt(AliasPrompt)
@@ -646,6 +647,8 @@ enum CoreEvent {
             return decode(PushResult.self).map(CoreEvent.pushSubscribeResult)
         case "push_unsubscribe_result":
             return decode(PushResult.self).map(CoreEvent.pushUnsubscribeResult)
+		case "push_update_alerts_result":
+			return decode(PushResult.self).map(CoreEvent.pushUpdateAlertsResult)
         case "followed_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.followedHashtags)
         case "trending_hashtags": return decode(FollowedHashtags.self).map(CoreEvent.trendingHashtags)
         case "alias_prompt": return decode(AliasPrompt.self).map(CoreEvent.aliasPrompt)

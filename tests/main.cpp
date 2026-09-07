@@ -130,6 +130,12 @@ void test_marker_restore_reports_already_there();
 void test_note_selection_same_row_is_not_a_move();
 void test_restored_position_survives_default_edge_echo();
 
+// From test_push.cpp
+void test_push_settings();
+void test_push_requests();
+void test_push_session();
+void test_push_without_accounts();
+
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
     CHECK(std::strlen(fastsm::version()) > 0);
@@ -241,6 +247,10 @@ int main() {
     test_marker_restore_reports_already_there();
     test_note_selection_same_row_is_not_a_move();
     test_restored_position_survives_default_edge_echo();
+	test_push_settings();
+	test_push_requests();
+	test_push_session();
+	test_push_without_accounts();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

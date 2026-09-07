@@ -26,6 +26,7 @@ enum SettingRow {
     case toggle(String, key: String, def: Bool)
     // A device-side on/off backed by PushManager (not a core setting).
     case pushToggle(String)
+	case pushAlert(String, key: String)
     case picker(String, key: String, options: [(String, Any)], def: Any)
     case stepper(String, key: String, def: Int, min: Int, max: Int, step: Int)
     case slider(String, key: String, def: Int, min: Int, max: Int)
@@ -82,10 +83,10 @@ final class SettingsViewController: UITableViewController {
             ]),
             SettingPanel(title: "Notifications",
                     footer: "Get notified of mentions, boosts, favorites and more while the app "
-                          + "is closed. Mastodon accounts only.",
+                          + "is closed. These choices apply to all Mastodon accounts on this device.",
                     rows: [
                 .pushToggle("Push notifications"),
-            ]),
+			] + state.pushAlertTypes.map { .pushAlert($0.label, key: $0.key) }),
             SettingPanel(title: "Timelines",
                     footer: "Check timelines for new posts on this interval; new posts play "
                           + "that timeline's sound.",
@@ -241,6 +242,12 @@ final class SettingsPanelViewController: UITableViewController {
                 if on { PushManager.shared.enable(state: self.state) }
                 else { PushManager.shared.disable(state: self.state) }
             }
+		case let .pushAlert(title, key):
+			let on = (state.settingsRaw["push_alerts"] as? [String: Bool])?[key] ?? true
+			return ToggleCell(title: title, on: on) { [weak self] on in
+				self?.state.setPushAlert(key, enabled: on,
+					applyToSubscriptions: PushManager.shared.isEnabled)
+			}
         case let .picker(title, key, options, def):
             let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
             var content = cell.defaultContentConfiguration()
@@ -306,6 +313,11 @@ final class SettingsPanelViewController: UITableViewController {
             if on { PushManager.shared.enable(state: state) }
             else { PushManager.shared.disable(state: state) }
             (tableView.cellForRow(at: indexPath) as? ToggleCell)?.set(on: on)
+		case let .pushAlert(_, key):
+			let on = !((state.settingsRaw["push_alerts"] as? [String: Bool])?[key] ?? true)
+			state.setPushAlert(key, enabled: on,
+				applyToSubscriptions: PushManager.shared.isEnabled)
+			(tableView.cellForRow(at: indexPath) as? ToggleCell)?.set(on: on)
         default:
             break
         }

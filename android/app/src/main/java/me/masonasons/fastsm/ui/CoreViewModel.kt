@@ -318,6 +318,8 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     // persisted value and the device-side plumbing; this mirrors it for the UI.
     private val _pushEnabled = MutableStateFlow(false)
     val pushEnabled: StateFlow<Boolean> = _pushEnabled.asStateFlow()
+	private val _pushAlertTypes = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+	val pushAlertTypes = _pushAlertTypes.asStateFlow()
 
     // The hashtags in a post, to pick which one's timeline to open (the core
     // sends this only when a post has several; one tag opens directly).
@@ -357,6 +359,13 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             "settings" -> {
                 val settings = e.optJSONObject("settings")
                 _settings.value = settings
+				val types = e.optJSONArray("push_alert_types")
+				_pushAlertTypes.value = buildList {
+					if (types != null) for (i in 0 until types.length()) {
+						val type = types.getJSONObject(i)
+						add(type.getString("key") to type.getString("label"))
+					}
+				}
                 val sp = e.optJSONArray("soundpacks")
                 _soundpacks.value = buildList {
                     if (sp != null) for (i in 0 until sp.length()) add(sp.optString(i))
@@ -603,6 +612,9 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             "push_unsubscribe_result" -> {
                 pushToggleInFlight = false
             }
+			"push_update_alerts_result" -> {
+				// Keep saved choices and the master switch. The core announces failures.
+			}
 
             "hashtag_timeline_picker" -> {
                 val arr = e.optJSONArray("tags")
@@ -866,6 +878,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         PushManager.enable(app) { sub ->
+			if (!PushManager.isEnabled(app)) return@enable
             // Send whatever we got, including nothing: no Firebase token or a
             // relay that wouldn't answer means an empty endpoint, and the core
             // turns that into the same spoken failure as any other, so no
@@ -886,7 +899,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshPush() {
         syncPushEnabled()
         PushManager.refreshIfEnabled(getApplication()) { sub ->
-            if (sub == null) return@refreshIfEnabled
+			if (sub == null || !PushManager.isEnabled(getApplication())) return@refreshIfEnabled
             core.dispatch("push_subscribe") {
                 put("endpoint", sub.endpoint)
                 put("p256dh", sub.p256dh)
@@ -894,6 +907,14 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+	/** Save one push type without replacing other pending setting changes. */
+	fun setPushAlert(key: String, enabled: Boolean) {
+		core.dispatch("push_update_alerts") {
+			put("alerts", JSONObject().put(key, enabled))
+			put("apply_to_subscriptions", PushManager.isEnabled(getApplication()))
+		}
+	}
 
     /** Close a tab: select it (so it's current), then dismiss it. */
     fun closeTimeline(index: Int) {

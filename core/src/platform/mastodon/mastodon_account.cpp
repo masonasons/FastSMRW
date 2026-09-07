@@ -1264,22 +1264,18 @@ bool MastodonAccount::unfollow_hashtag(const std::string& name) {
 
 PushSubscribe MastodonAccount::subscribe_push(const std::string& endpoint,
                                              const std::string& p256dh,
-                                             const std::string& auth) {
+                                             const std::string& auth, const PushAlerts& alerts) {
     // POST /api/v1/push/subscription. Replaces any existing subscription for
-    // this access token. Subscribe to every alert type; the UI can refine later.
-    const std::vector<std::pair<std::string, std::string>> params = {
+    // this access token. Always apply the saved device-wide alert preferences.
+	std::vector<std::pair<std::string, std::string>> params = {
         {"subscription[endpoint]", endpoint},
         {"subscription[keys][p256dh]", p256dh},
         {"subscription[keys][auth]", auth},
-        {"data[alerts][mention]", "true"},
-        {"data[alerts][favourite]", "true"},
-        {"data[alerts][reblog]", "true"},
-        {"data[alerts][follow]", "true"},
-        {"data[alerts][follow_request]", "true"},
-        {"data[alerts][poll]", "true"},
-        {"data[alerts][status]", "true"},
-        {"data[alerts][update]", "true"},
     };
+	for (const auto& def : push_alert_catalog) {
+		params.emplace_back(std::string("data[alerts][") + def.key + "]",
+			alerts.*(def.enabled) ? "true" : "false");
+	}
     const std::string url = credentials_.instance_url + "/api/v1/push/subscription";
     std::string body;
     long status = 0;
@@ -1299,6 +1295,21 @@ bool MastodonAccount::unsubscribe_push() {
     std::string body;
     long status = 0;
     return request("DELETE", url, "", "", body, status);
+}
+
+PushSubscribe MastodonAccount::update_push_alerts(const PushAlerts& alerts) {
+	std::vector<std::pair<std::string, std::string>> params;
+	for (const auto& def : push_alert_catalog) {
+		params.emplace_back(std::string("data[alerts][") + def.key + "]",
+			alerts.*(def.enabled) ? "true" : "false");
+	}
+	std::string body;
+	long status = 0;
+	if (request("PUT", credentials_.instance_url + "/api/v1/push/subscription",
+		util::form_encode(params), "application/x-www-form-urlencoded", body, status)) {
+		return PushSubscribe::Ok;
+	}
+	return status == 403 ? PushSubscribe::NeedsReauth : PushSubscribe::Failed;
 }
 
 std::vector<FollowedTag> MastodonAccount::followed_hashtags() {
