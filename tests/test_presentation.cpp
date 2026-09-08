@@ -1,5 +1,6 @@
 #include "check.hpp"
 
+#include <ctime>
 #include <memory>
 
 #include "fastsm/presentation/reply_helper.hpp"
@@ -223,6 +224,25 @@ void test_presenter_stats_nonzero() {
     CHECK_EQ(present::accessibility_label(s, now), std::string("3 boosts, 1 favorite"));
 
     present::SpeechConfig::set_current(present::SpeechSettings::defaults()); // restore
+}
+
+void test_presenter_user_profile_joined() {
+    present::TextConfig::set_current({});
+    User u;
+    u.acct = "alice@example.social";
+    u.display_name = "Alice";
+
+    // No join date from the server -> no "Joined" line at all.
+    CHECK(!contains(present::user_profile(u), "Joined"));
+
+    std::tm t{};
+    t.tm_year = 2021 - 1900;
+    t.tm_mon = 2; // March
+    t.tm_mday = 3;
+    t.tm_hour = 12;
+    t.tm_isdst = -1;
+    u.created_at = static_cast<std::int64_t>(std::mktime(&t));
+    CHECK(contains(present::user_profile(u), "\nJoined March 3, 2021"));
 }
 
 void test_presenter_poll() {

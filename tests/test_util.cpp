@@ -1,5 +1,7 @@
 #include "check.hpp"
 
+#include <ctime>
+
 #include "fastsm/util/date_parsing.hpp"
 #include "fastsm/util/demojify.hpp"
 #include "fastsm/util/html_stripper.hpp"
@@ -73,6 +75,19 @@ void test_relative_dates() {
     CHECK_EQ(relative_spoken(now - 3600, now), std::string("1 hour ago"));
     CHECK_EQ(relative_spoken(now - 2 * 3600, now), std::string("2 hours ago"));
     CHECK_EQ(relative_spoken(now - 300, now), std::string("5 minutes ago"));
+}
+
+void test_calendar_date() {
+    // Build the instant from a LOCAL calendar date so the check holds in any
+    // time zone -- calendar_date formats in local time.
+    std::tm t{};
+    t.tm_year = 2021 - 1900;
+    t.tm_mon = 2; // March
+    t.tm_mday = 3;
+    t.tm_hour = 12;
+    t.tm_isdst = -1;
+    const std::int64_t when = static_cast<std::int64_t>(std::mktime(&t));
+    CHECK_EQ(calendar_date(when), std::string("March 3, 2021"));
 }
 
 void test_demojify() {

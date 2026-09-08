@@ -694,6 +694,10 @@ std::string user_profile(const User& u) {
     out += "\n" + std::to_string(u.followers_count) + " followers, " +
            std::to_string(u.following_count) + " following, " +
            std::to_string(u.statuses_count) + " posts";
+    // Its own line so a screen reader can step past it; omitted entirely when
+    // the server didn't say (some Bluesky profile views leave it out).
+    if (u.created_at != 0)
+        out += "\nJoined " + util::calendar_date(u.created_at);
     return out;
 }
 

@@ -60,6 +60,11 @@ std::string relative_spoken(std::int64_t when, std::int64_t now) {
 }
 
 namespace {
+
+const char* const kMonths[] = {"January",   "February", "March",    "April",
+                               "May",       "June",     "July",     "August",
+                               "September", "October",  "November", "December"};
+
 std::tm to_local(std::int64_t unix_seconds) {
     const std::time_t t = static_cast<std::time_t>(unix_seconds);
     std::tm out{};
@@ -83,16 +88,16 @@ std::string absolute_time(std::int64_t when, std::int64_t now) {
 
     // Append the date only when it isn't today (local calendar day).
     const std::tm n = to_local(now);
-    if (w.tm_year != n.tm_year || w.tm_yday != n.tm_yday) {
-        static const char* const months[] = {"January",   "February", "March",    "April",
-                                              "May",       "June",     "July",     "August",
-                                              "September", "October",  "November", "December"};
-        char date[48];
-        std::snprintf(date, sizeof(date), ", %s %d, %d", months[w.tm_mon], w.tm_mday,
-                      w.tm_year + 1900);
-        out += date;
-    }
+    if (w.tm_year != n.tm_year || w.tm_yday != n.tm_yday)
+        out += ", " + calendar_date(when);
     return out;
+}
+
+std::string calendar_date(std::int64_t when) {
+    const std::tm w = to_local(when);
+    char buf[48];
+    std::snprintf(buf, sizeof(buf), "%s %d, %d", kMonths[w.tm_mon], w.tm_mday, w.tm_year + 1900);
+    return buf;
 }
 
 } // namespace fastsm::util

@@ -324,6 +324,23 @@ void test_bluesky_labels_content_warning() {
     CHECK(!bluesky::map_feed_item(json::parse(kSpam)).has_content_warning());
 }
 
+void test_bluesky_profile_created_at() {
+    // getProfile's detailed view carries the account's creation date.
+    const json detailed = json::parse(R"JSON({
+      "did": "did:plc:author", "handle": "alice.bsky.social", "displayName": "Alice",
+      "followersCount": 12, "followsCount": 34, "postsCount": 56,
+      "createdAt": "2023-04-05T06:07:08.000Z"
+    })JSON");
+    const User u = bluesky::map_author(detailed);
+    CHECK_EQ(u.created_at, static_cast<std::int64_t>(1680674828));
+
+    // A post author's inline view has no createdAt; 0 means unknown, and the
+    // profile text then leaves the join date out entirely.
+    const json basic = json::parse(
+        R"JSON({"did": "did:plc:author", "handle": "alice.bsky.social"})JSON");
+    CHECK_EQ(bluesky::map_author(basic).created_at, static_cast<std::int64_t>(0));
+}
+
 void test_bluesky_plain_post() {
     const char* kPlain = R"JSON({
       "post": {

@@ -185,6 +185,9 @@ User map_author(const json& j) {
     u.followers_count = j.value("followersCount", 0);
     u.following_count = j.value("followsCount", 0);
     u.statuses_count = j.value("postsCount", 0);
+    // Only the detailed profile view carries the account's creation date; a
+    // post author's inline profile doesn't, and 0 means "unknown".
+    u.created_at = util::parse_iso8601(str(j, "createdAt")).value_or(0);
     u.url = "https://bsky.app/profile/" + u.acct;
     return u;
 }

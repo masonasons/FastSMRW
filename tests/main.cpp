@@ -20,6 +20,7 @@ void test_strip_quote_url();
 void test_entity_decoding();
 void test_date_parsing();
 void test_relative_dates();
+void test_calendar_date();
 void test_demojify();
 void test_truncate_mentions();
 
@@ -34,6 +35,7 @@ void test_form_encode();
 
 // From test_bluesky_map.cpp
 void test_bluesky_feed_mapping();
+void test_bluesky_profile_created_at();
 void test_bluesky_plain_post();
 void test_bluesky_notification_mapping();
 void test_bluesky_facet_mapping();
@@ -69,6 +71,7 @@ void test_presenter_cw_modes();
 void test_presenter_demojify_and_mentions();
 void test_presenter_wrap_and_separator();
 void test_presenter_stats_nonzero();
+void test_presenter_user_profile_joined();
 void test_presenter_poll();
 void test_presenter_boosted_by_handle();
 void test_presenter_copy_keeps_line_breaks();
@@ -165,6 +168,7 @@ int main() {
     test_entity_decoding();
     test_date_parsing();
     test_relative_dates();
+    test_calendar_date();
     test_demojify();
     test_truncate_mentions();
     test_mastodon_status_mapping();
@@ -175,6 +179,7 @@ int main() {
     test_remote_timeline_source();
     test_form_encode();
     test_bluesky_feed_mapping();
+    test_bluesky_profile_created_at();
     test_bluesky_plain_post();
     test_bluesky_notification_mapping();
     test_bluesky_facet_mapping();
@@ -203,6 +208,7 @@ int main() {
     test_presenter_demojify_and_mentions();
     test_presenter_wrap_and_separator();
     test_presenter_stats_nonzero();
+    test_presenter_user_profile_joined();
     test_presenter_poll();
     test_presenter_boosted_by_handle();
     test_presenter_copy_keeps_line_breaks();

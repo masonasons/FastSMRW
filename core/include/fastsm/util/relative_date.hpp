@@ -16,4 +16,8 @@ std::string relative_spoken(std::int64_t when, std::int64_t now);
 // at the end only when `when` falls on a different local calendar day than `now`.
 std::string absolute_time(std::int64_t when, std::int64_t now);
 
+// Just the local calendar date: "March 3, 2021". For dates where the time of
+// day is noise (a profile's join date).
+std::string calendar_date(std::int64_t when);
+
 } // namespace fastsm::util
