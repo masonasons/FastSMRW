@@ -1,9 +1,14 @@
 FastSMRW changelog
 ==================
+
+0.5.9
+-----
+
+- New: the user profile dialog now shows the date the account joined.
+
 0.5.8
 -----
 - New: on iPhone and Android, choose which types of Mastodon push notifications you receive in Settings, Notifications.
-- New: the user profile dialog now shows the date the account joined.
 - Fixed: Open Links now finds Bluesky links hidden behind descriptive text, not just web addresses written out in the post.
 
 0.5.7
