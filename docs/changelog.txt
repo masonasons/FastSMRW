@@ -5,6 +5,7 @@ FastSMRW changelog
 -----
 
 - New: the user profile dialog now shows the date the account joined.
+- New: FastSMRW can now ask before you follow or unfollow someone — turn either on in Settings, Confirmation.
 
 0.5.8
 -----

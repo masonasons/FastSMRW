@@ -88,6 +88,18 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         state.onFollowRequestPrompt = { [weak self] accountId, acct in
             self?.promptFollowRequest(accountId: accountId, acct: acct)
         }
+        state.onConfirm = { [weak self] title, text, command in
+            // The core wrote both strings; we only wrap them in an alert and hand
+            // its command back if the answer is yes.
+            guard let self, let window = self.view.window else { return }
+            let alert = NSAlert()
+            alert.messageText = text
+            alert.addButton(withTitle: title)
+            alert.addButton(withTitle: "Cancel")
+            alert.beginSheetModal(for: window) { [weak self] r in
+                if r == .alertFirstButtonReturn { self?.state.sendRaw(command) }
+            }
+        }
         tableView.onCommandReturn = { [weak self] in self?.openLinksForSelection(nil) }
         // Option+arrows drive movement units (Up/Down jump by the unit, Left/Right
         // pick the unit). Handled on the table (not menu key-equivalents) so

@@ -114,6 +114,8 @@ AppSettings settings_from_json(const json& root) {
     settings.confirm_favorite = root.value("confirm_favorite", false);
     settings.confirm_unfavorite = root.value("confirm_unfavorite", false);
     settings.confirm_clear_timeline = root.value("confirm_clear_timeline", true);
+    settings.confirm_follow = root.value("confirm_follow", false);
+    settings.confirm_unfollow = root.value("confirm_unfollow", false);
     settings.confirm_block = root.value("confirm_block", true);
     settings.confirm_unblock = root.value("confirm_unblock", false);
     settings.confirm_delete_post = root.value("confirm_delete_post", true);
@@ -242,6 +244,8 @@ json settings_to_json(const AppSettings& settings) {
     root["confirm_favorite"] = settings.confirm_favorite;
     root["confirm_unfavorite"] = settings.confirm_unfavorite;
     root["confirm_clear_timeline"] = settings.confirm_clear_timeline;
+    root["confirm_follow"] = settings.confirm_follow;
+    root["confirm_unfollow"] = settings.confirm_unfollow;
     root["confirm_block"] = settings.confirm_block;
     root["confirm_unblock"] = settings.confirm_unblock;
     root["confirm_delete_post"] = settings.confirm_delete_post;

@@ -364,8 +364,15 @@ final class UserProfileWindowController: DetailSheetController {
             let following = profile.following ?? false
             buttons.append((following ? "Unfollow" : "Follow", false, { [weak self] in
                 self?.dismiss()
-                state.setRelationship(accountId: accountId,
-                                      action: following ? "unfollow" : "follow", acct: acct)
+                // The sheet is gone by the time the action runs, so when a
+                // confirmation is wanted let the core drive it: it re-checks the
+                // relationship and raises the confirm event the main window shows.
+                if following ? state.confirmUnfollow : state.confirmFollow {
+                    state.followToggle(accountId: accountId, acct: acct)
+                } else {
+                    state.setRelationship(accountId: accountId,
+                                          action: following ? "unfollow" : "follow", acct: acct)
+                }
             }))
             let muting = profile.muting ?? false
             buttons.append((muting ? "Unmute" : "Mute", false, { [weak self] in

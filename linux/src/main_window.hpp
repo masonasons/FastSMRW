@@ -133,6 +133,7 @@ private:
     void ev_spawnable(const nlohmann::json& e);
     void ev_copy(const nlohmann::json& e);
     void ev_url_picker(const nlohmann::json& e);
+    void ev_confirm(const nlohmann::json& e); // core-composed yes/no, re-dispatches on yes
     void ev_user_picker(const nlohmann::json& e);
     void ev_post_info(const nlohmann::json& e);
     void ev_user_profile(const nlohmann::json& e);

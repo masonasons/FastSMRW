@@ -283,6 +283,17 @@ final class MainViewController: UIViewController {
         state.onFollowRequestPrompt = { [weak self] accountId, acct in
             self?.promptFollowRequest(accountId: accountId, acct: acct)
         }
+        state.onConfirm = { [weak self] title, text, command in
+            guard let self else { return }
+            // The core wrote both strings; we only wrap them in an alert and hand
+            // its command back if the answer is yes.
+            let alert = UIAlertController(title: title, message: text, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                self?.state.sendRaw(command)
+            })
+            self.topPresenter.present(alert, animated: true)
+        }
     }
 
     /// Accept/Reject a follow request (activating its notification row).

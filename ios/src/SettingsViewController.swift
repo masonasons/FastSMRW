@@ -178,6 +178,8 @@ final class SettingsViewController: UITableViewController {
                 .toggle("Favorite", key: "confirm_favorite", def: false),
                 .toggle("Un-favorite", key: "confirm_unfavorite", def: false),
                 .toggle("Clearing a timeline", key: "confirm_clear_timeline", def: true),
+                .toggle("Follow", key: "confirm_follow", def: false),
+                .toggle("Unfollow", key: "confirm_unfollow", def: false),
                 .toggle("Block", key: "confirm_block", def: true),
                 .toggle("Un-block", key: "confirm_unblock", def: false),
                 .toggle("Deleting a post", key: "confirm_delete_post", def: true),

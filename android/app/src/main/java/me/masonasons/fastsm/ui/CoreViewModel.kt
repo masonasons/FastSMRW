@@ -118,6 +118,12 @@ data class MentionSuggestions(val query: String, val users: List<MentionSuggesti
  */
 data class UserPickerRequest(val purpose: String, val rowId: String, val users: List<UserPick>)
 
+/**
+ * A yes/no the core raised itself (confirm event). Both strings are composed in
+ * the core; [command] is dispatched back verbatim if the user agrees.
+ */
+data class ConfirmRequest(val title: String, val text: String, val command: JSONObject)
+
 /** Prompt to add/edit a user alias (a global, cross-account custom display name). */
 data class AliasPromptRequest(val key: String, val handle: String, val current: String)
 
@@ -273,6 +279,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while a user-disambiguation picker should be shown. */
     private val _userPicker = MutableStateFlow<UserPickerRequest?>(null)
     val userPicker: StateFlow<UserPickerRequest?> = _userPicker.asStateFlow()
+
+    /** Non-null while a core-raised confirmation should be shown. */
+    private val _confirm = MutableStateFlow<ConfirmRequest?>(null)
+    val confirm: StateFlow<ConfirmRequest?> = _confirm.asStateFlow()
 
     /** Non-null while the add/edit-alias prompt should be shown. */
     private val _aliasPrompt = MutableStateFlow<AliasPromptRequest?>(null)
@@ -518,6 +528,15 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 _userPicker.value = UserPickerRequest(e.optString("purpose"), e.optString("id"), users)
             }
 
+            "confirm" -> {
+                val command = e.optJSONObject("command")
+                if (command != null) {
+                    _confirm.value = ConfirmRequest(
+                        e.optString("title", "Confirm"), e.optString("text"), command,
+                    )
+                }
+            }
+
             "alias_prompt" ->
                 _aliasPrompt.value =
                     AliasPromptRequest(e.optString("key"), e.optString("handle"), e.optString("current"))
@@ -726,6 +745,19 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Open a post's conversation as a new tab. */
     fun openThread(id: String) = core.dispatch("open_thread") { put("id", id) }
+
+    /** The user said yes to a core-raised confirmation: send its command back. */
+    fun acceptConfirm() {
+        val req = _confirm.value ?: return
+        _confirm.value = null
+        core.dispatch(req.command)
+    }
+
+    fun dismissConfirm() { _confirm.value = null }
+
+    /** Whether a confirmation is wanted before [key] (a confirm_* setting). */
+    fun confirmsBefore(key: String, default: Boolean = false): Boolean =
+        _settings.value?.optBoolean(key, default) ?: default
 
     /** Open a post author's timeline as a new tab (may raise a user_picker). */
     fun openUserTimeline(rowId: String) =

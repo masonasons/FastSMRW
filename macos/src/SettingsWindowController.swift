@@ -159,6 +159,8 @@ final class SettingsWindowController: NSWindowController {
             p.checkbox("Confirm favorite", key: "confirm_favorite", default: false)
             p.checkbox("Confirm un-favorite", key: "confirm_unfavorite", default: false)
             p.checkbox("Confirm clearing a timeline", key: "confirm_clear_timeline", default: true)
+            p.checkbox("Confirm follow", key: "confirm_follow", default: false)
+            p.checkbox("Confirm unfollow", key: "confirm_unfollow", default: false)
             p.checkbox("Confirm block", key: "confirm_block", default: true)
             p.checkbox("Confirm un-block", key: "confirm_unblock", default: false)
             p.checkbox("Confirm deleting a post", key: "confirm_delete_post", default: true)

@@ -294,6 +294,23 @@ fun HomeScreen(
         }
     }
 
+    // A yes/no the core raised itself -- the follow toggle, where only the core
+    // knows which way it will go. Both strings come composed from the core.
+    val confirm by viewModel.confirm.collectAsStateWithLifecycle()
+    confirm?.let { req ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissConfirm,
+            title = { Text(req.title) },
+            text = { Text(req.text) },
+            confirmButton = {
+                TextButton(onClick = viewModel::acceptConfirm) { Text(req.title) }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissConfirm) { Text("Cancel") }
+            },
+        )
+    }
+
     val picker by viewModel.userPicker.collectAsStateWithLifecycle()
     picker?.let { req ->
         AlertDialog(

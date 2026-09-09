@@ -1921,6 +1921,14 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
         }
         return;
     }
+    do_relationship_action(acct, id, handle, action);
+}
+
+// Perform one relationship change and speak the result. Shared by
+// set_relationship and the follow toggle (which lands here once the user has
+// confirmed, or straight away when no confirmation is asked for).
+void CoreSession::do_relationship_action(SocialAccount* acct, const std::string& id,
+                                         const std::string& handle, const std::string& action) {
     worker_.post([this, acct, id, action, handle] {
         bool ok = false;
         if (action == "follow")
@@ -1952,6 +1960,17 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
             emit_announce(relationship_message(action, handle));
         });
     });
+}
+
+// Ask the UI to confirm something the core can't decide on its own. The whole
+// prompt is composed here; the front end only shows [text] with a yes/no and
+// dispatches [command] verbatim on yes.
+void CoreSession::emit_confirm(const std::string& title, const std::string& text,
+                               nlohmann::json command) {
+    emit({{"event", "confirm"},
+          {"title", title},
+          {"text", text},
+          {"command", std::move(command)}});
 }
 
 void CoreSession::cmd_report(const json& cmd) {
@@ -2141,15 +2160,23 @@ void CoreSession::follow_toggle_user(SocialAccount* acct, const std::string& id,
         // following yet and follow.
         std::optional<Relationship> rel = acct->relationship(id);
         const bool following = rel && (rel->following || rel->requested);
-        const std::string action = following ? "unfollow" : "follow";
-        const bool ok = following ? acct->unfollow(id) : acct->follow(id);
-        loop_.post([this, ok, action, handle] {
-            if (!ok) {
-                sound_.play(sound::Earcon::Error);
-                emit_announce("Action failed");
+        loop_.post([this, acct, id, handle, following] {
+            const std::string action = following ? "unfollow" : "follow";
+            // Which way this toggle goes is only known here, after the lookup --
+            // the UI can't ask "Unfollow @alice?" before dispatching because it
+            // doesn't know yet. So the confirmation is raised from here, and the
+            // UI sends set_relationship back if the user says yes.
+            if (following ? settings_.confirm_unfollow : settings_.confirm_follow) {
+                emit_confirm(user_action_label(action),
+                             user_action_label(action) + " @" +
+                                 (handle.empty() ? std::string("user") : handle) + "?",
+                             {{"cmd", "set_relationship"},
+                              {"account_id", id},
+                              {"acct", handle},
+                              {"action", action}});
                 return;
             }
-            emit_announce(relationship_message(action, handle));
+            do_relationship_action(acct, id, handle, action);
         });
     });
 }

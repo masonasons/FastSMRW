@@ -190,6 +190,12 @@ private:
     // target user the same way the u / Ctrl+U actions do (picker for multi-user posts).
     void cmd_follow_toggle(const nlohmann::json& cmd);
     void follow_toggle_user(SocialAccount* acct, const std::string& id, const std::string& handle);
+    // One relationship change (follow/mute/block/...), shared by set_relationship
+    // and the confirmed follow toggle.
+    void do_relationship_action(SocialAccount* acct, const std::string& id,
+                                const std::string& handle, const std::string& action);
+    // Ask the UI to confirm, then dispatch `command` back to us if it agrees.
+    void emit_confirm(const std::string& title, const std::string& text, nlohmann::json command);
     // Toggle mute (block=false) or block (block=true) for a user, looking up the
     // current relationship first to decide direction. Used by the invisible
     // interface's MuteToggle / BlockToggle actions.

@@ -76,6 +76,9 @@ final class AppState {
     /// The core's "UserActions" request (Enter on a user row when enter_user_action
     /// is "actions"): the Mac's equivalent is opening the user profile dialog.
     var onUserActionsMenu: (() -> Void)?
+    /// A yes/no the core raised itself, with (title, text, command). Both strings
+    /// are already composed; send `command` back with `sendRaw` if the user agrees.
+    var onConfirm: ((String, String, [String: Any]) -> Void)?
     private var didStartupUpdateCheck = false
     /// One-shot: delay the next `announce` slightly so a menu key-equivalent's
     /// title (spoken by VoiceOver) doesn't stomp a Speak User/Reply result.
@@ -174,6 +177,18 @@ final class AppState {
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            obj["event"] as? String == "invisible_ui_action" {
             if obj["action"] as? String == "UserActions" { onUserActionsMenu?() }
+            return
+        }
+        // The core wants a yes/no it can't decide on its own -- the follow toggle,
+        // where only the core knows which way it will go once it has looked the
+        // relationship up. It composes the wording and the follow-up command.
+        if let data = json.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           obj["event"] as? String == "confirm" {
+            if let command = obj["command"] as? [String: Any] {
+                onConfirm?(obj["title"] as? String ?? "Confirm",
+                           obj["text"] as? String ?? "", command)
+            }
             return
         }
         // Enter on a follow-request notification: the core asks the UI to show
@@ -330,6 +345,8 @@ final class AppState {
     func loadGap(id: String) { client.send("load_gap", ["id": id]) }
     var autoLoadOlder: Bool { settingsRaw["auto_load_older"] as? Bool ?? true }
     var confirmDeletePost: Bool { settingsRaw["confirm_delete_post"] as? Bool ?? true }
+    var confirmFollow: Bool { settingsRaw["confirm_follow"] as? Bool ?? false }
+    var confirmUnfollow: Bool { settingsRaw["confirm_unfollow"] as? Bool ?? false }
     var confirmClearTimeline: Bool { settingsRaw["confirm_clear_timeline"] as? Bool ?? true }
 
     // Timelines: open a new one, close/clear the current one.
@@ -486,6 +503,13 @@ final class AppState {
     }
     func openUserTimeline(id: String) { client.send("open_user_timeline", ["id": id]) }
     func openUserProfile(id: String) { client.send("open_user_profile", ["id": id]) }
+
+    /// Send a command the core handed us (a confirm event's follow-up) unchanged.
+    func sendRaw(_ command: [String: Any]) {
+        var payload = command
+        guard let cmd = payload.removeValue(forKey: "cmd") as? String else { return }
+        client.send(cmd, payload)
+    }
     func postInfo(id: String) { client.send("post_info", ["id": id]) }
 
     // Disambiguated user actions (from the user picker or profile dialog).

@@ -687,6 +687,8 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         checked(dlg, IDC_SET_CONFIRM_FAV, ctx->settings.confirm_favorite);
         checked(dlg, IDC_SET_CONFIRM_UNFAV, ctx->settings.confirm_unfavorite);
         checked(dlg, IDC_SET_CONFIRM_CLEAR, ctx->settings.confirm_clear_timeline);
+        checked(dlg, IDC_SET_CONFIRM_FOLLOW, ctx->settings.confirm_follow);
+        checked(dlg, IDC_SET_CONFIRM_UNFOLLOW, ctx->settings.confirm_unfollow);
         checked(dlg, IDC_SET_CONFIRM_BLOCK, ctx->settings.confirm_block);
         checked(dlg, IDC_SET_CONFIRM_UNBLOCK, ctx->settings.confirm_unblock);
         checked(dlg, IDC_SET_CONFIRM_DELETE, ctx->settings.confirm_delete_post);
@@ -700,6 +702,8 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             ctx->settings.confirm_favorite = is_checked(dlg, IDC_SET_CONFIRM_FAV);
             ctx->settings.confirm_unfavorite = is_checked(dlg, IDC_SET_CONFIRM_UNFAV);
             ctx->settings.confirm_clear_timeline = is_checked(dlg, IDC_SET_CONFIRM_CLEAR);
+            ctx->settings.confirm_follow = is_checked(dlg, IDC_SET_CONFIRM_FOLLOW);
+            ctx->settings.confirm_unfollow = is_checked(dlg, IDC_SET_CONFIRM_UNFOLLOW);
             ctx->settings.confirm_block = is_checked(dlg, IDC_SET_CONFIRM_BLOCK);
             ctx->settings.confirm_unblock = is_checked(dlg, IDC_SET_CONFIRM_UNBLOCK);
             ctx->settings.confirm_delete_post = is_checked(dlg, IDC_SET_CONFIRM_DELETE);

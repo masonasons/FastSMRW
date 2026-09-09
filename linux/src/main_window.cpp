@@ -993,7 +993,13 @@ void MainWindow::run_user_action(const std::string& action,
     if (row_ids.empty())
         return;
     const std::string many = std::to_string(row_ids.size()) + " users?";
-    if (action == "block" && settings_.value("confirm_block", true)) {
+    if (action == "follow" && settings_.value("confirm_follow", false)) {
+        if (!confirm(row_ids.size() > 1 ? "Follow " + many : "Follow this user?", "Follow"))
+            return;
+    } else if (action == "unfollow" && settings_.value("confirm_unfollow", false)) {
+        if (!confirm(row_ids.size() > 1 ? "Unfollow " + many : "Unfollow this user?", "Unfollow"))
+            return;
+    } else if (action == "block" && settings_.value("confirm_block", true)) {
         if (!confirm(row_ids.size() > 1 ? "Block " + many : "Block this user?", "Block"))
             return;
     } else if (action == "unblock" && settings_.value("confirm_unblock", false)) {
@@ -1299,6 +1305,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_copy(e);
     else if (ev == "url_picker")
         ev_url_picker(e);
+    else if (ev == "confirm")
+        ev_confirm(e);
     else if (ev == "user_picker")
         ev_user_picker(e);
     else if (ev == "user_suggestions")
@@ -1889,9 +1897,16 @@ void MainWindow::ev_user_profile(const json& e) {
         dispatch_cmd({{"cmd", "open_following"}, {"account_id", account_id}, {"acct", acct}});
     else if (*action == "browser")
         open_url(e.value("url", std::string{}));
-    else if (*action == "follow")
-        set_rel((following || requested) ? "unfollow" : "follow");
-    else if (*action == "mute")
+    else if (*action == "follow") {
+        if (following || requested) {
+            if (!settings_.value("confirm_unfollow", false) ||
+                confirm("Unfollow @" + acct + "?", "Unfollow"))
+                set_rel("unfollow");
+        } else if (!settings_.value("confirm_follow", false) ||
+                   confirm("Follow @" + acct + "?", "Follow")) {
+            set_rel("follow");
+        }
+    } else if (*action == "mute")
         set_rel(e.value("muting", false) ? "unmute" : "mute");
     else if (*action == "block") {
         if (e.value("blocking", false)) {
@@ -1963,6 +1978,16 @@ void MainWindow::ev_account_settings(const json& e) {
                           {"soundpack", packs[static_cast<size_t>(sel)]}});
     }
     gtk_widget_destroy(dialog);
+}
+
+void MainWindow::ev_confirm(const json& e) {
+    // The core asks, the core wrote the words; we only put a yes/no around them
+    // and send its command back if the answer is yes.
+    const std::string text = e.value("text", std::string{});
+    if (text.empty() || !e.contains("command"))
+        return;
+    if (confirm(text, e.value("title", std::string("Confirm"))))
+        dispatch_cmd(e["command"]);
 }
 
 void MainWindow::ev_user_picker(const json& e) {

@@ -430,6 +430,8 @@ private fun ConfirmationPanel(s: JSONObject, vm: CoreViewModel) {
         "confirm_favorite" to "Favoriting",
         "confirm_unfavorite" to "Unfavoriting",
         "confirm_clear_timeline" to "Clearing a timeline",
+        "confirm_follow" to "Following a user",
+        "confirm_unfollow" to "Unfollowing a user",
         "confirm_block" to "Blocking a user",
         "confirm_unblock" to "Unblocking a user",
         "confirm_delete_post" to "Deleting a post",

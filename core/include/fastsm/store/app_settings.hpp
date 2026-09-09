@@ -41,6 +41,8 @@ struct AppSettings {
     bool confirm_favorite = false;
     bool confirm_unfavorite = false;
     bool confirm_clear_timeline = true;
+    bool confirm_follow = false;
+    bool confirm_unfollow = false;
     bool confirm_block = true;
     bool confirm_unblock = false;
     bool confirm_delete_post = true;

@@ -133,8 +133,16 @@ final class UserProfileViewController: ActionListViewController {
         if profile.hasRelationship {
             let following = profile.following ?? false
             items.append(Item(title: following ? "Unfollow" : "Follow", pops: true) {
-                state.setRelationship(accountId: accountId,
-                                      action: following ? "unfollow" : "follow", acct: acct)
+                // This screen pops before the action runs, so there's nothing left
+                // to hang an alert on. When a confirmation is wanted, hand the
+                // toggle to the core instead: it re-checks the relationship, then
+                // raises the confirm event that MainViewController presents.
+                if following ? state.confirmUnfollow : state.confirmFollow {
+                    state.followToggle(accountId: accountId, acct: acct)
+                } else {
+                    state.setRelationship(accountId: accountId,
+                                          action: following ? "unfollow" : "follow", acct: acct)
+                }
             })
             let muting = profile.muting ?? false
             items.append(Item(title: muting ? "Unmute" : "Mute", pops: true) {

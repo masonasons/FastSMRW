@@ -499,6 +499,8 @@ std::optional<AppSettings> show_settings_dialog(GtkWindow* parent, AppSettings s
         b.check(p, "_Favoriting", &settings.confirm_favorite);
         b.check(p, "Un_favoriting", &settings.confirm_unfavorite);
         b.check(p, "_Clearing a timeline", &settings.confirm_clear_timeline);
+        b.check(p, "Fo_llowing a user", &settings.confirm_follow);
+        b.check(p, "U_nfollowing a user", &settings.confirm_unfollow);
         b.check(p, "Bloc_king a user", &settings.confirm_block);
         b.check(p, "_Unblocking a user", &settings.confirm_unblock);
         b.check(p, "_Deleting a post", &settings.confirm_delete_post);

@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,6 +50,9 @@ fun ProfileScreen(
     var following by remember(profile.accountId) { mutableStateOf(profile.following) }
     var requested by remember(profile.accountId) { mutableStateOf(profile.requested) }
     var showReport by remember(profile.accountId) { mutableStateOf(false) }
+    // Set while the Confirmation setting says to ask before following/unfollowing.
+    var pendingFollow by remember(profile.accountId) { mutableStateOf(false) }
+    var pendingUnfollow by remember(profile.accountId) { mutableStateOf(false) }
 
     BackHandler(enabled = true) { onClose() }
 
@@ -83,9 +87,17 @@ fun ProfileScreen(
                     }
                     Button(onClick = {
                         if (following || requested) {
-                            viewModel.setRelationship(profile.accountId, "unfollow", profile.acct)
-                            following = false
-                            requested = false
+                            if (viewModel.confirmsBefore("confirm_unfollow")) {
+                                pendingUnfollow = true
+                            } else {
+                                viewModel.setRelationship(
+                                    profile.accountId, "unfollow", profile.acct,
+                                )
+                                following = false
+                                requested = false
+                            }
+                        } else if (viewModel.confirmsBefore("confirm_follow")) {
+                            pendingFollow = true
                         } else {
                             viewModel.setRelationship(profile.accountId, "follow", profile.acct)
                             // A locked account turns the tap into a pending request; we
@@ -113,6 +125,34 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+
+    if (pendingFollow || pendingUnfollow) {
+        val un = if (pendingUnfollow) "Unfollow" else "Follow"
+        AlertDialog(
+            onDismissRequest = { pendingFollow = false; pendingUnfollow = false },
+            title = { Text(un) },
+            text = { Text("$un @${profile.acct}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (pendingUnfollow) {
+                        viewModel.setRelationship(profile.accountId, "unfollow", profile.acct)
+                        following = false
+                        requested = false
+                    } else {
+                        viewModel.setRelationship(profile.accountId, "follow", profile.acct)
+                        following = true
+                    }
+                    pendingFollow = false
+                    pendingUnfollow = false
+                }) { Text(un) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingFollow = false; pendingUnfollow = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showReport) {

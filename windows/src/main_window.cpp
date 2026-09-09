@@ -1387,7 +1387,14 @@ void MainWindow::ev_user_profile(const json& e) {
             ShellExecuteW(nullptr, L"open", to_wide(url).c_str(), nullptr, nullptr, SW_SHOW);
         break;
     case UserProfileAction::ToggleFollow:
-        set_rel((rel.following || rel.requested) ? "unfollow" : "follow");
+        if (rel.following || rel.requested) {
+            if (!settings_.value("confirm_unfollow", false) ||
+                confirm(hwnd_, (L"Unfollow @" + to_wide(acct) + L"?").c_str(), L"Unfollow"))
+                set_rel("unfollow");
+        } else if (!settings_.value("confirm_follow", false) ||
+                   confirm(hwnd_, (L"Follow @" + to_wide(acct) + L"?").c_str(), L"Follow")) {
+            set_rel("follow");
+        }
         break;
     case UserProfileAction::ToggleMute:
         set_rel(rel.muting ? "unmute" : "mute");
@@ -1459,6 +1466,20 @@ void MainWindow::ev_user_lists(const json& e) {
                       {"account_id", account_id},
                       {"add", (*result)[i].member}});
     }
+}
+
+void MainWindow::ev_confirm(const json& e) {
+    // The core asks, the core wrote the words; we only put a yes/no around them
+    // and send its command back if the answer is yes.
+    const std::string text = e.value("text", std::string{});
+    const std::string title = e.value("title", std::string("Confirm"));
+    if (text.empty() || !e.contains("command"))
+        return;
+    auto g = enter_modal();
+    const bool yes = confirm(hwnd_, to_wide(text).c_str(), to_wide(title).c_str());
+    leave_modal(g);
+    if (yes)
+        dispatch_cmd(e["command"]);
 }
 
 void MainWindow::ev_user_picker(const json& e) {
@@ -1628,7 +1649,18 @@ void MainWindow::show_user_actions() {
         return;
     const char* action = kActs[chosen - 1].action;
     const std::string act(action);
-    if (act == "block" && settings_.value("confirm_block", true)) {
+    if (act == "follow" && settings_.value("confirm_follow", false)) {
+        const std::wstring msg =
+            count > 1 ? L"Follow " + std::to_wstring(count) + L" users?" : L"Follow this user?";
+        if (!confirm(hwnd_, msg.c_str(), L"Follow"))
+            return;
+    } else if (act == "unfollow" && settings_.value("confirm_unfollow", false)) {
+        const std::wstring msg = count > 1
+                                     ? L"Unfollow " + std::to_wstring(count) + L" users?"
+                                     : L"Unfollow this user?";
+        if (!confirm(hwnd_, msg.c_str(), L"Unfollow"))
+            return;
+    } else if (act == "block" && settings_.value("confirm_block", true)) {
         const std::wstring msg =
             count > 1 ? L"Block " + std::to_wstring(count) + L" users?" : L"Block this user?";
         if (!confirm(hwnd_, msg.c_str(), L"Block"))
@@ -2269,6 +2301,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_profile_editor(e);
     else if (ev == "user_profile")
         ev_user_profile(e);
+    else if (ev == "confirm")
+        ev_confirm(e);
     else if (ev == "user_picker")
         ev_user_picker(e);
     else if (ev == "user_suggestions")

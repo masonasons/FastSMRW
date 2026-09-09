@@ -35,6 +35,8 @@ void test_form_encode();
 
 // From test_bluesky_map.cpp
 void test_bluesky_feed_mapping();
+void test_confirm_settings_roundtrip();
+void test_confirm_follow_toggle();
 void test_bluesky_profile_created_at();
 void test_bluesky_plain_post();
 void test_bluesky_notification_mapping();
@@ -179,6 +181,8 @@ int main() {
     test_remote_timeline_source();
     test_form_encode();
     test_bluesky_feed_mapping();
+    test_confirm_settings_roundtrip();
+    test_confirm_follow_toggle();
     test_bluesky_profile_created_at();
     test_bluesky_plain_post();
     test_bluesky_notification_mapping();
