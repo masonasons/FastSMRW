@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import me.masonasons.fastsm.core.FastSmCore
+import me.masonasons.fastsm.push.FastSmMessagingService
 import me.masonasons.fastsm.push.PushManager
 import org.json.JSONArray
 import org.json.JSONObject
@@ -375,6 +376,12 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 						val type = types.getJSONObject(i)
 						add(type.getString("key") to type.getString("label"))
 					}
+				}
+				// Keep the catalog on disk and the notification channels in step
+				// with it: the messaging service names its channels from this and
+				// runs with the app closed, where there's no core to ask.
+				if (PushManager.cacheAlertTypes(getApplication(), _pushAlertTypes.value)) {
+					FastSmMessagingService.ensureChannels(getApplication())
 				}
                 val sp = e.optJSONArray("soundpacks")
                 _soundpacks.value = buildList {

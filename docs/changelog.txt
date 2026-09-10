@@ -6,6 +6,8 @@ FastSMRW changelog
 
 - New: the user profile dialog now shows the date the account joined.
 - New: FastSMRW can now ask before you follow or unfollow someone — turn either on in Settings, Confirmation.
+- New: on Android, mentions, boosts, favorites and each other kind of notification now have their own entry in Android's notification settings, so you can give each one its own sound, vibration or none at all.
+- New: on iPhone, notifications are now grouped by kind in Notification Centre.
 
 0.5.8
 -----

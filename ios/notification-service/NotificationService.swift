@@ -8,8 +8,9 @@
 //  replace the generic fallback with the real notification text.
 //
 //  Mastodon's Web Push payload already carries a composed title + body, which
-//  we display here. (Routing this through the core's own string composition —
-//  for FastSM-consistent phrasing — is a deliberate later refinement.)
+//  we display here, plus the notification type, which picks the category.
+//  (Routing this through the core's own string composition — for
+//  FastSM-consistent phrasing — is a deliberate later refinement.)
 //
 
 import CryptoKit
@@ -59,6 +60,12 @@ final class NotificationService: UNNotificationServiceExtension {
 
         if let title = obj["title"] as? String, !title.isEmpty { content.title = title }
         if let text = obj["body"] as? String { content.body = text }
+        // Tag the push with its Mastodon notification type. The category is what
+        // the app registered at launch; the thread identifier makes iOS group
+        // mentions separately from boosts in Notification Centre.
+        let type = obj["notification_type"] as? String ?? ""
+        content.categoryIdentifier = PushCategory.id(type)
+        content.threadIdentifier = PushCategory.id(type)
         contentHandler(content)
     }
 

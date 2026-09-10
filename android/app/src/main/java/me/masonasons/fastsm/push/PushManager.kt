@@ -12,6 +12,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -36,6 +37,7 @@ object PushManager {
     private const val PREFS = "push"
     private const val ENABLED = "enabled"
     private const val ENDPOINT_ID = "endpoint_id"
+    private const val ALERT_TYPES = "alert_types"
 
     /** The self-hosted relay that bridges Mastodon Web Push to FCM and APNs. */
     private const val RELAY_BASE = "https://push.brynify.me"
@@ -209,6 +211,41 @@ object PushManager {
                 }
             }
         })
+    }
+
+    /**
+     * Remember the core's notification-type catalog (key to label), returning
+     * whether it changed -- the caller rebuilds the notification channels when
+     * it did.
+     *
+     * [FastSmMessagingService] names its channels from this. That service runs
+     * with the app closed and deliberately doesn't start the core, so the labels
+     * -- which the core owns, like every other string -- have to be waiting for
+     * it on disk.
+     */
+    fun cacheAlertTypes(context: Context, types: List<Pair<String, String>>): Boolean {
+        if (types.isEmpty() || types == alertTypes(context)) return false
+        // An array, not an object: it keeps the core's ordering, which is the
+        // order the channels then appear in.
+        val arr = JSONArray()
+        types.forEach { (key, label) ->
+            arr.put(JSONObject().put("key", key).put("label", label))
+        }
+        prefs(context).edit().putString(ALERT_TYPES, arr.toString()).apply()
+        return true
+    }
+
+    /** The cached catalog in the core's order, or empty before settings arrive. */
+    fun alertTypes(context: Context): List<Pair<String, String>> {
+        val raw = prefs(context).getString(ALERT_TYPES, null) ?: return emptyList()
+        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val key = o.optString("key")
+                if (key.isNotEmpty()) add(key to o.optString("label", key))
+            }
+        }
     }
 
     private fun prefs(context: Context) =

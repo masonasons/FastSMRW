@@ -184,5 +184,11 @@ time you turn it on. Tapping a notification opens FastSMRW.
 Notifications cover every Mastodon account you are signed in to. Bluesky does
 not offer them, so accounts there are skipped.
 
+Each kind of notification — mentions, boosts, favorites, follows and the rest —
+gets its own entry in Android's notification settings for FastSMRW, so you can
+give each one a different sound, turn vibration on or off, or silence one kind
+without losing the others. Long-press a notification, or open the system
+Settings for FastSMRW, to get there.
+
 The text of a notification is encrypted by your Mastodon server and only
 decrypted on your phone — the relay that wakes the app never sees it.

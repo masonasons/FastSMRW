@@ -1029,6 +1029,9 @@ final class MainViewController: UIViewController {
     /// that would disturb the reading position.
     private func settingsChanged() {
         applyTabBarPosition()
+        // The catalog only exists once the core has sent settings, so register
+        // the notification categories from here rather than at launch.
+        PushManager.shared.registerCategories(types: state.pushAlertTypes)
         for cell in tableView.visibleCells {
             guard let postCell = cell as? PostCell,
                   let indexPath = tableView.indexPath(for: cell),

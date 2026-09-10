@@ -40,6 +40,7 @@ class FastSmMessagingService : FirebaseMessagingService() {
         var title = getString(R.string.app_name)
         var text = "New notification"
         var id = 0
+        var type = ""
 
         if (blob != null) {
             val payload = runCatching {
@@ -64,31 +65,68 @@ class FastSmMessagingService : FirebaseMessagingService() {
                     // Replace an earlier notification about the same event
                     // instead of stacking duplicates.
                     id = o.optString("notification_id").hashCode()
+                    // Mastodon says what kind of notification this is; that
+                    // picks the channel, so mentions and boosts can sound
+                    // different (or not at all) in Android's own settings.
+                    type = o.optString("notification_type")
                 }
             }
         }
-        show(applicationContext, id, title, text)
+        show(applicationContext, id, title, text, type)
     }
 
     companion object {
         private const val TAG = "FastSmPush"
-        private const val CHANNEL = "notifications"
 
-        /** Create the notification channel; safe to call repeatedly. */
-        fun ensureChannel(context: Context) {
+        /** The single channel everything used before there was one per type. */
+        private const val LEGACY_CHANNEL = "notifications"
+
+        /**
+         * Where a notification type Android has never heard of goes -- Mastodon
+         * adds types over time, and one arriving before FastSMRW knows its name
+         * still has to be shown somewhere.
+         */
+        private const val OTHER_CHANNEL = "push_other"
+
+        private fun channelId(type: String) =
+            if (type.isEmpty()) OTHER_CHANNEL else "push_$type"
+
+        /**
+         * Create one channel per notification type, so mentions, boosts,
+         * favorites and the rest each get their own sound, vibration and
+         * importance in Android's Settings. Safe to call repeatedly: creating a
+         * channel that exists is a no-op and never overwrites what the user has
+         * since changed.
+         *
+         * The names come from the core's catalog, cached by [PushManager] -- this
+         * runs with the app closed, so there's no core to ask.
+         */
+        fun ensureChannels(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-            val channel = NotificationChannel(
-                CHANNEL,
-                "Notifications",
-                NotificationManager.IMPORTANCE_HIGH,
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            val types = PushManager.alertTypes(context)
+            for ((key, label) in types) {
+                manager.createNotificationChannel(
+                    // HIGH across the board matches what the single channel did,
+                    // so upgrading doesn't quietly make anything less noticeable.
+                    // Turning individual ones down is now the user's to do.
+                    NotificationChannel(channelId(key), label, NotificationManager.IMPORTANCE_HIGH)
+                )
+            }
+            manager.createNotificationChannel(
+                NotificationChannel(OTHER_CHANNEL, "Other", NotificationManager.IMPORTANCE_HIGH)
             )
-            channel.description = "Mentions, boosts, favorites, follows and other activity."
-            context.getSystemService(NotificationManager::class.java)
-                ?.createNotificationChannel(channel)
+            // Only retire the old catch-all once the real channels exist, so a
+            // push can never land on a channel that isn't there.
+            if (types.isNotEmpty()) manager.deleteNotificationChannel(LEGACY_CHANNEL)
         }
 
-        private fun show(context: Context, id: Int, title: String, text: String) {
-            ensureChannel(context)
+        private fun show(context: Context, id: Int, title: String, text: String, type: String) {
+            ensureChannels(context)
+            // An unknown type, or one whose channel somehow isn't there yet,
+            // falls back rather than vanishing.
+            val known = PushManager.alertTypes(context).any { it.first == type }
+            val channel = if (known) channelId(type) else OTHER_CHANNEL
             val tap = PendingIntent.getActivity(
                 context,
                 0,
@@ -96,7 +134,7 @@ class FastSmMessagingService : FirebaseMessagingService() {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            val notification = NotificationCompat.Builder(context, CHANNEL)
+            val notification = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(title)
                 .setContentText(text)

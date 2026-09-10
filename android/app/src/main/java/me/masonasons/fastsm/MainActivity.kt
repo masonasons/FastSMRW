@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
         // land while the app is closed -- so create it now, not when the
         // Notifications setting is opened. Renewing the subscription itself
         // waits for the accounts to load (see CoreViewModel).
-        FastSmMessagingService.ensureChannel(this)
+        FastSmMessagingService.ensureChannels(this)
         handleOAuthRedirect(intent)
         setContent {
             FastSmTheme {

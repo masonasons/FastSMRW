@@ -140,6 +140,8 @@ targets:
       # Reuse the app's key store + decryption code (compiled into the extension).
       - path: src/WebPushKeys.swift
       - path: src/WebPushDecrypt.swift
+      # The category identifiers the app registers, so both sides agree.
+      - path: src/PushCategory.swift
     dependencies:
       - sdk: UserNotifications.framework
     settings:

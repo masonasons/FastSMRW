@@ -88,6 +88,22 @@ final class PushManager: NSObject {
         requestAuthorizationAndRegister()
     }
 
+    /// Tell iOS about one category per Mastodon notification type, named by the
+    /// core's catalog. The Notification Service Extension stamps each push with
+    /// the matching identifier, which is what lets iOS group mentions apart from
+    /// boosts and gives us somewhere to hang per-type actions later.
+    ///
+    /// Unlike Android's channels, an iOS category carries no per-type sound —
+    /// Apple doesn't offer that — so this is grouping and future actions only.
+    func registerCategories(types: [(key: String, label: String)]) {
+        guard !types.isEmpty else { return }
+        let categories = types.map { type in
+            UNNotificationCategory(identifier: PushCategory.id(type.key), actions: [],
+                                   intentIdentifiers: [], options: [])
+        }
+        UNUserNotificationCenter.current().setNotificationCategories(Set(categories))
+    }
+
     /// Ask permission and, if granted, register with APNs. Safe to call more
     /// than once — iOS shows the system prompt only the first time.
     func requestAuthorizationAndRegister() {
