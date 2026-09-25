@@ -108,25 +108,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !status.silent {
                 let alert = NSAlert()
                 alert.messageText = "You’re up to date."
-                alert.informativeText = "FastSMRW \(CoreClient.version) is the latest version."
+				alert.informativeText = status.branch == "latest"
+					? "You’re running the latest build of FastSMRW."
+					: "FastSMRW \(CoreClient.version) is the latest version."
                 alert.addButton(withTitle: "OK")
                 present(alert, on: window) { _ in }
             }
             return
         }
+		guard !status.dmgUrl.isEmpty else {
+			if !status.silent {
+				ErrorAlert.present("Mac update isn't available yet.",
+					detail: "The selected release has no Mac download yet. Check again later.",
+					in: window)
+			}
+			return
+		}
         let alert = NSAlert()
-        alert.messageText = "Update available: \(status.version)"
-        alert.informativeText = status.notes.isEmpty ? "A new version of FastSMRW is available."
+		alert.messageText = status.branch == "latest"
+			? "New build available: \(status.version)"
+			: "Update available: \(status.version)"
+		alert.informativeText = status.notes.isEmpty
+			? (status.branch == "latest" ? "A new build of FastSMRW is available."
+				: "A new version of FastSMRW is available.")
             : status.notes
         alert.addButton(withTitle: "Download")
         alert.addButton(withTitle: "Later")
         present(alert, on: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            if !status.dmgUrl.isEmpty {
-                self?.downloadAndOpenDMG(status.dmgUrl)
-            } else if let url = URL(string: status.downloadUrl) {
-                NSWorkspace.shared.open(url) // no Mac disk image; open the release page
-            }
+			self?.downloadAndOpenDMG(status.dmgUrl)
         }
     }
 

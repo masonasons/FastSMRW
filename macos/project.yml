@@ -23,6 +23,19 @@ targets:
   fastsm_core:
     type: library.static
     platform: macOS
+    preBuildScripts:
+      - name: Embed build commit
+        basedOnDependencyAnalysis: false
+        script: |
+          COMMIT=$(/usr/bin/git -C "$SRCROOT/.." rev-parse --short HEAD 2>/dev/null || true)
+          HEADER="$DERIVED_FILE_DIR/fastsm_build_commit.h"
+          mkdir -p "$DERIVED_FILE_DIR"
+          printf '#define FASTSM_BUILD_COMMIT "%s"\n' "$COMMIT" > "$HEADER.tmp"
+          if ! cmp -s "$HEADER.tmp" "$HEADER"; then
+            mv "$HEADER.tmp" "$HEADER"
+          else
+            rm "$HEADER.tmp"
+          fi
     sources:
       # The whole portable core, minus the Windows-only WinHTTP transport. This
       # is capi/fastsm_core.cpp + net/darwin_http_client.mm + everything the
@@ -38,6 +51,7 @@ targets:
           - ../core/include
           - ../deps
           - ../deps/stb_vorbis
+          - $(DERIVED_FILE_DIR)
         # stb_vorbis.c is noisy; don't let its warnings clutter the build.
         GCC_WARN_UNUSED_FUNCTION: NO
         GCC_WARN_UNUSED_VARIABLE: NO

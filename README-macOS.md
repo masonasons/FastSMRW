@@ -198,5 +198,8 @@ versions of FastSM:
   secondary action, keeping the media player in the background, and moving extra
   reply mentions to the end.
 - Advanced — how many pages of posts to fetch per load.
+- Updates — choose Stable version releases or every new build from main, and
+  whether to check automatically at startup. Use Application > Check for Updates
+  to download the selected Mac disk image.
 - Confirmation — ask before boosting, unboosting, liking, unliking, clearing a
   timeline, blocking, unblocking, or deleting a post.

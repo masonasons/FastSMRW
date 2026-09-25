@@ -472,12 +472,10 @@ final class AppState {
     }
     func deleteList(id: String) { client.send("delete_list", ["id": id]) }
 
-    // Updates. Mac checks the version-tagged "stable" channel (the commit-based
-    // "latest" channel needs an embedded build commit, which the Mac build lacks
-    // — same rationale as Android).
-    func checkForUpdate(silent: Bool) {
-        client.send("check_for_update", ["silent": silent, "branch": "stable"])
-    }
+	// The core uses the saved channel; iOS does not invoke this update flow.
+	func checkForUpdate(silent: Bool) {
+		client.send("check_for_update", ["silent": silent])
+	}
 
     func getClientFilter() { client.send("get_client_filter") }
     func setClientFilter(_ filter: [String: Any]) { client.send("set_client_filter", ["filter": filter]) }

@@ -3,7 +3,7 @@
 //
 //  The preferences window: a toolbar-style tab view mirroring the Windows
 //  settings pages (General, Timelines, Audio, Speech, Behavior, Advanced,
-//  Confirmation). Each control reads from the core's settings and writes back
+//  Updates, Confirmation). Each control reads from the core's settings and writes back
 //  through update_settings, which the core applies live.
 //
 //  Deferred: the per-category reorderable "Speech Details" field lists — those
@@ -152,6 +152,17 @@ final class SettingsWindowController: NSWindowController {
         tab("Advanced", "wrench.and.screwdriver") { p in
             p.intRow("API pages per fetch:", key: "fetch_pages", default: 3, min: 1, max: 10)
         }
+
+		tab("Updates", "arrow.down.circle") { p in
+			let channels = [("Stable (version updates)", "stable"),
+				("Latest (every build)", "latest")]
+			p.popup("Update channel:", options: channels,
+				key: "update_branch", default: "stable")
+			p.checkbox("Check for updates automatically at startup",
+				key: "check_updates_on_startup", default: true)
+			p.label("Stable offers versioned releases. Latest follows new builds from main.")
+			p.label("Use Application > Check for Updates to check now.")
+		}
 
         tab("Confirmation", "checkmark.shield") { p in
             p.checkbox("Confirm boost", key: "confirm_boost", default: false)
@@ -341,6 +352,12 @@ final class SettingsPane: NSViewController {
         handlers[ObjectIdentifier(button)] = { _ in action() }
         stack.addArrangedSubview(button)
     }
+
+	func label(_ text: String) {
+		let label = NSTextField(wrappingLabelWithString: text)
+		label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		stack.addArrangedSubview(label)
+	}
 
     // MARK: Helpers
 

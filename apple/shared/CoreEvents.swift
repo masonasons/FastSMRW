@@ -494,28 +494,26 @@ struct AccountSettings: Decodable {
     }
 }
 
-/// Result of a check_for_update. Mac uses the `dmg_url` (a .dmg release asset);
-/// falls back to opening `download_url` if none.
+/// Result of a check_for_update. Mac downloads the `dmg_url` asset.
 struct UpdateStatus: Decodable {
     var silent = false
     var available = false
+	var branch = "stable"
     var version = ""
     var notes = ""
-    var downloadUrl = ""
     var dmgUrl = ""
     var error = ""
     enum CodingKeys: String, CodingKey {
-        case silent, available, version, notes, error
-        case downloadUrl = "download_url"
+		case silent, available, branch, version, notes, error
         case dmgUrl = "dmg_url"
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         silent = try c.decodeIfPresent(Bool.self, forKey: .silent) ?? false
         available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? false
+		branch = try c.decodeIfPresent(String.self, forKey: .branch) ?? "stable"
         version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
-        downloadUrl = try c.decodeIfPresent(String.self, forKey: .downloadUrl) ?? ""
         dmgUrl = try c.decodeIfPresent(String.self, forKey: .dmgUrl) ?? ""
         error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
     }

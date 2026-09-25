@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.0
 -----
 
+- New: on the Mac, choose Stable version releases or every new build from main in Settings, Updates, and choose whether to check at startup.
 - Fixed: on iPhone, posts with multiple lines now display with their original line breaks.
 - New: on iPhone, choose whether the VoiceOver magic tap uses your secondary action, opens compose, or leaves the gesture to iOS; a magic tap set to View Media opens compose when a post has no playable media.
 - Fixed: on Mastodon, posting no longer fails with an error sound when you have many timelines open; background refreshing now slows down before it uses up your server's request limit.

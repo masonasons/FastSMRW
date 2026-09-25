@@ -19,6 +19,10 @@ CORE=core/src
 CXXFLAGS=(-std=c++20 -fexceptions -frtti -O2 -g
     -I core/include -I deps -I deps/stb_vorbis
     -Wall -Wno-deprecated-declarations)
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || true)
+if [ -n "$COMMIT" ]; then
+    CXXFLAGS+=("-DFASTSM_BUILD_COMMIT=\"$COMMIT\"")
+fi
 
 # Portable core sources (mirrors android/app/src/main/cpp/CMakeLists.txt), plus
 # the C-ABI factory. Windows-only winhttp_client is excluded; the Darwin

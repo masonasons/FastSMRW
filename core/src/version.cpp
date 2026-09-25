@@ -1,5 +1,9 @@
 #include "fastsm/fastsm.hpp"
 
+#if defined(__APPLE__) && __has_include("fastsm_build_commit.h")
+#include "fastsm_build_commit.h"
+#endif
+
 namespace fastsm {
 
 const char* version() {
