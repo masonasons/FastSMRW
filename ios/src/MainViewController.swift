@@ -292,6 +292,9 @@ final class MainViewController: UIViewController {
         state.onFollowRequestPrompt = { [weak self] accountId, acct in
             self?.promptFollowRequest(accountId: accountId, acct: acct)
         }
+        state.onMessageRequestPrompt = { [weak self] rowId, title, text in
+            self?.promptMessageRequest(rowId: rowId, title: title, text: text)
+        }
         state.onConfirm = { [weak self] title, text, command in
             guard let self else { return }
             // The core wrote both strings; we only wrap them in an alert and hand
@@ -303,6 +306,21 @@ final class MainViewController: UIViewController {
             })
             self.topPresenter.present(alert, animated: true)
         }
+    }
+
+    /// Accept/Dismiss a message request (activating its row). Accepting lets that
+    /// person's held notifications through from now on; dismissing keeps them filtered.
+    /// The core wrote both strings.
+    private func promptMessageRequest(rowId: String, title: String, text: String) {
+        let alert = UIAlertController(title: title, message: text, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Accept", style: .default) { [weak self] _ in
+            self?.state.messageRequestAction(rowId: rowId, accept: true)
+        })
+        alert.addAction(UIAlertAction(title: "Dismiss", style: .destructive) { [weak self] _ in
+            self?.state.messageRequestAction(rowId: rowId, accept: false)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        topPresenter.present(alert, animated: true)
     }
 
     /// Accept/Reject a follow request (activating its notification row).
@@ -938,6 +956,22 @@ final class MainViewController: UIViewController {
                         self.state.clearTimeline()
                     }
                 },
+                // The desktop and Mac apps both offer this; iOS had the single-timeline
+                // clear only.
+                UIAction(title: "Clear All Timelines",
+                         image: UIImage(systemName: "trash.slash"),
+                         attributes: .destructive) { [weak self] _ in
+                    guard let self else { return }
+                    if self.state.confirmClearTimeline {
+                        confirm("Clear All Timelines",
+                                message: "Remove all loaded posts from every open timeline?",
+                                actionTitle: "Clear All", on: self) { [weak self] in
+                            self?.state.clearAllTimelines()
+                        }
+                    } else {
+                        self.state.clearAllTimelines()
+                    }
+                },
             ]
             let index = self.state.currentIndex
             if self.state.timelines.indices.contains(index),
@@ -948,7 +982,13 @@ final class MainViewController: UIViewController {
                     self?.state.closeTimeline()
                 })
             }
-            items.append(UIMenu(options: .displayInline, children: timelineItems))
+            // A named submenu, not an inline run: inline put Find/Filter/Clear/Close
+            // loose in a flat list of fifteen, which is a lot of swiping to discover
+            // and gave no clue they were about the focused timeline. Named after the
+            // desktop's Timeline menu so the two read the same.
+            items.append(UIMenu(title: "Timeline",
+                                image: UIImage(systemName: "list.bullet.rectangle"),
+                                children: timelineItems))
             var accountItems: [UIMenuElement] = [
                 UIAction(title: "Account Settings…",
                          image: UIImage(systemName: "person.crop.circle.badge.checkmark")) {
@@ -981,8 +1021,11 @@ final class MainViewController: UIViewController {
                     }
                 })
             }
+            // Also a real submenu now. The handle stays in the title so you can tell
+            // which account these act on without opening it.
             let accountTitle = self.state.currentAccountHandle ?? "Accounts"
-            items.append(UIMenu(title: accountTitle, options: .displayInline,
+            items.append(UIMenu(title: accountTitle,
+                                image: UIImage(systemName: "person.crop.circle"),
                                 children: accountItems))
             items.append(UIMenu(title: "Manage", image: UIImage(systemName: "folder"),
                                 children: [

@@ -73,6 +73,9 @@ final class AppState {
     /// Enter on a follow-request notification: show Accept/Reject for
     /// (account_id, acct) and answer with setRelationship.
     var onFollowRequestPrompt: ((String, String) -> Void)?
+    /// Enter on a message-request row: show Accept/Dismiss for (row id, title, text).
+    /// The core wrote both strings; the UI only wraps them in an alert.
+    var onMessageRequestPrompt: ((String, String, String) -> Void)?
     /// The core's "UserActions" request (Enter on a user row when enter_user_action
     /// is "actions"): the Mac's equivalent is opening the user profile dialog.
     var onUserActionsMenu: (() -> Void)?
@@ -199,6 +202,18 @@ final class AppState {
             let accountId = obj["account_id"] as? String ?? ""
             let acct = obj["acct"] as? String ?? ""
             onFollowRequestPrompt?(accountId, acct)
+            return
+        }
+        // Enter on a message-request row: the core asks for the native Accept/Dismiss
+        // choice, answered with messageRequestAction (a user_action, so the core picks
+        // the request id out of the row rather than the UI guessing at it).
+        if let data = json.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           obj["event"] as? String == "message_request_prompt" {
+            let rowId = obj["row_id"] as? String ?? ""
+            let title = obj["title"] as? String ?? "Message request"
+            let text = obj["text"] as? String ?? ""
+            onMessageRequestPrompt?(rowId, title, text)
             return
         }
         guard let event = CoreEvent.decode(json) else { return }
@@ -537,6 +552,19 @@ final class AppState {
     }
     func setRelationship(accountId: String, action: String, acct: String) {
         client.send("set_relationship", ["account_id": accountId, "action": action, "acct": acct])
+    }
+    /// Accept or dismiss a Mastodon message request. Sent as a user_action so the core
+    /// resolves the request id from the row itself: setRelationship's verbs all take an
+    /// account id, and the accept/dismiss endpoints act on the request instead.
+    func messageRequestAction(rowId: String, accept: Bool) {
+        client.send("user_action", [
+            "action": accept ? "accept_notification_request" : "dismiss_notification_request",
+            "ids": [rowId],
+        ])
+    }
+    /// The buffer of people whose notifications the server is holding for approval.
+    func openMessageRequests() {
+        client.send("spawn_timeline", ["kind": "notification_requests"])
     }
 
     func toggleBoost(id: String) { client.send("toggle_boost", ["id": id]) }

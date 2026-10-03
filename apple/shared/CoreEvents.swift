@@ -45,6 +45,12 @@ struct Row: Decodable, Equatable {
     var isMine = false
     var gapAfter = false
     var followRequest = false
+    /// A Mastodon message-request row: Enter accepts or dismisses it. `requestId` is
+    /// the REQUEST's id, a different object from `accountId` -- the accept and dismiss
+    /// endpoints take the former.
+    var notificationRequest = false
+    var requestId: String?
+    var pendingNotifications = 0
     var accountId: String?
     var acct: String?
     /// Author timestamp + conversation key, for synchronous movement-unit
@@ -72,6 +78,9 @@ struct Row: Decodable, Equatable {
         case isMine = "is_mine"
         case gapAfter = "gap_after"
         case followRequest = "follow_request"
+        case notificationRequest = "notification_request"
+        case requestId = "request_id"
+        case pendingNotifications = "pending_notifications"
         case accountId = "account_id"
         case favoritesCount = "favorites_count"
         case boostsCount = "boosts_count"
@@ -94,6 +103,10 @@ struct Row: Decodable, Equatable {
         isMine = try c.decodeIfPresent(Bool.self, forKey: .isMine) ?? false
         gapAfter = try c.decodeIfPresent(Bool.self, forKey: .gapAfter) ?? false
         followRequest = try c.decodeIfPresent(Bool.self, forKey: .followRequest) ?? false
+        notificationRequest =
+            try c.decodeIfPresent(Bool.self, forKey: .notificationRequest) ?? false
+        requestId = try c.decodeIfPresent(String.self, forKey: .requestId)
+        pendingNotifications = try c.decodeIfPresent(Int.self, forKey: .pendingNotifications) ?? 0
         accountId = try c.decodeIfPresent(String.self, forKey: .accountId)
         acct = try c.decodeIfPresent(String.self, forKey: .acct)
         time = try c.decodeIfPresent(Int.self, forKey: .time)

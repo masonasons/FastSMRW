@@ -88,6 +88,9 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
         state.onFollowRequestPrompt = { [weak self] accountId, acct in
             self?.promptFollowRequest(accountId: accountId, acct: acct)
         }
+        state.onMessageRequestPrompt = { [weak self] rowId, title, text in
+            self?.promptMessageRequest(rowId: rowId, title: title, text: text)
+        }
         state.onConfirm = { [weak self] title, text, command in
             // The core wrote both strings; we only wrap them in an alert and hand
             // its command back if the answer is yes.
@@ -353,6 +356,31 @@ final class TimelineViewController: NSViewController, NSTableViewDataSource, NST
             } else if r == .alertSecondButtonReturn {
                 self.state.setRelationship(accountId: accountId, action: "reject_request",
                                            acct: acct)
+            }
+        }
+        if let window = view.window {
+            alert.beginSheetModal(for: window, completionHandler: respond)
+        } else {
+            respond(alert.runModal())
+        }
+    }
+
+    /// Accept/Dismiss a message request. Accepting lets that person's held
+    /// notifications through from now on; dismissing keeps them filtered. The core wrote
+    /// both strings; this only wraps them in an alert.
+    private func promptMessageRequest(rowId: String, title: String, text: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        alert.addButton(withTitle: "Accept")
+        alert.addButton(withTitle: "Dismiss")
+        alert.addButton(withTitle: "Cancel")
+        let respond: (NSApplication.ModalResponse) -> Void = { [weak self] r in
+            guard let self else { return }
+            if r == .alertFirstButtonReturn {
+                self.state.messageRequestAction(rowId: rowId, accept: true)
+            } else if r == .alertSecondButtonReturn {
+                self.state.messageRequestAction(rowId: rowId, accept: false)
             }
         }
         if let window = view.window {
