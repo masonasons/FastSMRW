@@ -54,6 +54,12 @@ data class RowUi(
     val groupActors: String,
     // A follow-request notification: tap offers Accept/Reject for [accountId].
     val followRequest: Boolean,
+    // A Mastodon message-request row: tap offers Accept/Dismiss. [requestId] is the
+    // REQUEST's id -- the accept/dismiss endpoints take it, not [accountId]. The
+    // question itself is composed by the core, so it reads the same on every platform.
+    val notificationRequest: Boolean,
+    val requestId: String,
+    val requestPrompt: String,
     val accountId: String,
     val acct: String,
     val favoritesCount: Int, // >0 -> "See who favorited" is offered
@@ -338,6 +344,50 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     val hashtagTimelinePicker: StateFlow<List<String>?> = _hashtagTimelinePicker.asStateFlow()
 
     /** Timelines the user can open (Add-timeline / search screen). */
+    /**
+     * The focused timeline's display filter, as the core last reported it: the flag map
+     * plus the required-text string. Null until a client_filter event arrives, which is
+     * how the filter screen knows to wait rather than opening with everything "on".
+     */
+    /** One of the account's lists. */
+    data class ListUi(val id: String, val title: String)
+
+    /** A hashtag you follow; [following] is false once you unfollow it. */
+    data class FollowedTagUi(val name: String, val following: Boolean)
+
+    /** One keyword inside a server filter. */
+    data class FilterKeywordUi(val id: String, val keyword: String, val wholeWord: Boolean)
+
+    /**
+     * A server-side filter: the instance applies it, so it works in every client.
+     * [action] is "warn" or "hide"; [context] names the timelines it applies to.
+     */
+    data class ServerFilterUi(
+        val id: String,
+        val title: String,
+        val action: String,
+        val context: List<String>,
+        val keywords: List<FilterKeywordUi>,
+    )
+
+    // null = not loaded yet; the screens wait rather than showing an empty list as if
+    // the account genuinely had none.
+    private val _lists = MutableStateFlow<List<ListUi>?>(null)
+    val lists: StateFlow<List<ListUi>?> = _lists.asStateFlow()
+    private val _followedTags = MutableStateFlow<List<FollowedTagUi>?>(null)
+    val followedTags: StateFlow<List<FollowedTagUi>?> = _followedTags.asStateFlow()
+    private val _serverFilters = MutableStateFlow<List<ServerFilterUi>?>(null)
+    val serverFilters: StateFlow<List<ServerFilterUi>?> = _serverFilters.asStateFlow()
+    // False when the selected account can't do these at all (Bluesky): the screens say
+    // so instead of looking broken.
+    private val _listsSupported = MutableStateFlow(true)
+    val listsSupported: StateFlow<Boolean> = _listsSupported.asStateFlow()
+    private val _serverFiltersSupported = MutableStateFlow(true)
+    val serverFiltersSupported: StateFlow<Boolean> = _serverFiltersSupported.asStateFlow()
+
+    private val _clientFilter = MutableStateFlow<Pair<Map<String, Boolean>, String>?>(null)
+    val clientFilter: StateFlow<Pair<Map<String, Boolean>, String>?> = _clientFilter.asStateFlow()
+
     private val _spawnables = MutableStateFlow<List<SpawnableUi>>(emptyList())
     val spawnables: StateFlow<List<SpawnableUi>> = _spawnables.asStateFlow()
 
@@ -478,6 +528,9 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                 muted = r.optBoolean("muted"),
                                 groupActors = r.optString("group_actors"),
                                 followRequest = r.optBoolean("follow_request"),
+                                notificationRequest = r.optBoolean("notification_request"),
+                                requestId = r.optString("request_id"),
+                                requestPrompt = r.optString("request_prompt"),
                                 accountId = r.optString("account_id"),
                                 acct = r.optString("acct"),
                                 favoritesCount = r.optInt("favorites_count"),
@@ -649,6 +702,75 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
+            "lists" -> {
+                _listsSupported.value = e.optBoolean("supported", true)
+                val arr = e.optJSONArray("lists")
+                _lists.value = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val l = arr.getJSONObject(i)
+                        add(ListUi(l.optString("id"), l.optString("title")))
+                    }
+                }
+            }
+            "followed_hashtags" -> {
+                val arr = e.optJSONArray("tags")
+                _followedTags.value = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val t = arr.getJSONObject(i)
+                        add(FollowedTagUi(t.optString("name"), t.optBoolean("following", true)))
+                    }
+                }
+            }
+            "server_filters" -> {
+                _serverFiltersSupported.value = e.optBoolean("supported", true)
+                val arr = e.optJSONArray("filters")
+                _serverFilters.value = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val f = arr.getJSONObject(i)
+                        val ctx = f.optJSONArray("context")
+                        val kws = f.optJSONArray("keywords")
+                        add(
+                            ServerFilterUi(
+                                id = f.optString("id"),
+                                title = f.optString("title"),
+                                action = f.optString("action").ifBlank { "warn" },
+                                context = buildList {
+                                    if (ctx != null) for (j in 0 until ctx.length()) {
+                                        add(ctx.optString(j))
+                                    }
+                                },
+                                keywords = buildList {
+                                    if (kws != null) for (j in 0 until kws.length()) {
+                                        val k = kws.getJSONObject(j)
+                                        add(
+                                            FilterKeywordUi(
+                                                k.optString("id"),
+                                                k.optString("keyword"),
+                                                k.optBoolean("whole_word"),
+                                            )
+                                        )
+                                    }
+                                },
+                            )
+                        )
+                    }
+                }
+            }
+            "client_filter" -> {
+                val f = e.optJSONObject("filter")
+                if (f == null) {
+                    _clientFilter.value = null
+                } else {
+                    val keys = listOf(
+                        "original", "replies", "replies_to_me", "replies_to_unfollowed",
+                        "threads", "boosts", "quotes", "media", "no_media", "my_posts",
+                        "my_replies",
+                    )
+                    // Absent means "shown": the core's own default for every flag.
+                    _clientFilter.value =
+                        keys.associateWith { f.optBoolean(it, true) } to f.optString("text")
+                }
+            }
             "spawnable_timelines" -> {
                 val arr = e.optJSONArray("timelines")
                 _spawnables.value = buildList {
@@ -738,6 +860,70 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
         core.dispatch("select_timeline") { put("index", index) }
     }
 
+    /**
+     * Drop every loaded post from the focused timeline (it refills on the next refresh).
+     * The confirmation is the front end's job -- confirm_clear_timeline is a setting the
+     * desktop apps honour too.
+     */
+    fun listLists() = core.dispatch("list_lists")
+    fun createList(title: String) = core.dispatch("create_list") { put("title", title) }
+    fun renameList(id: String, title: String) =
+        core.dispatch("rename_list") { put("id", id); put("title", title) }
+    fun deleteList(id: String) = core.dispatch("delete_list") { put("id", id) }
+
+    fun listFollowedHashtags() = core.dispatch("list_followed_hashtags")
+    fun unfollowHashtag(name: String) = core.dispatch("unfollow_hashtag") { put("name", name) }
+
+    fun listServerFilters() = core.dispatch("list_server_filters")
+    fun deleteServerFilter(id: String) = core.dispatch("delete_server_filter") { put("id", id) }
+
+    /**
+     * Create or update a server filter. An empty [id] creates; anything else updates.
+     * [context] is the list of timelines it applies to ("home", "notifications", ...).
+     */
+    fun saveServerFilter(
+        id: String,
+        title: String,
+        action: String,
+        context: List<String>,
+        keywords: List<String>,
+    ) {
+        core.dispatch("save_server_filter") {
+            put("filter", JSONObject().apply {
+                put("id", id)
+                put("title", title)
+                put("action", action)
+                put("context", JSONArray().apply { context.forEach { put(it) } })
+                put("keywords", JSONArray().apply {
+                    keywords.forEach { k ->
+                        put(JSONObject().put("keyword", k).put("whole_word", false))
+                    }
+                })
+            })
+        }
+    }
+
+    fun clearTimeline() = core.dispatch("clear_timeline")
+
+    /** The same, for every open timeline at once. */
+    fun clearAllTimelines() = core.dispatch("clear_all_timelines")
+
+    /** Ask for the focused timeline's display filter, answered with a clientFilter event. */
+    fun getClientFilter() = core.dispatch("get_client_filter")
+
+    /** Apply a display filter (which categories of post to show) to the focused timeline. */
+    fun setClientFilter(flags: Map<String, Boolean>, text: String) {
+        core.dispatch("set_client_filter") {
+            put("filter", JSONObject().apply {
+                flags.forEach { (key, on) -> put(key, on) }
+                put("text", text)
+            })
+        }
+    }
+
+    /** Show everything again. */
+    fun clearClientFilter() = core.dispatch("clear_client_filter")
+
     fun refresh() = core.dispatch("refresh")
 
     fun refreshAll() = core.dispatch("refresh_all")
@@ -811,6 +997,21 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun openUserProfilePicked(rowId: String, accountId: String) {
         _userPicker.value = null
         core.dispatch("open_user_profile") { put("id", rowId); put("account_id", accountId) }
+    }
+
+    /**
+     * Accept or dismiss a Mastodon message request. Sent as a user_action so the core
+     * resolves the request id from the row: setRelationship's verbs all take an account
+     * id, which these endpoints would reject.
+     */
+    fun messageRequestAction(rowId: String, accept: Boolean) {
+        core.dispatch("user_action") {
+            put(
+                "action",
+                if (accept) "accept_notification_request" else "dismiss_notification_request",
+            )
+            put("ids", JSONArray().put(rowId))
+        }
     }
 
     fun setRelationship(accountId: String, action: String, acct: String) =

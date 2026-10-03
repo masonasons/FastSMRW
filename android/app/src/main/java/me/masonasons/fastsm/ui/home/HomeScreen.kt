@@ -65,6 +65,10 @@ import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.RowUi
 import me.masonasons.fastsm.ui.TabUi
 import me.masonasons.fastsm.ui.TrendingTagUi
+import me.masonasons.fastsm.ui.timeline.ClientFilterScreen
+import me.masonasons.fastsm.ui.timeline.FollowedHashtagsScreen
+import me.masonasons.fastsm.ui.timeline.ListsManagerScreen
+import me.masonasons.fastsm.ui.timeline.ServerFiltersScreen
 
 /**
  * The home surface: account picker + timeline tabs + a pager of row lists.
@@ -107,6 +111,16 @@ fun HomeScreen(
     var showUserAnalysis by remember { mutableStateOf(false) }
     // Find in timeline (opened from the overflow menu).
     var showFindDialog by remember { mutableStateOf(false) }
+    // Clear timeline / clear all: confirmed first when the setting asks for it.
+    var confirmClear by remember { mutableStateOf(false) }
+    var confirmClearAll by remember { mutableStateOf(false) }
+    // The display filter screen, shown once the core has answered with the current
+    // filter -- opening it before that would show every switch "on" regardless.
+    var showFilter by remember { mutableStateOf(false) }
+    // The three managers, matching what iOS offers under its "Manage" group.
+    var showLists by remember { mutableStateOf(false) }
+    var showFollowedTags by remember { mutableStateOf(false) }
+    var showServerFilters by remember { mutableStateOf(false) }
     var findText by remember { mutableStateOf("") }
 
     // Keep the pager and the core's selected timeline in sync both ways.
@@ -133,6 +147,9 @@ fun HomeScreen(
             selectedIndex = pagerState.currentPage,
             onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
             onClose = viewModel::closeTimeline,
+            // Clearing the tab you are on; the overflow menu's entry does the same for
+            // the focused timeline.
+            onClear = { index -> viewModel.selectTimeline(index); viewModel.clearTimeline() },
             onPin = viewModel::pinTimeline,
             onMute = viewModel::muteTimeline,
             onMove = viewModel::moveTimeline,
@@ -170,6 +187,37 @@ fun HomeScreen(
                                 onClick = { menuOpen = false; showFindDialog = true },
                             )
                             DropdownMenuItem(
+                                text = { Text("Filter timeline") },
+                                onClick = {
+                                    menuOpen = false
+                                    // Ask first; the screen opens when the answer lands.
+                                    viewModel.getClientFilter()
+                                    showFilter = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear timeline") },
+                                onClick = {
+                                    menuOpen = false
+                                    if (viewModel.confirmsBefore("confirm_clear_timeline", default = true)) {
+                                        confirmClear = true
+                                    } else {
+                                        viewModel.clearTimeline()
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear all timelines") },
+                                onClick = {
+                                    menuOpen = false
+                                    if (viewModel.confirmsBefore("confirm_clear_timeline", default = true)) {
+                                        confirmClearAll = true
+                                    } else {
+                                        viewModel.clearAllTimelines()
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Find next") },
                                 onClick = { menuOpen = false; viewModel.findNext() },
                             )
@@ -184,6 +232,30 @@ fun HomeScreen(
                             DropdownMenuItem(
                                 text = { Text("User analysis") },
                                 onClick = { menuOpen = false; showUserAnalysis = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Manage lists") },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.listLists()
+                                    showLists = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Followed hashtags") },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.listFollowedHashtags()
+                                    showFollowedTags = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Server filters") },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.listServerFilters()
+                                    showServerFilters = true
+                                },
                             )
                             DropdownMenuItem(
                                 text = { Text("Trending hashtags") },
@@ -290,6 +362,7 @@ fun HomeScreen(
                 onReport = viewModel::reportPost,
                 onCopy = viewModel::copyRow,
                 onSetRelationship = viewModel::setRelationship,
+                onMessageRequest = viewModel::messageRequestAction,
             )
         }
     }
@@ -428,6 +501,65 @@ fun HomeScreen(
         )
     }
 
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Clear timeline") },
+            text = { Text("Remove all loaded posts from this timeline?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClear = false
+                    viewModel.clearTimeline()
+                }) { Text("Clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("Cancel") }
+            },
+        )
+    }
+    if (confirmClearAll) {
+        AlertDialog(
+            onDismissRequest = { confirmClearAll = false },
+            title = { Text("Clear all timelines") },
+            text = { Text("Remove all loaded posts from every open timeline?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClearAll = false
+                    viewModel.clearAllTimelines()
+                }) { Text("Clear all") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearAll = false }) { Text("Cancel") }
+            },
+        )
+    }
+    if (showFilter) {
+        val filter by viewModel.clientFilter.collectAsStateWithLifecycle()
+        filter?.let { (flags, text) ->
+            ClientFilterScreen(
+                initial = flags,
+                initialText = text,
+                onApply = { f, t ->
+                    showFilter = false
+                    viewModel.setClientFilter(f, t)
+                },
+                onClear = {
+                    showFilter = false
+                    viewModel.clearClientFilter()
+                },
+                onClose = { showFilter = false },
+            )
+        }
+    }
+    if (showLists) {
+        ListsManagerScreen(vm = viewModel, onClose = { showLists = false })
+    }
+    if (showFollowedTags) {
+        FollowedHashtagsScreen(vm = viewModel, onClose = { showFollowedTags = false })
+    }
+    if (showServerFilters) {
+        ServerFiltersScreen(vm = viewModel, onClose = { showServerFilters = false })
+    }
     if (showUserAnalysis) {
         UserAnalysisDialog(
             onSelect = { category ->
@@ -658,6 +790,7 @@ private fun StatusList(
     onReport: (id: String, category: String, comment: String, forward: Boolean) -> Unit,
     onCopy: (String) -> Unit,
     onSetRelationship: (accountId: String, action: String, acct: String) -> Unit,
+    onMessageRequest: (rowId: String, accept: Boolean) -> Unit,
 ) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -765,6 +898,7 @@ private fun StatusList(
                 onReport = onReport,
                 onCopy = onCopy,
                 onSetRelationship = onSetRelationship,
+                onMessageRequest = onMessageRequest,
             )
         }
     }
@@ -781,6 +915,7 @@ private fun TimelineTabs(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     onClose: (Int) -> Unit,
+    onClear: (Int) -> Unit,
     onPin: (Int) -> Unit,
     onMute: (Int) -> Unit,
     onMove: (Int, String) -> Unit,
@@ -805,6 +940,9 @@ private fun TimelineTabs(
                     add(MenuAction(if (tab.muted) "Unmute sounds" else "Mute sounds") { onMute(index) })
                     if (index > 0) add(MenuAction("Move left") { onMove(index, "up") })
                     if (index < n - 1) add(MenuAction("Move right") { onMove(index, "down") })
+                    // Clearing belongs here too: the tab's actions are the first place
+                    // you look for something that acts on this one timeline.
+                    add(MenuAction("Clear timeline") { onClear(index) })
                     if (tab.dismissable) add(MenuAction("Close tab") { onClose(index) })
                 }
                 val actions = menuActions.toAccessibilityActions()

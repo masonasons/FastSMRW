@@ -74,11 +74,13 @@ fun StatusRow(
     onReport: (id: String, category: String, comment: String, forward: Boolean) -> Unit,
     onCopy: (String) -> Unit,
     onSetRelationship: (accountId: String, action: String, acct: String) -> Unit,
+    onMessageRequest: (rowId: String, accept: Boolean) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showFollowRequest by remember { mutableStateOf(false) }
+    var showMessageRequest by remember { mutableStateOf(false) }
 
     // The user's configured action list, in order, keeping only the actions
     // that apply to this post (the same list drives TalkBack's custom actions
@@ -138,6 +140,7 @@ fun StatusRow(
     // other row opens its thread.
     val primaryOpen: () -> Unit = when {
         row.followRequest -> ({ showFollowRequest = true })
+        row.notificationRequest -> ({ showMessageRequest = true })
         row.groupActors == "favorited_by" -> ({ onOpenFavoritedBy(row.id) })
         row.groupActors == "reblogged_by" -> ({ onOpenRebloggedBy(row.id) })
         else -> ({ onOpenThread(row.id) })
@@ -182,6 +185,26 @@ fun StatusRow(
         )
     }
 
+    if (showMessageRequest) {
+        AlertDialog(
+            onDismissRequest = { showMessageRequest = false },
+            title = { Text("Message request") },
+            // The core wrote this sentence; it is not reassembled here.
+            text = { Text(row.requestPrompt) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMessageRequest = false
+                    onMessageRequest(row.id, true)
+                }) { Text("Accept") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showMessageRequest = false
+                    onMessageRequest(row.id, false)
+                }) { Text("Dismiss") }
+            },
+        )
+    }
     if (showFollowRequest) {
         AlertDialog(
             onDismissRequest = { showFollowRequest = false },
