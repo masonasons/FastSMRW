@@ -227,3 +227,49 @@ void test_form_encode() {
     CHECK_EQ(fastsm::util::form_encode(p),
              std::string("status=hi%20there%20%26%20you&visibility=public"));
 }
+
+void test_mastodon_notification_request_mapping() {
+    // One entry of /api/v1/notifications/requests. The row is the requesting account,
+    // but accept/dismiss act on the request's own id, so that has to survive mapping --
+    // sending the account id to those endpoints would address the wrong object.
+    // notifications_count is documented as a string; some servers send a number, so
+    // both are accepted.
+    const char* kAsString = R"JSON({
+      "id": "4321",
+      "created_at": "2026-09-30T10:00:00.000Z",
+      "notifications_count": "7",
+      "account": {"id": "900", "acct": "stranger@example.social",
+                  "username": "stranger", "display_name": "A Stranger"}
+    })JSON";
+    const User u = mastodon::map_notification_request(json::parse(kAsString));
+    CHECK_EQ(u.id, std::string("900")); // the account, for opening their profile
+    CHECK_EQ(u.notification_request_id, std::string("4321")); // what accept/dismiss uses
+    CHECK_EQ(u.pending_notifications, 7);
+    CHECK_EQ(u.acct, std::string("stranger@example.social"));
+    // The row keys off the account, so two requests from one person can't collide.
+    CHECK_EQ(TimelineItem{u}.id(), std::string("u:900"));
+
+    const char* kAsNumber = R"JSON({
+      "id": "4322", "notifications_count": 2,
+      "account": {"id": "901", "acct": "other", "username": "other"}
+    })JSON";
+    CHECK_EQ(mastodon::map_notification_request(json::parse(kAsNumber)).pending_notifications, 2);
+
+    // A malformed entry must not throw out of the mapper: a missing account yields an
+    // empty user rather than taking the whole timeline down.
+    const User none = mastodon::map_notification_request(json::parse(R"JSON({"id":"5"})JSON"));
+    CHECK_EQ(none.notification_request_id, std::string("5"));
+    CHECK(none.id.empty());
+    CHECK_EQ(none.pending_notifications, 0);
+}
+
+void test_notification_requests_source() {
+    const TimelineSource src = TimelineSource::notification_requests();
+    CHECK_EQ(src.cache_key(), std::string("notificationRequests"));
+    CHECK_EQ(src.title(), std::string("Message Requests"));
+    CHECK(src.is_user_list());      // rows are people: multi-select + batch actions
+    CHECK(src.is_dismissable());    // it's a spawned buffer, so Delete closes it
+    CHECK(!src.is_static());        // fetched and paged, unlike the analysis lists
+    CHECK(!src.paginates_by_item_id()); // pages via the Link header
+    CHECK(!src.new_items_sound_name().has_value()); // not a streaming feed
+}

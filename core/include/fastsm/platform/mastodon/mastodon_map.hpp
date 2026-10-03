@@ -12,6 +12,9 @@
 namespace fastsm::mastodon {
 
 User map_user(const nlohmann::json& j);
+// One entry of /api/v1/notifications/requests: the requesting account, plus the
+// request id and how many notifications are held behind it.
+User map_notification_request(const nlohmann::json& j);
 Status map_status(const nlohmann::json& j);
 Notification map_notification(const nlohmann::json& j);
 // Map one entry of /api/v2/notifications' `notification_groups`, resolving its

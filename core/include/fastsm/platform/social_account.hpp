@@ -316,6 +316,15 @@ public:
     // Accept / reject a pending follow request (id = the requesting account id).
     virtual bool authorize_follow_request(const std::string&) { return false; }
     virtual bool reject_follow_request(const std::string&) { return false; }
+    // Mastodon notification requests. The id is the REQUEST's, not the account's.
+    // Accepting lets that person's held notifications through from now on; dismissing
+    // drops the request and keeps them filtered.
+    virtual bool accept_notification_request(const std::string&) { return false; }
+    virtual bool dismiss_notification_request(const std::string&) { return false; }
+    // Whether this account can hold notifications for approval at all. Bluesky has no
+    // equivalent, so the New Timeline list hides the buffer there rather than offering
+    // one that would always be empty.
+    virtual bool supports_notification_requests() const { return false; }
     // Show or hide a followed account's boosts in the home timeline.
     virtual bool set_show_boosts(const std::string&, bool) { return false; }
 

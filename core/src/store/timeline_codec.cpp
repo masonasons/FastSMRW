@@ -10,8 +10,8 @@ namespace {
 // cleanly (a magic mismatch -> empty) instead of being read with a mismatched
 // reader. v2 added Status::url. v6 added Notification group_key + notifications_count.
 // v7 added Status::filtered + tags. v9 added Bluesky reply-parent metadata.
-// v11 added Status::text_links.
-constexpr char kMagic[4] = {'F', 'S', 'C', 'B'};
+// v11 added Status::text_links. v12 added User notification-request fields.
+constexpr char kMagic[4] = {'F', 'S', 'C', 'C'};
 // Guard against runaway recursion if a file is ever corrupt/misaligned: boost/
 // quote nesting is shallow in practice.
 constexpr int kMaxStatusDepth = 24;
@@ -115,6 +115,10 @@ void write_user(Writer& w, const User& u) {
     w.boolean(u.bot);
     w.boolean(u.locked);
     w.u8(static_cast<std::uint8_t>(u.platform));
+    // Without these a message-request row restored from cache would come back with no
+    // request id, and accepting it would quietly act on nothing.
+    w.str(u.notification_request_id);
+    w.i32(u.pending_notifications);
 }
 
 User read_user(Reader& r) {
@@ -134,6 +138,8 @@ User read_user(Reader& r) {
     u.bot = r.boolean();
     u.locked = r.boolean();
     u.platform = static_cast<Platform>(r.u8());
+    u.notification_request_id = r.str();
+    u.pending_notifications = r.i32();
     return u;
 }
 

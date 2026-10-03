@@ -498,6 +498,10 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     case TimelineSource::Kind::FollowRequests:
         path = "/api/v1/follow_requests"; // rows are accounts; paginates via the Link header
         break;
+    case TimelineSource::Kind::NotificationRequests:
+        // Rows are request objects wrapping an account, not bare accounts.
+        path = "/api/v1/notifications/requests";
+        break;
     case TimelineSource::Kind::Thread:
     case TimelineSource::Kind::SearchPosts:
     case TimelineSource::Kind::SearchPeople:
@@ -534,9 +538,16 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     const bool notif_feed = source.is_notification_timeline(); // Notifications or Mentions
     const bool mentions = source.kind == TimelineSource::Kind::Mentions;
     const bool user_list = source.is_user_list();
+    const bool notif_requests = source.kind == TimelineSource::Kind::NotificationRequests;
     std::string last_id;
     for (const auto& entry : j) {
-        if (user_list) {
+        if (notif_requests) {
+            // The row shows the person, but accept/dismiss act on the request, so the
+            // request id and the held count ride along on the user.
+            User u = mastodon::map_notification_request(entry);
+            last_id = u.notification_request_id; // paginates by request id
+            page.items.push_back(TimelineItem{std::move(u)});
+        } else if (user_list) {
             User u = mastodon::map_user(entry);
             last_id = u.id;
             page.items.push_back(TimelineItem{std::move(u)});
@@ -1199,6 +1210,22 @@ bool MastodonAccount::authorize_follow_request(const std::string& id) {
 bool MastodonAccount::reject_follow_request(const std::string& id) {
     const std::string url =
         credentials_.instance_url + "/api/v1/follow_requests/" + id + "/reject";
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
+bool MastodonAccount::accept_notification_request(const std::string& id) {
+    // POST /api/v1/notifications/requests/:id/accept -- the id is the request's. The
+    // held notifications are delivered and that person stops being filtered.
+    const std::string url =
+        credentials_.instance_url + "/api/v1/notifications/requests/" + id + "/accept";
+    std::string body;
+    long status = 0;
+    return request("POST", url, "", "", body, status);
+}
+bool MastodonAccount::dismiss_notification_request(const std::string& id) {
+    const std::string url =
+        credentials_.instance_url + "/api/v1/notifications/requests/" + id + "/dismiss";
     std::string body;
     long status = 0;
     return request("POST", url, "", "", body, status);

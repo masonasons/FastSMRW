@@ -1,5 +1,6 @@
 #include "fastsm/platform/mastodon/mastodon_map.hpp"
 
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -121,6 +122,21 @@ User map_user(const json& j) {
     u.created_at = date(j, "created_at");
     u.bot = boolean(j, "bot");
     u.locked = boolean(j, "locked");
+    return u;
+}
+
+User map_notification_request(const json& j) {
+    auto account = j.find("account");
+    User u = map_user(account != j.end() && account->is_object() ? *account : json::object());
+    u.notification_request_id = str(j, "id");
+    // notifications_count is documented as a string, and some servers send a number
+    // instead. Accept both rather than silently reading zero.
+    if (auto it = j.find("notifications_count"); it != j.end()) {
+        if (it->is_number())
+            u.pending_notifications = it->get<int>();
+        else if (it->is_string())
+            u.pending_notifications = std::atoi(it->get<std::string>().c_str());
+    }
     return u;
 }
 

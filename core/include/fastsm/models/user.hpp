@@ -25,6 +25,14 @@ struct User {
     bool locked = false;
     Platform platform = Platform::Mastodon;
 
+    // Mastodon notification requests only. The row shows the person, but accept and
+    // dismiss act on the id of the REQUEST, not of the account, so it has to travel
+    // with the row. Empty on every other kind of row.
+    std::string notification_request_id;
+    // How many notifications are being held back behind this request -- the whole
+    // reason the row is worth looking at. 0 when not a notification request.
+    int pending_notifications = 0;
+
     // displayName, falling back to acct when empty.
     const std::string& best_name() const {
         return display_name.empty() ? acct : display_name;

@@ -187,6 +187,10 @@ std::string user_action_label(const std::string& action) {
         return "Accept";
     if (action == "reject_request")
         return "Reject";
+    if (action == "accept_notification_request")
+        return "Accept";
+    if (action == "dismiss_notification_request")
+        return "Dismiss";
     return "Action";
 }
 
@@ -213,7 +217,19 @@ std::string relationship_message(const std::string& action, const std::string& h
         return "Accepted " + at;
     if (action == "reject_request")
         return "Rejected " + at;
+    if (action == "accept_notification_request")
+        return "Accepting notifications from " + at;
+    if (action == "dismiss_notification_request")
+        return "Dismissed the request from " + at;
     return "Done";
+}
+
+// The Accept/Dismiss question for a message request. Composed here so the five front
+// ends render it rather than each writing its own version of the sentence.
+std::string message_request_prompt_text(const std::string& acct, int pending) {
+    const std::string held =
+        pending == 1 ? "1 notification" : std::to_string(pending) + " notifications";
+    return "@" + acct + " has " + held + " waiting. Accept them from now on?";
 }
 
 json features_json(const PlatformFeatures& f) {
@@ -247,6 +263,7 @@ const char* kind_name(TimelineSource::Kind k) {
     case K::Mutes: return "mutes";
     case K::Blocks: return "blocks";
     case K::FollowRequests: return "followRequests";
+    case K::NotificationRequests: return "notificationRequests";
     case K::Trends: return "trends";
     case K::Conversations: return "conversations";
     case K::FavoritedBy: return "favoritedBy";
@@ -277,6 +294,7 @@ std::optional<TimelineSource::Kind> kind_from_name(const std::string& s) {
     if (s == "mutes") return K::Mutes;
     if (s == "blocks") return K::Blocks;
     if (s == "followRequests") return K::FollowRequests;
+    if (s == "notificationRequests") return K::NotificationRequests;
     if (s == "trends") return K::Trends;
     if (s == "conversations") return K::Conversations;
     if (s == "favoritedBy") return K::FavoritedBy;
@@ -1150,6 +1168,20 @@ void CoreSession::cmd_get_spawnable() {
                 tls.push_back({{"kind", "sent"}, {"title", "Sent"}});
         }
         // Parameterized timelines: an "input" label tells the UI to prompt for a value.
+        // Message requests: people whose notifications the server is holding for your
+        // approval. Offered only where the account can actually hold them, so Bluesky
+        // isn't given a buffer that would always be empty.
+        if (account->supports_notification_requests()) {
+            const std::string rk = TimelineSource::notification_requests().cache_key();
+            bool open = false;
+            for (auto& tc : timelines_)
+                if (tc->source().cache_key() == rk) {
+                    open = true;
+                    break;
+                }
+            if (!open)
+                tls.push_back({{"kind", "notification_requests"}, {"title", "Message Requests"}});
+        }
         if (account->platform() == Platform::Mastodon) {
             tls.push_back({{"kind", "hashtag"}, {"title", "Hashtag"}, {"input", "Hashtag"}});
             tls.push_back({{"kind", "search_posts"}, {"title", "Search Posts"}, {"input", "Search"}});
@@ -1526,6 +1558,12 @@ void CoreSession::cmd_spawn_timeline(const json& cmd) {
                           "Mastodon accounts.");
             return;
         }
+    }
+    if (kind == "notification_requests" &&
+        !accounts_.selected()->supports_notification_requests()) {
+        // Bluesky has no notion of holding notifications for approval.
+        emit_announce("Message requests are only available for Mastodon accounts.");
+        return;
     }
     if (auto src = source_from_kind(kind))
         spawn_source(*src);
@@ -2007,6 +2045,10 @@ void CoreSession::do_relationship_action(SocialAccount* acct, const std::string&
             ok = acct->authorize_follow_request(id);
         else if (action == "reject_request")
             ok = acct->reject_follow_request(id);
+        // Deliberately NOT handling accept_notification_request / dismiss here: every
+        // verb above takes an ACCOUNT id, and those two take the request's. Front ends
+        // send them through user_action, which resolves the right id from the row, so
+        // there is one correct path rather than two that disagree about the id.
         loop_.post([this, ok, action, handle] {
             if (!ok) {
                 sound_.play(sound::Earcon::Error);
@@ -2158,14 +2200,21 @@ void CoreSession::cmd_user_action(const json& cmd) {
     const std::string action = cmd.value("action", std::string{});
     if (!acct || !tc || action.empty() || !cmd.contains("ids") || !cmd["ids"].is_array())
         return;
-    // Resolve the selected user-row ids to account ids.
+    // Resolve the selected user-row ids to the id the action actually takes. Accepting
+    // or dismissing a notification request acts on the REQUEST, so sending the account
+    // id there would address the wrong object (or nothing at all).
+    const bool by_request_id =
+        action == "accept_notification_request" || action == "dismiss_notification_request";
     std::vector<std::string> account_ids;
     for (const auto& rid : cmd["ids"]) {
         if (!rid.is_string())
             continue;
         if (const TimelineItem* item = find_item(tc, rid.get<std::string>()))
-            if (const User* u = item->user())
-                account_ids.push_back(u->id);
+            if (const User* u = item->user()) {
+                const std::string id = by_request_id ? u->notification_request_id : u->id;
+                if (!id.empty())
+                    account_ids.push_back(id);
+            }
     }
     if (account_ids.empty())
         return;
@@ -2189,6 +2238,10 @@ void CoreSession::cmd_user_action(const json& cmd) {
                 ok = acct->authorize_follow_request(id);
             else if (action == "reject_request")
                 ok = acct->reject_follow_request(id);
+            else if (action == "accept_notification_request")
+                ok = acct->accept_notification_request(id);
+            else if (action == "dismiss_notification_request")
+                ok = acct->dismiss_notification_request(id);
             if (!ok)
                 ++failures;
         }
@@ -3998,6 +4051,19 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         if (!it)
             return;
         if (it->is_user()) {
+            // A message-request row: Enter acts on the request rather than doing the
+            // configured user action, the same way Enter on a follow-request
+            // notification does. The front end shows its native Accept/Dismiss choice
+            // and answers with user_action, which resolves the request id from the row.
+            if (const User* u = it->user(); u && !u->notification_request_id.empty()) {
+                emit({{"event", "message_request_prompt"},
+                      {"row_id", row},
+                      {"acct", u->acct},
+                      {"pending", u->pending_notifications},
+                      {"title", "Message request"},
+                      {"text", message_request_prompt_text(u->acct, u->pending_notifications)}});
+                return;
+            }
             const std::string& ua = settings_.enter_user_action;
             if (ua == "profile")
                 return cmd_open_user_profile({{"id", row}});
@@ -5116,6 +5182,8 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::mutes();
     if (kind == "blocks")
         return TimelineSource::blocks();
+    if (kind == "notification_requests")
+        return TimelineSource::notification_requests();
     if (kind == "follow_requests")
         return TimelineSource::follow_requests();
     if (kind == "trends")
@@ -5309,6 +5377,18 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
         n && n->notifications_count > 1 && n->status &&
         (n->type == Notification::Kind::Favourite || n->type == Notification::Kind::Reblog))
         r["group_actors"] = n->type == Notification::Kind::Reblog ? "reblogged_by" : "favorited_by";
+    // A message-request row: carry the request id so Enter can accept or dismiss it.
+    // The row's own id is the account's, which these actions must NOT be given.
+    if (const User* u = item.user(); u && !u->notification_request_id.empty()) {
+        r["notification_request"] = true;
+        r["request_id"] = u->notification_request_id;
+        r["account_id"] = u->id;
+        r["acct"] = u->acct;
+        r["pending_notifications"] = u->pending_notifications;
+        // The question to put to the user, so a front end that acts on a tap (rather
+        // than through the core's Enter action) doesn't have to compose it either.
+        r["request_prompt"] = message_request_prompt_text(u->acct, u->pending_notifications);
+    }
     // A follow-request notification: surface the requester so Enter can accept/reject.
     if (const Notification* n = item.notification();
         n && n->type == Notification::Kind::FollowRequest) {

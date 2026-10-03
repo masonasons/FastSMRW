@@ -31,6 +31,9 @@ struct TimelineSource {
         Mutes,       // the account's muted users; rows are users
         Blocks,      // the account's blocked users; rows are users
         FollowRequests, // accounts requesting to follow you; rows are users
+        NotificationRequests, // Mastodon only: people whose notifications are held
+                              // back pending your approval (/api/v1/notifications/
+                              // requests). Rows are users carrying the request id.
         PostUsers,   // the users referenced in one post (author + mentions); rows are
                      // users, seeded from the post (not fetched). param = status id.
         AnalyzedUsers, // result of a User Analysis (e.g. "don't follow you back");
@@ -92,6 +95,8 @@ struct TimelineSource {
             return "Blocked Users";
         case Kind::FollowRequests:
             return "Follow Requests";
+        case Kind::NotificationRequests:
+            return "Message Requests";
         case Kind::PostUsers:
             return title_text.empty() ? "Users in post" : title_text;
         case Kind::AnalyzedUsers:
@@ -153,6 +158,8 @@ struct TimelineSource {
             return "blocks";
         case Kind::FollowRequests:
             return "followRequests";
+        case Kind::NotificationRequests:
+            return "notificationRequests";
         case Kind::PostUsers:
             return "postUsers:" + param;
         case Kind::AnalyzedUsers:
@@ -190,6 +197,7 @@ struct TimelineSource {
     bool is_user_list() const {
         return kind == Kind::Followers || kind == Kind::Following || kind == Kind::SearchPeople ||
                kind == Kind::Mutes || kind == Kind::Blocks || kind == Kind::FollowRequests ||
+               kind == Kind::NotificationRequests ||
                kind == Kind::PostUsers || kind == Kind::AnalyzedUsers ||
                kind == Kind::FavoritedBy || kind == Kind::BoostedBy;
     }
@@ -257,6 +265,7 @@ struct TimelineSource {
         case Kind::Mutes:
         case Kind::Blocks:
         case Kind::FollowRequests:
+        case Kind::NotificationRequests:
         case Kind::PostUsers:
         case Kind::AnalyzedUsers:
         case Kind::Trends:
@@ -336,6 +345,7 @@ struct TimelineSource {
     static TimelineSource mutes() { return {Kind::Mutes}; }
     static TimelineSource blocks() { return {Kind::Blocks}; }
     static TimelineSource follow_requests() { return {Kind::FollowRequests}; }
+    static TimelineSource notification_requests() { return {Kind::NotificationRequests}; }
 };
 
 } // namespace fastsm

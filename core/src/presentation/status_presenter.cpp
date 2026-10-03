@@ -373,7 +373,15 @@ std::optional<std::string> notification_field_string(NotificationSpeechField f, 
 std::string accessibility_label(const User& u, const std::vector<SpeechItem<UserSpeechField>>& fields) {
     std::string label =
         compose_fields(fields, [&](UserSpeechField f) { return user_field_string(f, u); });
-    return label.empty() ? display_name_for(u) : label; // never read a blank row
+    if (label.empty())
+        label = display_name_for(u); // never read a blank row
+    // On a message-request row, how many notifications are being held is the reason the
+    // row exists, so it is always read -- not left to the configurable fields above,
+    // where it would be absent for everyone who has already tuned their speech.
+    if (u.pending_notifications > 0)
+        label += ", " + std::to_string(u.pending_notifications) +
+                 (u.pending_notifications == 1 ? " notification" : " notifications") + " waiting";
+    return label;
 }
 
 std::string accessibility_label(const User& u) {

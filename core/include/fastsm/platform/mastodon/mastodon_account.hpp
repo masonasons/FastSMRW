@@ -67,6 +67,9 @@ public:
     bool unblock(const std::string& id) override;
     bool authorize_follow_request(const std::string& id) override;
     bool reject_follow_request(const std::string& id) override;
+    bool accept_notification_request(const std::string& id) override;
+    bool dismiss_notification_request(const std::string& id) override;
+    bool supports_notification_requests() const override { return true; }
     bool set_show_boosts(const std::string& id, bool show) override;
 
     bool follow_hashtag(const std::string& name) override;
