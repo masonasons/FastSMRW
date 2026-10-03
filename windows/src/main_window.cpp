@@ -101,6 +101,7 @@ enum {
     ID_VIEW_MUTES,
     ID_VIEW_BLOCKS,
     ID_FOLLOW_REQUESTS,
+    ID_MESSAGE_REQUESTS,
     ID_FOLLOWED_HASHTAGS,
     ID_TRENDING_HASHTAGS,
     ID_USER_ANALYSIS,
@@ -232,6 +233,7 @@ HMENU build_menu() {
     AppendMenuW(me, MF_STRING, ID_VIEW_MUTES, L"View &Muted Users");
     AppendMenuW(me, MF_STRING, ID_VIEW_BLOCKS, L"View &Blocked Users");
     AppendMenuW(me, MF_STRING, ID_FOLLOW_REQUESTS, L"View Follow &Requests");
+    AppendMenuW(me, MF_STRING, ID_MESSAGE_REQUESTS, L"View &Message Requests");
     AppendMenuW(me, MF_STRING, ID_FOLLOWED_HASHTAGS, L"Followed Hasht&ags…");
     AppendMenuW(me, MF_STRING, ID_TRENDING_HASHTAGS, L"&Trending Hashtags…");
     AppendMenuW(me, MF_STRING, ID_USER_ANALYSIS, L"User A&nalysis…");
@@ -967,12 +969,15 @@ void MainWindow::on_view_keydown(int vk) {
         Timeline* t = current();
         const int fr = selected_row();
         const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-        const bool follow_req = t && fr >= 0 && fr < static_cast<int>(t->rows.size()) &&
-                                t->rows[static_cast<size_t>(fr)].follow_request;
-        if (shift && t && !t->user_list && !follow_req) {
+        const bool in_range = t && fr >= 0 && fr < static_cast<int>(t->rows.size());
+        const bool follow_req = in_range && t->rows[static_cast<size_t>(fr)].follow_request;
+        const bool msg_req = in_range && t->rows[static_cast<size_t>(fr)].notification_request;
+        if (shift && t && !t->user_list && !follow_req && !msg_req) {
             do_secondary_post_action(); // Shift+Enter: the secondary interact (Behavior tab)
         } else if (follow_req) {
             do_follow_request_action(t->rows[static_cast<size_t>(fr)]); // accept/reject
+        } else if (msg_req) {
+            do_message_request_action(t->rows[static_cast<size_t>(fr)]); // accept/dismiss
         } else if (t && t->user_list) {
             do_enter_user_action(); // configurable (Behavior tab)
         } else {
@@ -1081,6 +1086,37 @@ void MainWindow::show_status_context_menu(LPARAM lp) {
     }
     // No TPM_RETURNCMD: let the menu post WM_COMMAND like the menu bar does.
     TrackPopupMenu(status, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON, x, y, 0, hwnd_, nullptr);
+}
+
+void MainWindow::do_message_request_action(const Row& r) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+    AppendMenuW(menu, MF_STRING, 1, L"&Accept");
+    AppendMenuW(menu, MF_STRING, 2, L"&Dismiss");
+    POINT pt{0, 0};
+    RECT rc;
+    const int frow = selected_row();
+    if (frow >= 0 && ListView_GetItemRect(timeline_view_, frow, &rc, LVIR_BOUNDS)) {
+        pt.x = rc.left;
+        pt.y = rc.bottom;
+        ClientToScreen(timeline_view_, &pt);
+    } else {
+        GetCursorPos(&pt);
+    }
+    const int chosen = static_cast<int>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd_,
+        nullptr));
+    DestroyMenu(menu);
+    if (chosen != 1 && chosen != 2)
+        return;
+    // user_action, not set_relationship: the core resolves the request id from the row.
+    // set_relationship's verbs all take an account id, which these endpoints would
+    // reject.
+    dispatch_cmd({{"cmd", "user_action"},
+                  {"action", chosen == 1 ? "accept_notification_request"
+                                         : "dismiss_notification_request"},
+                  {"ids", nlohmann::json::array({r.id})}});
 }
 
 void MainWindow::do_follow_request_action(const Row& r) {
@@ -2071,6 +2107,9 @@ void MainWindow::handle_command(int id) {
     case ID_FOLLOW_REQUESTS:
         dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "follow_requests"}});
         break;
+    case ID_MESSAGE_REQUESTS:
+        dispatch_cmd({{"cmd", "spawn_timeline"}, {"kind", "notification_requests"}});
+        break;
     case ID_FOLLOWED_HASHTAGS:
         dispatch_cmd({{"cmd", "list_followed_hashtags"}}); // core replies -> manager dialog
         break;
@@ -2444,6 +2483,8 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.is_mine = r.value("is_mine", false);
         row.gap_after = r.value("gap_after", false);
         row.follow_request = r.value("follow_request", false);
+        row.notification_request = r.value("notification_request", false);
+        row.request_id = r.value("request_id", std::string{});
         row.account_id = r.value("account_id", std::string{});
         row.acct = r.value("acct", std::string{});
         row.group_actors = r.value("group_actors", std::string{});

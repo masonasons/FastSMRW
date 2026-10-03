@@ -64,6 +64,10 @@ private:
         bool follow_request = false; // a follow-request notification (Enter accepts/rejects)
         std::string account_id;      // requester's account id (follow-request rows)
         std::string acct;            // requester's handle (follow-request rows)
+        // A Mastodon message-request row (Enter accepts/dismisses). The id below is the
+        // REQUEST's, not the account's -- the two endpoints take different objects.
+        bool notification_request = false;
+        std::string request_id;
         std::string group_actors;    // grouped like/boost notif: "favorited_by"/"reblogged_by"
                                      // -> Enter opens the list of everyone in the group
     };
@@ -135,6 +139,7 @@ private:
     void show_user_actions(); // batch follow/mute/block on a user list
     void show_status_context_menu(LPARAM lp); // Status menu via right-click / Shift+F10 / Apps key
     void do_follow_request_action(const Row& r); // accept/reject a follow request (Enter)
+    void do_message_request_action(const Row& r); // accept/dismiss a message request (Enter)
     void ev_follow_request_prompt(const nlohmann::json& e); // core-driven accept/reject choice
     void do_enter_post_action();                 // Enter on a post (configurable)
     void do_enter_user_action();                 // Enter on a user (configurable)

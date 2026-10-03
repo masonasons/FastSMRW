@@ -207,6 +207,7 @@ void MainWindow::build_menu() {
     spawn(me_menu, "View _Muted Users", "mutes");
     spawn(me_menu, "View _Blocked Users", "blocks");
     spawn(me_menu, "View Follow _Requests", "follow_requests");
+    spawn(me_menu, "View _Message Requests", "notification_requests");
     plain(me_menu, "Followed Hasht_ags…", 0, none, "list_followed_hashtags");
     plain(me_menu, "_Trending Hashtags…", 0, none, "list_trending_hashtags");
     add_item(me_menu, "User A_nalysis…", accel, 0, none,
@@ -856,14 +857,24 @@ void MainWindow::do_enter_post_action() {
 // menu never touches the (mutable) row list after it pops up.
 void MainWindow::do_follow_request_action(const Row& r) {
     GtkWidget* menu = gtk_menu_new();
-    const char* labels[] = {"_Accept", "_Reject"};
-    const char* actions[] = {"authorize_request", "reject_request"};
+    // A message request dismisses rather than rejects, and travels as a user_action:
+    // the core resolves the request id from the row, where set_relationship's verbs all
+    // take an account id and these endpoints would reject one.
+    const bool msg = r.notification_request;
+    const char* labels[] = {"_Accept", msg ? "_Dismiss" : "_Reject"};
+    const char* actions[] = {msg ? "accept_notification_request" : "authorize_request",
+                             msg ? "dismiss_notification_request" : "reject_request"};
     for (int i = 0; i < 2; ++i) {
         GtkWidget* mi = gtk_menu_item_new_with_mnemonic(labels[i]);
         json cmd(json::object());
-        cmd["cmd"] = "set_relationship";
-        cmd["account_id"] = r.account_id;
-        cmd["acct"] = r.acct;
+        if (msg) {
+            cmd["cmd"] = "user_action";
+            cmd["ids"] = json::array({r.id});
+        } else {
+            cmd["cmd"] = "set_relationship";
+            cmd["account_id"] = r.account_id;
+            cmd["acct"] = r.acct;
+        }
         cmd["action"] = actions[i];
         g_object_set_data_full(G_OBJECT(mi), "fastsm-cmd", g_strdup(cmd.dump().c_str()), g_free);
         g_signal_connect(mi, "activate", G_CALLBACK(+[](GtkMenuItem* m, gpointer u) {
@@ -1555,6 +1566,8 @@ void MainWindow::ev_timeline_updated(const json& e) {
         row.is_mine = r.value("is_mine", false);
         row.gap_after = r.value("gap_after", false);
         row.follow_request = r.value("follow_request", false);
+        row.notification_request = r.value("notification_request", false);
+        row.request_id = r.value("request_id", std::string{});
         row.account_id = r.value("account_id", std::string{});
         row.acct = r.value("acct", std::string{});
         row.group_actors = r.value("group_actors", std::string{});
@@ -2849,7 +2862,8 @@ gboolean MainWindow::on_posts_key(GtkWidget*, GdkEventKey* event, gpointer user)
         Timeline* tc = self->current();
         const int row = self->selected_row();
         if (tc && row >= 0 && row < static_cast<int>(tc->rows.size()) &&
-            tc->rows[static_cast<size_t>(row)].follow_request)
+            (tc->rows[static_cast<size_t>(row)].follow_request ||
+             tc->rows[static_cast<size_t>(row)].notification_request))
             self->do_follow_request_action(tc->rows[static_cast<size_t>(row)]);
         else if (tc && tc->user_list)
             self->do_enter_user_action();
@@ -2929,7 +2943,8 @@ gboolean MainWindow::on_posts_key(GtkWidget*, GdkEventKey* event, gpointer user)
         Timeline* tc = self->current();
         const int row = self->selected_row();
         if (tc && row >= 0 && row < static_cast<int>(tc->rows.size()) &&
-            tc->rows[static_cast<size_t>(row)].follow_request) {
+            (tc->rows[static_cast<size_t>(row)].follow_request ||
+             tc->rows[static_cast<size_t>(row)].notification_request)) {
             self->do_follow_request_action(tc->rows[static_cast<size_t>(row)]);
             return TRUE;
         }

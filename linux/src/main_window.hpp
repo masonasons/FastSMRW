@@ -32,6 +32,10 @@ struct Row {
     bool is_mine = false;
     bool gap_after = false;
     bool follow_request = false;
+    // A Mastodon message-request row (Enter accepts/dismisses). request_id is the
+    // REQUEST's id, which is a different object from the account's.
+    bool notification_request = false;
+    std::string request_id;
 };
 
 struct Timeline {
@@ -97,7 +101,9 @@ private:
     void do_enter_post_action();
     void do_secondary_post_action();
     void run_post_action(const std::string& action);
-    void do_follow_request_action(const Row& r); // accept/reject a follow request (Enter)
+    // Accept/reject a follow request, or accept/dismiss a message request -- the two
+    // differ only in their labels and which command carries them (Enter).
+    void do_follow_request_action(const Row& r);
     void do_enter_user_action();                 // configurable Enter on user-list rows
     void show_user_actions();                    // user-row actions menu (Accept/Reject on Follow Requests)
     std::vector<std::string> selected_user_row_ids(); // the multi-selection, else the focused row
