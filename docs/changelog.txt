@@ -1,14 +1,24 @@
 FastSMRW changelog
 ==================
 
-0.6.0
+0.6.1
 -----
 
+- New: on Android, Manage lists, Followed hashtags and Server filters are now in the menu, matching what the other apps offer.
+- Changed: on iPhone, the More menu now groups the timeline and account actions behind named Timeline and account entries, instead of one long flat list.
+- New: on iPhone, Clear All Timelines, which the desktop and Mac apps already had.
+- New: open Message Requests from the new timeline screen to see people whose notifications your server is holding back, and accept or dismiss each one (Mastodon accounts).
+- New: on Android, Filter timeline lets you hide boosts, replies, posts with or without media and more, with the same options as the desktop apps.
+- New: on Android, clear a timeline's loaded posts from the menu or from a tab's actions, or clear every timeline at once.
 - New: on the Mac, choose Stable version releases or every new build from main in Settings, Updates, and choose whether to check at startup.
 - Fixed: on iPhone, posts with multiple lines now display with their original line breaks.
 - New: on iPhone, choose whether the VoiceOver magic tap uses your secondary action, opens compose, or leaves the gesture to iOS; a magic tap set to View Media opens compose when a post has no playable media.
 - Fixed: on Mastodon, posting no longer fails with an error sound when you have many timelines open; background refreshing now slows down before it uses up your server's request limit.
 - Changed: threads and user timelines with nothing new for a day now check for updates every 15 minutes instead of every minute, unless you're viewing them, so keeping many open no longer strains your server's request limit.
+
+0.6.0
+-----
+
 - New: on iPhone, an Accounts button next to the More button lists your accounts so you can jump straight to one, and add, remove or configure accounts.
 - New: on iPhone, Command+Up and Command+Down jump to the top and bottom of the timeline.
 - Fixed: on iPhone, a two-finger scrub now closes the media player or an open dialog first, instead of always closing the current timeline.

@@ -174,6 +174,16 @@ echo Assembling dist...
 if not exist dist mkdir dist
 xcopy /e /i /y assets\* dist\ >nul
 copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
+REM A FAILED copy here used to pass silently, so the build said "successful" while
+REM dist\ still held yesterday's exe -- usually because the app was running and
+REM holding it open. Running a stale binary while believing it is current wastes
+REM hours, so say so instead.
+if errorlevel 1 (
+    echo.
+    echo WARNING: could not copy FastSMRW.exe into dist\ -- is the app still running?
+    echo          dist\ still holds the PREVIOUS exe.
+    set "DIST_STALE=1"
+)
 if exist docs xcopy /e /i /y docs\* dist\docs\ >nul
 REM UniversalSpeech runtime bridge DLLs (NVDA/SAPI/ZDSR), if present.
 if exist "deps\UniversalSpeech\bin-x64\*.dll" copy /y deps\UniversalSpeech\bin-x64\*.dll dist\ >nul
@@ -211,6 +221,13 @@ if "%RUN_TESTS%"=="1" (
         echo Tests FAILED.
         exit /b 1
     )
+)
+
+if defined DIST_STALE (
+    echo.
+    echo Build FAILED: dist\ was not updated, so dist\FastSMRW.exe is NOT this build.
+    echo Close FastSMRW and build again.
+    exit /b 1
 )
 
 echo.
