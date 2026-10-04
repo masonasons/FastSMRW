@@ -51,6 +51,16 @@ final class MainViewController: UIViewController {
     /// Reading position per timeline, tracked by post id so it survives leaving
     /// / returning and posts streaming in above — same pattern as Mac/Windows.
     private var selectionByKey: [String: String] = [:]
+    /// Accurate per-row heights, keyed by post id. Post cells self-size to
+    /// however many lines the text wraps to; without real heights UIKit guesses
+    /// off-screen rows, and the guesses are wrong enough that scrollToRow lands
+    /// in the wrong place and the list jerks as you swipe (the reading position
+    /// "jumps"). We feed the table an exact height instead — computed from the
+    /// text, then refined to the measured cell height once a row is displayed.
+    /// Cleared when the width or Dynamic Type size changes (both change wrapping).
+    private var heightByID: [String: CGFloat] = [:]
+    private var heightCacheWidth: CGFloat = 0
+    private var heightCacheCategory: UIContentSizeCategory = .unspecified
     private weak var composeVC: ComposeViewController?
     // Open managers, so refresh events update them in place instead of
     // pushing duplicates.
@@ -443,6 +453,10 @@ final class MainViewController: UIViewController {
         }
         lastRenderedKey = currentKey
         lastRenderedRows = rows
+        // A full reload means a switch or first fill: drop cached heights so the
+        // rows being shown are measured fresh (the same post id can render at a
+        // different height in another timeline), keeping the restore scroll exact.
+        heightByID.removeAll()
         tableView.reloadData()
         // Restore this timeline's remembered reading position (or adopt the
         // core's re-anchor), mirroring the Mac posts pane — but only scroll;
@@ -550,6 +564,32 @@ final class MainViewController: UIViewController {
         guard rows.indices.contains(index) else { return }
         tableView.scrollToRow(at: IndexPath(row: index, section: 0), at: .middle,
                               animated: false)
+    }
+
+    /// Exact height for a post row, matching the self-sizing cell: one wrapping
+    /// body label inset 16pt either side and 8pt top/bottom. Giving the table
+    /// real heights for every row (not UIKit's estimate) keeps scrollToRow and
+    /// in-flight scrolling from throwing the reading position around.
+    private func heightForRow(_ row: Row, width: CGFloat) -> CGFloat {
+        let category = traitCollection.preferredContentSizeCategory
+        if width != heightCacheWidth || category != heightCacheCategory {
+            heightByID.removeAll()
+            heightCacheWidth = width
+            heightCacheCategory = category
+        }
+        if let cached = heightByID[row.id] { return cached }
+        let textWidth = max(1, width - 32) // 16pt leading + 16pt trailing inset
+        let text = (row.textWithBreaks ?? row.text)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let font = UIFont.preferredFont(forTextStyle: .body)
+        let bounds = (text as NSString).boundingRect(
+            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font], context: nil)
+        let height = ceil(bounds.height) + 16 // 8pt top + 8pt bottom inset
+        heightByID[row.id] = height
+        return height
     }
 
     // MARK: Hardware keyboard (iPad / Bluetooth keyboards)
@@ -1505,9 +1545,26 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
         }
     }
 
-    /// Sighted scrolling reaches the bottom: page in older posts too.
+    /// Exact up-front heights so the table's geometry is right before a row is
+    /// ever shown — this is what keeps scrollToRow accurate and stops the list
+    /// jumping as you swipe. Returning automaticDimension here (the default)
+    /// would hand the work back to UIKit's wrong estimate, which is the bug.
+    func tableView(_ tableView: UITableView,
+                   estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
+        guard rows.indices.contains(indexPath.row) else {
+            return UITableView.automaticDimension
+        }
+        return heightForRow(rows[indexPath.row], width: tableView.bounds.width)
+    }
+
+    /// Sighted scrolling reaches the bottom: page in older posts too. Also
+    /// refine the height cache with the cell's true self-sized height, so any
+    /// difference between the computed estimate and the real layout can't drift.
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell,
                    forRowAt indexPath: IndexPath) {
+        if rows.indices.contains(indexPath.row) {
+            heightByID[rows[indexPath.row].id] = cell.frame.height
+        }
         maybeLoadOlder(row: indexPath.row)
     }
 }
