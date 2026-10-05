@@ -1,0 +1,81 @@
+name: iOS TestFlight
+
+# Every push to main that touches the iPhone app, the shared Apple bridge, or
+# the core it is built on archives a new build and uploads it to TestFlight
+# (ios/testflight.sh), then adds it to both groups — the internal "Personal
+# Builds" group (installable at once) and the external "Public Beta" group
+# (submitted for beta review) — via ios/testflight_distribute.py. The build
+# number is the commit count, so each upload is higher than the last.
+#
+# Needs three repository secrets: ASC_KEY_ID and ASC_ISSUER_ID (an App Store
+# Connect API key's id and its issuer) and ASC_KEY_P8_B64 (the key's .p8 file,
+# base64-encoded). The app and beta-group ids are not secret and are baked into
+# the distribute script as defaults.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'apple/**'
+      - 'core/**'
+      - '.github/workflows/ios-testflight.yml'
+  workflow_dispatch:
+
+# One upload at a time, in order: build numbers only go up.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # every commit: their count is the build number
+
+      - name: Select the newest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the distribute script's deps
+        run: python3 -m pip install --quiet pyjwt cryptography requests
+
+      - name: Install the App Store Connect key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_KEY_P8_B64" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Archive and upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          chmod +x ios/testflight.sh macos/fetch-deps.sh
+          ios/testflight.sh
+
+      - name: Distribute to both TestFlight groups
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: python3 ios/testflight_distribute.py "$(git rev-list --count HEAD)"
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf ~/.appstoreconnect

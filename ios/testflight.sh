@@ -8,10 +8,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-TEAM="9QBYDAX396"
-KEY_ID="FB9N292RPN"
-ISSUER="02117eeb-7d87-4d4d-bf11-850f80204c4c"
-KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
+# Credentials default to the project's App Store Connect key but can be
+# overridden from the environment (CI passes them from repository secrets).
+TEAM="${ASC_TEAM_ID:-9QBYDAX396}"
+KEY_ID="${ASC_KEY_ID:-FB9N292RPN}"
+ISSUER="${ASC_ISSUER_ID:-02117eeb-7d87-4d4d-bf11-850f80204c4c}"
+KEY_PATH="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8}"
 
 VERSION=$(sed -n 's/.*return "\([0-9.]*\)";/\1/p' ../core/src/version.cpp | head -1)
 BUILD=$(git rev-list --count HEAD)
