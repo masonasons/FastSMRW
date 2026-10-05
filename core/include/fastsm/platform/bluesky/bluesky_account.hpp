@@ -20,6 +20,7 @@ public:
 
     Platform platform() const override { return Platform::Bluesky; }
     const User& me() const override { return me_; }
+    std::string server() const override;
     int max_chars() const override { return 300; }
     std::string account_key() const override { return "bluesky:" + credentials_.did; }
     PlatformFeatures features() const override;

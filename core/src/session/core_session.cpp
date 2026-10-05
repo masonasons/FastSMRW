@@ -232,6 +232,24 @@ std::string message_request_prompt_text(const std::string& acct, int pending) {
     return "@" + acct + " has " + held + " waiting. Accept them from now on?";
 }
 
+// How an account is named to the user: display name, handle and the server it lives
+// on. The server matters because a handle alone is ambiguous -- the same @name exists on
+// many instances -- and on Mastodon your own acct is just the local part, with no
+// instance in it at all, so without this there is nothing to tell two accounts apart.
+std::string account_label(const SocialAccount& a) {
+    const User& me = a.me();
+    const std::string handle = me.acct.empty() ? me.username : me.acct;
+    std::string label;
+    if (!me.display_name.empty() && me.display_name != handle)
+        label = me.display_name + " (@" + handle + ")";
+    else if (!handle.empty())
+        label = "@" + handle;
+    const std::string server = a.server();
+    if (server.empty())
+        return label;
+    return label.empty() ? server : label + " on " + server;
+}
+
 json features_json(const PlatformFeatures& f) {
     return {{"visibility", f.visibility},     {"content_warning", f.content_warning},
             {"quote_posts", f.quote_posts},   {"polls", f.polls},
@@ -819,6 +837,8 @@ void CoreSession::cmd_select_account(const json& cmd) {
     commit_home_marker_for(current()); // leaving this account's timeline
     switch_account(target_key); // swap, don't rebuild
     sound_.play(sound::Earcon::Navigate);
+    if (SocialAccount* sel = accounts_.selected())
+        emit_announce(account_label(*sel));
     emit_accounts();
     emit_timelines();
     emit_all_timelines(); // push the warm rows + remembered position for the new account
@@ -834,6 +854,7 @@ void CoreSession::cmd_update_settings(const json& cmd) {
     apply_settings();
     save_config();
     emit_settings();
+    emit_accounts();      // the window title rides on this, and show_account_in_title may have moved
     emit_all_timelines(); // a speech-order change re-renders every row
 }
 
@@ -4009,9 +4030,9 @@ void CoreSession::cmd_perform_action(const json& cmd) {
     if (a == "refresh")
         return cmd_refresh();
     if (a == "NextAccount" || a == "PrevAccount") {
+        // cmd_select_account announces the account and its server itself; announcing
+        // here as well read it out twice.
         cmd_select_account({{"dir", a == "PrevAccount" ? "prev" : "next"}});
-        if (SocialAccount* ac = accounts_.selected())
-            emit_announce(ac->me().acct);
         return;
     }
     // Actions on a specific row: the caller may name one (the mobile action
@@ -5243,9 +5264,21 @@ void CoreSession::emit_accounts() {
             {"handle", a->me().acct},
             {"display_name", a->me().display_name},
             {"platform", a->platform() == Platform::Mastodon ? "mastodon" : "bluesky"},
+            {"server", a->server()},
+            // Composed here so the pickers in five front ends don't each assemble it.
+            {"label", account_label(*a)},
         });
     }
-    emit({{"event", "accounts_changed"}, {"accounts", accts}, {"selected", accounts_.selected_key()}});
+    // The desktop window title. Composed in the core, including whether the account is
+    // named at all, so the apps only have to set what they're handed.
+    std::string title = "FastSMRW";
+    if (settings_.show_account_in_title)
+        if (SocialAccount* sel = accounts_.selected(); sel && !account_label(*sel).empty())
+            title = account_label(*sel) + " - FastSMRW";
+    emit({{"event", "accounts_changed"},
+          {"accounts", accts},
+          {"selected", accounts_.selected_key()},
+          {"window_title", title}});
 }
 
 void CoreSession::emit_timelines() {

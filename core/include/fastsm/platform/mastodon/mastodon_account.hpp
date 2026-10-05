@@ -19,6 +19,7 @@ public:
 
     Platform platform() const override { return Platform::Mastodon; }
     const User& me() const override { return me_; }
+    std::string server() const override;
     int max_chars() const override { return max_chars_; }
     std::string account_key() const override { return "mastodon:" + me_.id; }
     PlatformFeatures features() const override;

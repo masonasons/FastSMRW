@@ -97,6 +97,11 @@ struct AppSettings {
     bool window_shown = true;                  // remembered across restarts (ToggleWindow)
     std::string update_branch = "stable";      // "stable" (versioned) | "latest" (rolling)
     bool check_updates_on_startup = true;      // quietly check on launch
+    // Desktop only: put the focused account and its server in the window title. A
+    // screen reader reads the title when the window takes focus, which is the cheapest
+    // way to know which account you are about to post from. Mobile has no window title,
+    // so the setting is absent from those apps rather than present and inert.
+    bool show_account_in_title = true;
     present::SpeechSettings speech = present::SpeechSettings::defaults();
     present::TextPresentation text; // content-warning / demojify / mention-collapse
 

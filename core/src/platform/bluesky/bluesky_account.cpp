@@ -975,4 +975,6 @@ bool BlueskyAccount::update_profile(const ProfileSource& profile) {
     return put_profile_record(value);
 }
 
+std::string BlueskyAccount::server() const { return util::url_host(credentials_.service_url); }
+
 } // namespace fastsm

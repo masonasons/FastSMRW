@@ -7,6 +7,7 @@
 #include "fastsm/util/html_stripper.hpp"
 #include "fastsm/util/quote_text.hpp"
 #include "fastsm/util/relative_date.hpp"
+#include "fastsm/util/url.hpp"
 
 using namespace fastsm::util;
 
@@ -121,4 +122,24 @@ void test_truncate_mentions() {
              std::string("@a@x.social and 2 others body"));
     // No leading mentions: unchanged.
     CHECK_EQ(truncate_leading_mentions("just text", 1), std::string("just text"));
+}
+
+void test_url_host() {
+    // The ordinary cases: what goes in the window title and gets spoken on a switch.
+    CHECK_EQ(url_host("https://mastodon.social"), std::string("mastodon.social"));
+    CHECK_EQ(url_host("https://mastodon.social/"), std::string("mastodon.social"));
+    CHECK_EQ(url_host("https://bsky.social/xrpc/foo"), std::string("bsky.social"));
+    // A bare host passes through, so a server stored without a scheme still reads right.
+    CHECK_EQ(url_host("mastodon.social"), std::string("mastodon.social"));
+    // Case is normalised: hosts are case-insensitive, and "Mastodon.Social" spoken back
+    // at someone who typed it that way is just noise.
+    CHECK_EQ(url_host("HTTPS://Mastodon.Social/"), std::string("mastodon.social"));
+    // Ports and userinfo are plumbing, not something to read out.
+    CHECK_EQ(url_host("https://example.social:8443/api"), std::string("example.social"));
+    CHECK_EQ(url_host("https://user:pw@example.social/"), std::string("example.social"));
+    // An IPv6 literal keeps its colons: stripping at the last one would mangle it.
+    CHECK_EQ(url_host("https://[2001:db8::1]/api"), std::string("[2001:db8::1]"));
+    // Query and fragment without a path.
+    CHECK_EQ(url_host("https://example.social?x=1"), std::string("example.social"));
+    CHECK_EQ(url_host(""), std::string(""));
 }

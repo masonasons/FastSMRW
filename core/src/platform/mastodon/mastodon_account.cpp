@@ -1637,4 +1637,6 @@ std::optional<StreamItem> MastodonAccount::parse_stream_event(const std::string&
     return std::nullopt; // filters_changed / keep-alives are ignored
 }
 
+std::string MastodonAccount::server() const { return util::url_host(credentials_.instance_url); }
+
 } // namespace fastsm

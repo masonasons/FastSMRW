@@ -32,6 +32,7 @@ void test_mastodon_quote_mapping();
 void test_mark_remote();
 void test_remote_timeline_source();
 void test_form_encode();
+void test_url_host();
 
 // From test_bluesky_map.cpp
 void test_bluesky_feed_mapping();
@@ -189,6 +190,7 @@ int main() {
     test_mark_remote();
     test_remote_timeline_source();
     test_form_encode();
+    test_url_host();
     test_bluesky_feed_mapping();
     test_mastodon_notification_request_mapping();
     test_notification_requests_source();

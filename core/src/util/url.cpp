@@ -1,3 +1,4 @@
+#include <cctype>
 #include "fastsm/util/url.hpp"
 
 namespace fastsm::util {
@@ -31,6 +32,27 @@ std::string form_encode(const std::vector<std::pair<std::string, std::string>>& 
         out += percent_encode(value);
     }
     return out;
+}
+
+std::string url_host(std::string_view url) {
+    // Scheme, if any.
+    if (const auto scheme = url.find("://"); scheme != std::string_view::npos)
+        url.remove_prefix(scheme + 3);
+    // Anything after the authority.
+    for (const char* delim : {"/", "?", "#"})
+        if (const auto at = url.find(delim); at != std::string_view::npos)
+            url = url.substr(0, at);
+    // user:pass@ prefix.
+    if (const auto at = url.rfind('@'); at != std::string_view::npos)
+        url.remove_prefix(at + 1);
+    // :port suffix. Guarded against an IPv6 literal, where the colons are inside [].
+    if (url.find(']') == std::string_view::npos)
+        if (const auto colon = url.rfind(':'); colon != std::string_view::npos)
+            url = url.substr(0, colon);
+    std::string host(url);
+    for (char& c : host)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return host;
 }
 
 } // namespace fastsm::util

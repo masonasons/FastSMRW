@@ -197,6 +197,11 @@ public:
 
     virtual Platform platform() const = 0;
     virtual const User& me() const = 0;
+    // The server this account lives on, as a user would say it ("mastodon.social",
+    // "bsky.social") -- not the API base URL. Shown in the window title and spoken when
+    // switching accounts, because a handle alone is ambiguous across instances (and a
+    // Mastodon account's own acct is just the local part, with no instance in it).
+    virtual std::string server() const { return {}; }
     virtual int max_chars() const = 0;
     virtual std::string account_key() const = 0; // "mastodon:<id>" / "bluesky:<did>"
     virtual PlatformFeatures features() const = 0;
