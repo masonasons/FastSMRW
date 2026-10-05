@@ -49,6 +49,8 @@ final class SettingsWindowController: NSWindowController {
             p.checkbox("Automatically load older posts", key: "auto_load_older", default: true)
             p.checkbox("Sync home position with the server (Mastodon)",
                        key: "sync_home_position", default: false)
+            p.checkbox("Show the account and server in the window title",
+                       key: "show_account_in_title", default: true)
             p.button("Movement Units…") { [weak p] in p?.openMovementUnits() }
         }
 

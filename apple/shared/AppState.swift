@@ -37,6 +37,10 @@ final class AppState {
     private(set) var speechCatalog: SpeechCatalog?
 
     // UI subscriptions (set by the controllers).
+    /// The window title for the focused account, composed by the core (name + server,
+    /// or plain "FastSMRW" when the General setting turns it off). The Mac window uses
+    /// it; iOS has no window title.
+    var windowTitle = "FastSMRW"
     var onAccountsChanged: (() -> Void)?
     var onTimelinesChanged: (() -> Void)?
     var onTimelineRows: ((Int) -> Void)?
@@ -221,6 +225,7 @@ final class AppState {
         case let .accountsChanged(e):
             accounts = e.accounts
             selectedAccountKey = e.selected
+            if let title = e.windowTitle { windowTitle = title }
             onAccountsChanged?()
         case let .timelinesChanged(e):
             timelines = e.timelines

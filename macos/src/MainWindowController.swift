@@ -268,8 +268,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     private func updateSubtitle() {
-        let parts = [state.currentAccountHandle, state.currentTimelineTitle]
-        window?.subtitle = parts.compactMap { $0 }.joined(separator: " — ")
+        // The title carries the account and its server (composed by the core, and
+        // omitted entirely when the General setting says so); the subtitle is left for
+        // the timeline, so the account isn't announced twice.
+        window?.title = state.windowTitle
+        window?.subtitle = state.currentTimelineTitle ?? ""
     }
 
     // MARK: Action forwarders (work regardless of focused pane)

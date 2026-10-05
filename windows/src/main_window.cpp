@@ -2416,8 +2416,16 @@ void MainWindow::on_event(const std::string& js) {
     else if (ev == "open_url")
         ShellExecuteW(nullptr, L"open", to_wide(e.value("url", std::string{})).c_str(), nullptr,
                       nullptr, SW_SHOW);
-    // accounts_changed / auth_result / post_result: nothing extra (sounds + any
-    // announce come from the core).
+    // The window title names the focused account and its server, so a screen reader
+    // reads which account you are about to post from as the window takes focus. The core
+    // composed the string, including whether the account appears at all (the General
+    // setting), so there is nothing to assemble here.
+    else if (ev == "accounts_changed") {
+        if (auto it = e.find("window_title"); it != e.end() && it->is_string())
+            SetWindowTextW(hwnd_, to_wide(it->get<std::string>()).c_str());
+    }
+    // auth_result / post_result: nothing extra (sounds + any announce come from the
+    // core).
 }
 
 void MainWindow::ev_timelines_changed(const json& e) {

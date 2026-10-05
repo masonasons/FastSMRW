@@ -128,6 +128,15 @@ struct PostLink: Decodable, Equatable {
 struct AccountsChanged: Decodable {
     let accounts: [Account]
     let selected: String
+    /// The window title the core composed for the focused account: its name and the
+    /// server it is on, or just "FastSMRW" when the General setting turns that off.
+    /// Absent on older cores, hence optional.
+    let windowTitle: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accounts, selected
+        case windowTitle = "window_title"
+    }
 }
 
 struct TimelinesChanged: Decodable {

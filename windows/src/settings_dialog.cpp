@@ -170,6 +170,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         checked(dlg, IDC_SET_STREAMING, ctx->settings.streaming_enabled);
         checked(dlg, IDC_SET_SHOW_MENTIONS, ctx->settings.show_mentions_in_notifications);
         checked(dlg, IDC_SET_REVERSE, ctx->settings.reverse_timelines);
+        checked(dlg, IDC_SET_TITLE_ACCOUNT, ctx->settings.show_account_in_title);
         checked(dlg, IDC_SET_AUTOLOAD, ctx->settings.auto_load_older);
         checked(dlg, IDC_SET_SYNCHOME, ctx->settings.sync_home_position);
         return TRUE;
@@ -213,6 +214,7 @@ INT_PTR CALLBACK TimelinesProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             ctx->settings.streaming_enabled = is_checked(dlg, IDC_SET_STREAMING);
             ctx->settings.show_mentions_in_notifications = is_checked(dlg, IDC_SET_SHOW_MENTIONS);
             ctx->settings.reverse_timelines = is_checked(dlg, IDC_SET_REVERSE);
+            ctx->settings.show_account_in_title = is_checked(dlg, IDC_SET_TITLE_ACCOUNT);
             ctx->settings.auto_load_older = is_checked(dlg, IDC_SET_AUTOLOAD);
             ctx->settings.sync_home_position = is_checked(dlg, IDC_SET_SYNCHOME);
             ctx->applied = true;

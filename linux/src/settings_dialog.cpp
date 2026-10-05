@@ -329,6 +329,8 @@ std::optional<AppSettings> show_settings_dialog(GtkWindow* parent, AppSettings s
                 &settings.auto_load_older);
         b.check(p, "S_ync home position with the server (Mastodon)",
                 &settings.sync_home_position);
+        b.check(p, "Show the account and server in the _window title",
+                &settings.show_account_in_title);
         GtkWidget* mu_button = gtk_button_new_with_mnemonic("Mo_vement Units…");
         struct MuCtx {
             GtkWidget* dialog;

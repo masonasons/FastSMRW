@@ -1360,6 +1360,11 @@ void MainWindow::on_event(const std::string& js) {
         ev_profile_editor(e);
     else if (ev == "open_url")
         open_url(e.value("url", std::string{}));
+    // The focused account and its server in the title, composed by the core.
+    else if (ev == "accounts_changed") {
+        if (auto it = e.find("window_title"); it != e.end() && it->is_string())
+            gtk_window_set_title(GTK_WINDOW(window_), it->get<std::string>().c_str());
+    }
     else if (ev == "media_open")
         ev_media_open(e);
     else if (ev == "media_picker")

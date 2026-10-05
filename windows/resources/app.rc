@@ -126,7 +126,8 @@ BEGIN
     AUTOCHECKBOX "&Reverse timelines (newest at the bottom)", IDC_SET_REVERSE, 10, 136, 224, 12
     AUTOCHECKBOX "Automatically load &older posts when you reach the end", IDC_SET_AUTOLOAD, 10, 152, 224, 12
     AUTOCHECKBOX "S&ync home position with the server (Mastodon)", IDC_SET_SYNCHOME, 10, 168, 224, 12
-    PUSHBUTTON "Mo&vement Units…", IDC_SET_MOVEMENT_UNITS, 10, 186, 100, 14
+    AUTOCHECKBOX "Show the account and server in the &window title", IDC_SET_TITLE_ACCOUNT, 10, 184, 224, 12
+    PUSHBUTTON "Mo&vement Units…", IDC_SET_MOVEMENT_UNITS, 10, 202, 100, 14
 END
 
 IDD_SET_AUDIO DIALOGEX 0, 0, 240, 224
