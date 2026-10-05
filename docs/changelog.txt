@@ -4,6 +4,8 @@ FastSMRW changelog
 0.6.1
 -----
 
+- New: on Windows, Mac and Linux the window title now names the account you're on and the server it's on, so your screen reader tells you which account you're about to post from; turn it off under Settings, General.
+- Changed: switching accounts now says the account's name and its server, instead of just the handle - and on the desktop menu, which used to say nothing at all.
 - New: on Android, Manage lists, Followed hashtags and Server filters are now in the menu, matching what the other apps offer.
 - Changed: on iPhone, the More menu now groups the timeline and account actions behind named Timeline and account entries, instead of one long flat list.
 - New: on iPhone, Clear All Timelines, which the desktop and Mac apps already had.
