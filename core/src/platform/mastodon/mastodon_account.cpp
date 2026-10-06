@@ -85,6 +85,7 @@ std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
 }
 
 void MastodonAccount::load_configuration() {
+    load_default_visibility();
     // Pull the instance's real maximum post length. Mastodon 4 exposes it at
     // /api/v2/instance (configuration.statuses.max_characters); older servers at
     // /api/v1/instance. Leave the default (500) if neither reports it.
@@ -113,6 +114,28 @@ void MastodonAccount::load_configuration() {
         if (got)
             return;
     }
+}
+
+// The account's own default posting visibility, from source[privacy] on
+// verify_credentials. Separate from the instance config above because it is a property
+// of the account, not the server.
+void MastodonAccount::load_default_visibility() {
+    std::string body;
+    long status = 0;
+    if (!request("GET", credentials_.instance_url + "/api/v1/accounts/verify_credentials", "",
+                 "", body, status))
+        return;
+    const json j = json::parse(body, nullptr, false);
+    if (j.is_discarded() || !j.is_object())
+        return;
+    const auto src = j.find("source");
+    if (src == j.end() || !src->is_object())
+        return;
+    // Only an explicit value counts: visibility_from_tag falls back to Public, which
+    // would silently override a server default we simply failed to read.
+    const std::string privacy = src->value("privacy", std::string{});
+    if (!privacy.empty())
+        default_visibility_ = visibility_from_tag(privacy);
 }
 
 net::HttpResponse MastodonAccount::send(const net::HttpRequest& req) {

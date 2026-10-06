@@ -291,6 +291,11 @@ public:
     // synchronously on the worker thread. Lets the user look up someone by handle
     // even when they aren't in any open timeline.
     virtual std::optional<User> lookup_user(const std::string&) { return std::nullopt; }
+    // The account's own default posting visibility, as set on the server (Mastodon's
+    // source[privacy]). A new post opens at this; a reply still inherits the visibility
+    // of the post it answers, which matters more. nullopt where the server has no such
+    // notion -- every Bluesky post is public.
+    virtual std::optional<Visibility> default_visibility() const { return std::nullopt; }
     // Fetch a single status by id (Mastodon: status id; Bluesky: post uri), for
     // speaking a reply's parent that isn't loaded in any open timeline. Runs on
     // the worker thread. nullopt if unsupported or not found.

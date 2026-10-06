@@ -56,6 +56,7 @@ public:
 
     std::optional<User> fetch_profile(const std::string& id) override;
     std::optional<User> lookup_user(const std::string& handle) override;
+    std::optional<Visibility> default_visibility() const override { return default_visibility_; }
     std::optional<Status> fetch_status(const std::string& id) override;
     std::vector<User> search_accounts(const std::string& query, int limit) override;
     FullRelationResult fetch_all_relations(const std::string& id, bool following) override;
@@ -135,6 +136,10 @@ private:
     net::IHttpClient* http_;
     int max_chars_;
     int max_profile_fields_ = 4; // server's max profile metadata fields (default 4)
+    // Read from verify_credentials in load_configuration(), like max_chars_ above:
+    // written on the worker thread once at startup, read on the loop thread after.
+    std::optional<Visibility> default_visibility_;
+    void load_default_visibility();
     // Set once we learn this instance predates grouped notifications (/api/v2/
     // notifications 404s) so we stop probing v2 and go straight to v1.
     bool grouped_notifs_unsupported_ = false;

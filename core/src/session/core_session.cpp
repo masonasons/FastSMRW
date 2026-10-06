@@ -688,7 +688,7 @@ void CoreSession::cmd_add_account(const json& cmd) {
                     const std::string key = account->account_key();
                     SocialAccount* acct_ptr = account.get();
                     accounts_.add(std::move(account), cred);
-                    worker_.post([acct_ptr] { acct_ptr->load_configuration(); }); // real char limit
+                    worker_.post([acct_ptr] { acct_ptr->load_configuration(); }); // char limit + default visibility
                     switch_account(key); // parks the old account, builds the new one
                     save_config();
                     emit_accounts();
@@ -2045,27 +2045,36 @@ void CoreSession::cmd_set_relationship(const json& cmd) {
 void CoreSession::do_relationship_action(SocialAccount* acct, const std::string& id,
                                          const std::string& handle, const std::string& action) {
     worker_.post([this, acct, id, action, handle] {
+        // A row fetched from a remote-instance timeline carries THAT server's account
+        // id, which means nothing on ours -- following from one of those feeds simply
+        // errored. The handle is sound (mark_remote qualifies a bare local handle with
+        // its instance domain), so when the id isn't one we can ask about, resolve the
+        // handle to the local account and act on that instead.
+        std::string use_id = id;
+        if (!handle.empty() && !acct->relationship(id))
+            if (auto resolved = acct->lookup_user(handle); resolved && !resolved->id.empty())
+                use_id = resolved->id;
         bool ok = false;
         if (action == "follow")
-            ok = acct->follow(id);
+            ok = acct->follow(use_id);
         else if (action == "unfollow")
-            ok = acct->unfollow(id);
+            ok = acct->unfollow(use_id);
         else if (action == "mute")
-            ok = acct->mute(id);
+            ok = acct->mute(use_id);
         else if (action == "unmute")
-            ok = acct->unmute(id);
+            ok = acct->unmute(use_id);
         else if (action == "block")
-            ok = acct->block(id);
+            ok = acct->block(use_id);
         else if (action == "unblock")
-            ok = acct->unblock(id);
+            ok = acct->unblock(use_id);
         else if (action == "show_boosts")
-            ok = acct->set_show_boosts(id, true);
+            ok = acct->set_show_boosts(use_id, true);
         else if (action == "hide_boosts")
-            ok = acct->set_show_boosts(id, false);
+            ok = acct->set_show_boosts(use_id, false);
         else if (action == "authorize_request")
-            ok = acct->authorize_follow_request(id);
+            ok = acct->authorize_follow_request(use_id);
         else if (action == "reject_request")
-            ok = acct->reject_follow_request(id);
+            ok = acct->reject_follow_request(use_id);
         // Deliberately NOT handling accept_notification_request / dismiss here: every
         // verb above takes an ACCOUNT id, and those two take the request's. Front ends
         // send them through user_action, which resolves the right id from the row, so
@@ -2289,8 +2298,18 @@ void CoreSession::follow_toggle_user(SocialAccount* acct, const std::string& id,
         // can't tell (no relationship support / a lookup failure), assume we're not
         // following yet and follow.
         std::optional<Relationship> rel = acct->relationship(id);
+        // No relationship for an id from a remote-instance timeline, because that id
+        // belongs to the other server. Resolve the handle to the local account before
+        // deciding the direction, or unfollowing someone from one of those feeds reads
+        // as "not following yet" and tries to follow them again.
+        std::string use_id = id;
+        if (!rel && !handle.empty())
+            if (auto resolved = acct->lookup_user(handle); resolved && !resolved->id.empty()) {
+                use_id = resolved->id;
+                rel = acct->relationship(use_id);
+            }
         const bool following = rel && (rel->following || rel->requested);
-        loop_.post([this, acct, id, handle, following] {
+        loop_.post([this, acct, id = use_id, handle, following] {
             const std::string action = following ? "unfollow" : "follow";
             // Which way this toggle goes is only known here, after the lookup --
             // the UI can't ask "Unfollow @alice?" before dispatching because it
@@ -3267,6 +3286,11 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         ctx["default_visibility"] = static_cast<int>(Visibility::Direct);
     } else {
         ctx["title"] = "New Post";
+        // The account's own default, as set on the server. A reply deliberately does
+        // NOT come through here: it inherits the visibility of the post it answers, so
+        // a reply to a followers-only post can't be widened to public by accident.
+        if (auto vis = account->default_visibility())
+            ctx["default_visibility"] = static_cast<int>(*vis);
     }
     emit(ctx);
 }
@@ -4290,7 +4314,7 @@ void CoreSession::rebuild_timelines() {
     const auto saved = load_open_timelines();
     bool migrated = false;
     for (SocialAccount* account : accounts_.accounts()) {
-        worker_.post([account] { account->load_configuration(); }); // refresh char limit
+        worker_.post([account] { account->load_configuration(); }); // char limit + default visibility
         refresh_lists(account); // warm each account's list cache for Ctrl+T
         refresh_muted_words(account); // load keyword mutes (Bluesky) for the filter
         const std::string key = account->account_key();
