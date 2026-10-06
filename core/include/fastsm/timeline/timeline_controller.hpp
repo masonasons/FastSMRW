@@ -64,13 +64,15 @@ public:
     // The decision logic behind refresh(): walk pages newest-first via
     // `fetch(cursor)`, collecting items whose id isn't in `known`. Known items
     // sitting ABOVE the first fresh one — a realtime-streamed post or a floated
-    // pinned post at the top — are skipped; the scan only stops once it reaches
+    // pinned post at the top — do not stop the scan; fetched known rows are also
+    // retained so a cached post can gain or lose its quote. The scan stops at
     // known content BELOW a fresh one (reconnected), runs out of pages, hits a
     // short/empty page, or a full page brings nothing new. This is what lets a
     // refresh fill the gap beneath a streamed top instead of short-circuiting on
     // it. No threads or network, so it's unit-testable directly.
     struct RefreshScan {
         std::vector<TimelineItem> fresh;
+		std::vector<TimelineItem> updated; // fetched copies of rows already loaded
         std::vector<std::pair<std::string, PageCursor>> marks; // cold-load scrollback marks
         std::optional<PageCursor> tail;                        // cursor past the fetched region
         bool hit_known = false;                                // reconnected to known content

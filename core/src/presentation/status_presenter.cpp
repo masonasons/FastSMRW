@@ -52,9 +52,12 @@ std::string present_text(const std::string& raw, bool keep_breaks = false) {
 // to the source HTML; Bluesky posts have no HTML and already carry real
 // newlines in their text.
 std::string body_source(const Status& d, bool keep_breaks) {
-    if (!keep_breaks || d.content.empty())
-        return d.text;
-    return util::strip_html(d.content, /*keep_breaks=*/true);
+	std::string body = keep_breaks && !d.content.empty()
+		? util::strip_html(d.content, /*keep_breaks=*/true) : d.text;
+	// Recovering paragraph breaks also recovers the server's quote fallback link.
+	if (d.quote)
+		body = util::strip_quote_url(body, d.quote->url);
+	return body;
 }
 
 // A display name, cleaned for display/speech: emoji stripped per settings.
@@ -649,10 +652,7 @@ static std::string poll_text(const Poll& p, std::int64_t now) {
 // text (no HTML) already carries real newlines. (The timeline row and spoken
 // strings use the flattened single-line s.text instead.)
 static std::string detail_body(const Status& s) {
-    std::string body = s.content.empty() ? s.text : util::strip_html(s.content, true);
-    if (s.quote) // the quote is shown on its own, so drop its trailing URL
-        body = util::strip_quote_url(body, s.quote->url);
-    return body;
+	return body_source(s, /*keep_breaks=*/true);
 }
 
 std::string post_info(const Status& s, std::int64_t now) {
@@ -668,6 +668,8 @@ std::string post_info(const Status& s, std::int64_t now) {
     if (s.has_content_warning())
         out += "Content warning: " + *s.spoiler_text + "\n";
     out += "\n" + detail_body(s) + "\n";
+	if (s.quote)
+		out += "\nQuoting " + post_info(*s.quote, now) + "\n";
     if (s.poll)
         out += poll_text(*s.poll, now);
     if (!s.media_attachments.empty()) {

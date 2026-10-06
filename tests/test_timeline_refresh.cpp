@@ -69,8 +69,52 @@ void test_refresh_steady_state_stops_early() {
     };
     const auto scan = TimelineController::scan_refresh(known, false, 5, 3, fetch);
     CHECK(scan.fresh.empty());
+	CHECK_EQ(scan.updated.size(), size_t(3));
     CHECK(!scan.hit_known);
     CHECK_EQ(fetches, 1);
+}
+
+void test_refresh_updates_loaded_quotes() {
+	TimelineSource src;
+	src.kind = TimelineSource::Kind::PostUsers; // no cache or workers needed
+	TimelineController tc(nullptr, src, nullptr, nullptr, nullptr);
+	Status pending;
+	pending.id = "quoting";
+	pending.text = "RE: https://example.social/@alice/1 My thoughts";
+	tc.ingest_realtime(TimelineItem{pending});
+	tc.note_selection("s:quoting");
+	int received = 0;
+	int autoread = 0;
+	tc.on_received_new = [&](int n, bool) { received += n; };
+	tc.on_new_items = [&](const auto&) { ++autoread; };
+
+	Status accepted = pending;
+	accepted.text = "My thoughts";
+	accepted.quote = std::make_shared<Status>();
+	accepted.quote->id = "original";
+	accepted.quote->text = "Original post";
+	const auto scan = TimelineController::scan_refresh({"s:quoting"}, false, 5, 40,
+		[&](const PageCursor&) {
+			TimelinePage page;
+			page.items.push_back(TimelineItem{accepted});
+			return page;
+		});
+	CHECK(scan.fresh.empty());
+	CHECK_EQ(scan.updated.size(), size_t(1));
+	for (const auto& item : scan.updated)
+		tc.ingest_realtime(item);
+	CHECK_EQ(tc.items().size(), size_t(1));
+	CHECK(tc.items()[0].status()->quote != nullptr);
+	CHECK_EQ(tc.items()[0].status()->text, std::string("My thoughts"));
+	CHECK_EQ(tc.selected_id(), std::string("s:quoting"));
+	CHECK_EQ(received, 0);
+	CHECK_EQ(autoread, 0);
+
+	// A later server copy can also withdraw a quote; do not keep stale content.
+	tc.ingest_realtime(TimelineItem{pending});
+	CHECK(!tc.items()[0].status()->quote);
+	CHECK_EQ(received, 0);
+	CHECK_EQ(autoread, 0);
 }
 
 // A gap larger than one page below a streamed top is filled across pages until it
