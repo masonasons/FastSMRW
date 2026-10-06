@@ -24,7 +24,6 @@ class ServerFiltersDialog; // manager modal; non-null while open (like keymap_mg
 class ListsManagerDialog;  // Lists manager modal; non-null while open
 class FollowedHashtagsDialog; // Followed Hashtags manager modal; non-null while open
 class AliasesManagerDialog; // User Aliases manager modal; non-null while open
-class MediaPlayback;       // windowless background audio playback (media_player_window.hpp)
 
 // The main application window: a left "Timelines" list and a right virtual
 // "Timeline" posts list. It is a pure client of the core's C ABI: it dispatches
@@ -33,7 +32,7 @@ class MediaPlayback;       // windowless background audio playback (media_player
 class MainWindow {
 public:
     explicit MainWindow(HINSTANCE inst);
-    ~MainWindow(); // defined in the .cpp (media_bg_ needs the complete MediaPlayback)
+    ~MainWindow();
 
     bool create();
     HWND hwnd() const { return hwnd_; }
@@ -144,8 +143,7 @@ private:
     void do_enter_post_action();                 // Enter on a post (configurable)
     void do_enter_user_action();                 // Enter on a user (configurable)
     void do_secondary_post_action();             // Shift+Enter on a post (configurable)
-    void play_media_background(const std::wstring& url, const std::wstring& title);
-    void stop_media(); // stop windowless background audio
+    void stop_media(); // stop whatever the core is playing
     void surface_window(); // show + foreground + sync state (second-launch hand-off)
     void add_tray_icon();    // notification-area icon (show/hide window, exit)
     void remove_tray_icon();
@@ -183,7 +181,8 @@ private:
     void ev_layer_keymap(const nlohmann::json& e);
     void ev_action_catalog(const nlohmann::json& e);
     void ev_invisible_ui_action(const nlohmann::json& e);
-    void ev_media_open(const nlohmann::json& e);   // stream audio in the in-app player
+    void ev_media_open(const nlohmann::json& e);   // images/video: the system's viewer
+    void ev_media_player(const nlohmann::json& e); // the core's player: open/retitle/close its window
     void ev_copy(const nlohmann::json& e);         // write the composed text to the clipboard
     void ev_media_picker(const nlohmann::json& e); // choose which media to play
     void ev_client_filter(const nlohmann::json& e);  // open the per-timeline client filter dialog
@@ -226,8 +225,8 @@ private:
     // event; the driver registers them and maps WM_HOTKEY ids back to actions.
     HotkeyDriver hotkey_driver_;   // mode "hotkey" (RegisterHotKey)
     KeyhookDriver keyhook_driver_; // mode "keyhook" (WH_KEYBOARD_LL)
-    std::unique_ptr<MediaPlayback> media_bg_; // windowless background audio playback
     std::vector<std::string> sound_devices_;  // mixer output devices, from the settings event
+    std::vector<std::string> media_devices_;  // the media player's, likewise
     std::string invisible_mode_ = "off";
     bool installed_mode() const;            // installed.txt marker present (vs portable)
     std::string pending_update_url_;        // FastSMRW.zip URL from the last check

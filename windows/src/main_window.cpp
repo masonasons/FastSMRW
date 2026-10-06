@@ -41,7 +41,6 @@ namespace {
 constexpr wchar_t kClassName[] = L"FastSMRWMain";
 constexpr int kTimelinesPaneWidth = 220;
 constexpr int kMinWidth = 920;
-constexpr UINT_PTR kMediaBgTimer = 1; // WM_TIMER id for background-audio end polling
 constexpr UINT_PTR kExitTimer = 2;    // brief delay so "Exiting" is spoken before we quit
 constexpr int kMinHeight = 720;
 
@@ -305,7 +304,7 @@ HMENU build_menu() {
 } // namespace
 
 MainWindow::MainWindow(HINSTANCE inst) : inst_(inst) {}
-MainWindow::~MainWindow() = default; // here, where MediaPlayback is a complete type
+MainWindow::~MainWindow() = default;
 
 void MainWindow::event_sink(void* user, const char* event_json, size_t len) {
     auto* self = static_cast<MainWindow*>(user);
@@ -582,10 +581,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     case WM_TIMER:
-        if (wp == kMediaBgTimer && media_bg_ && media_bg_->completed()) {
-            media_bg_->stop(); // background audio finished; clear it
-            KillTimer(hwnd_, kMediaBgTimer);
-        } else if (wp == kExitTimer) {
+        if (wp == kExitTimer) {
             KillTimer(hwnd_, kExitTimer);
             DestroyWindow(hwnd_); // "Exiting" has been spoken; now really quit
         }
@@ -1758,8 +1754,7 @@ void MainWindow::do_settings() {
     AudioChoices audio;
     audio.soundpacks = soundpacks_.empty() ? std::vector<std::string>{"Default"} : soundpacks_;
     audio.sound_devices = sound_devices_; // the core's mixer devices, from the settings event
-    for (const std::wstring& d : media_output_devices())
-        audio.media_devices.push_back(to_utf8(d)); // DirectShow's, which can differ
+    audio.media_devices = media_devices_; // the core's media player's, from the settings event
     auto open_mgr = [this](HWND parent) { open_keymap_manager(parent); };
     if (auto result = show_settings_dialog(hwnd_, inst_, s, audio, open_mgr)) {
         // The Keyboard Manager (reachable from a button inside this dialog) switches
@@ -2383,6 +2378,8 @@ void MainWindow::on_event(const std::string& js) {
         ev_follow_request_prompt(e);
     else if (ev == "media_open")
         ev_media_open(e);
+    else if (ev == "media_player")
+        ev_media_player(e);
     else if (ev == "copy_to_clipboard")
         ev_copy(e);
     else if (ev == "media_picker")
@@ -2521,11 +2518,9 @@ void MainWindow::ev_settings(const json& e) {
     sound_devices_.clear();
     for (const auto& d : e.value("sound_devices", json::array()))
         sound_devices_.push_back(d.get<std::string>());
-    // A media volume change while something is already playing in the background
-    // should be heard now, not next time. (The device only applies to a new
-    // stream — it's chosen when the graph is built.)
-    if (media_bg_)
-        media_bg_->set_volume(settings_.value("media_volume", 100));
+    media_devices_.clear();
+    for (const auto& d : e.value("media_devices", json::array()))
+        media_devices_.push_back(d.get<std::string>());
     if (action_catalog_.empty()) // load once so the Keyboard Manager has its actions
         dispatch_cmd({{"cmd", "get_action_catalog"}});
     apply_invisible();
@@ -3142,52 +3137,29 @@ void MainWindow::ev_media_open(const json& e) {
     const std::wstring title = to_wide(e.value("title", std::string{}));
     if (url.empty())
         return;
-    // Only audio streams in the in-app player; images/video/gifv open in the
-    // system app (unchanged from when the core emitted open_url for them).
-    if (!kind.empty() && kind != "audio") {
-        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
-        return;
-    }
-    if (settings_.value("media_background", false)) { // no window; stop with Ctrl+S
-        play_media_background(url, title);
-        return;
-    }
-    leave_layer(); // a window is opening; leave the layer (restores an overlay)
-    MediaPlayerOptions opts;
-    opts.device = to_wide(settings_.value("media_device", std::string{}));
-    opts.volume = settings_.value("media_volume", 100);
-    // Up/Down in the player move the same level the Sounds page shows, and it
-    // sticks: the core persists it and hands it back on the next settings event.
-    opts.on_volume = [this](int level) {
-        dispatch_cmd({{"cmd", "set_media_volume"}, {"volume", level}});
-    };
-    const bool played = show_media_player(hwnd_, inst_, title, url,
-                                          [this](const std::wstring& m) { announce(to_utf8(m)); },
-                                          std::move(opts));
-    if (!played) // couldn't stream it (e.g. an unsupported codec) -> system player
-        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
+    (void)kind; (void)title;
+    // Audio (and YouTube) the core plays itself (media_player); what comes here
+    // is images, video and GIFs, for the system's own viewer.
+    ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
 }
 
-void MainWindow::play_media_background(const std::wstring& url, const std::wstring& title) {
-    if (!media_bg_)
-        media_bg_ = std::make_unique<MediaPlayback>();
-    media_bg_->set_output_device(to_wide(settings_.value("media_device", std::string{})));
-    media_bg_->set_volume(settings_.value("media_volume", 100));
-    if (media_bg_->play(url)) {
-        announce("Playing " + to_utf8(title));
-        SetTimer(hwnd_, kMediaBgTimer, 1000, nullptr); // auto-clear when it ends
+void MainWindow::ev_media_player(const json& e) {
+    const std::string state = e.value("state", std::string{});
+    const std::wstring title = to_wide(e.value("title", std::string{}));
+    if (state == "opening") {
+        if (e.value("background", false))
+            return; // no window: Stop Media (Ctrl+S) stops it
+        leave_layer(); // a window is opening; leave the layer (restores an overlay)
+        show_media_player(hwnd_, inst_, title.empty() ? L"Media" : title,
+                          [this](const json& cmd) { dispatch_cmd(cmd); });
+    } else if (state == "playing") {
+        retitle_media_player(title);
     } else {
-        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOW);
+        close_media_player(); // ended, failed or stopped
     }
 }
 
-void MainWindow::stop_media() {
-    if (media_bg_ && media_bg_->active()) {
-        media_bg_->stop();
-        KillTimer(hwnd_, kMediaBgTimer);
-        announce("Stopped");
-    }
-}
+void MainWindow::stop_media() { dispatch_cmd({{"cmd", "media_stop"}}); }
 
 void MainWindow::ev_media_picker(const json& e) {
     const std::string id = e.value("id", std::string{});

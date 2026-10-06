@@ -24,6 +24,8 @@ final class MainViewController: UIViewController {
     private var tabTopConstraints: [NSLayoutConstraint] = []
     private var tabBottomConstraints: [NSLayoutConstraint] = []
     private var tabsAtBottom: Bool?
+    /// The core's media player, while it is up.
+    private var corePlayer: CorePlayerViewController?
 
     private func applyTabBarPosition() {
         let bottom = (state.settingsRaw["tab_bar_position"] as? String ?? "bottom") == "bottom"
@@ -297,6 +299,27 @@ final class MainViewController: UIViewController {
             Media.present(media, from: self.topPresenter)
         }
         state.onMediaPicker = { [weak self] picker in self?.showMediaPicker(picker) }
+        state.onMediaPlayer = { [weak self] media in
+            guard let self else { return }
+            switch media.state {
+            case "opening":
+                if media.background { return }
+                if let player = self.corePlayer {
+                    player.retitle(media.title)
+                    return
+                }
+                let player = CorePlayerViewController(state: self.state, title: media.title)
+                self.corePlayer = player
+                let nav = UINavigationController(rootViewController: player)
+                nav.modalPresentationStyle = .fullScreen // closed by Done or Stop, not a swipe
+                self.topPresenter.present(nav, animated: true)
+            case "playing":
+                self.corePlayer?.retitle(media.title)
+            default: // ended, failed, stopped
+                self.corePlayer?.closeFromCore()
+                self.corePlayer = nil
+            }
+        }
         // Activating a follow-request notification: the core asks for the native
         // Accept/Reject choice, answered with set_relationship.
         state.onFollowRequestPrompt = { [weak self] accountId, acct in

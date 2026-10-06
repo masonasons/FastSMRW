@@ -54,6 +54,7 @@ set(CORE_SRC
     ${CORE}/presentation/alias_store.cpp
     ${CORE}/presentation/reply_helper.cpp
     ${CORE}/sound/sound_manager.cpp
+    ${CORE}/media/media_player.cpp
     ${CORE}/input/keymap.cpp
     ${CORE}/update/update_checker.cpp
     ${CORE}/session/core_session.cpp

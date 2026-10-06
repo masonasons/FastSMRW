@@ -180,6 +180,89 @@ final class ImageViewerViewController: UIViewController, UIScrollViewDelegate {
     @objc private func done() { dismiss(animated: true) }
 }
 
+/// The core's own player (audio attachments, through FastPlay's engine): big
+/// plain buttons VoiceOver reads well, each a command to the core, which speaks
+/// what happens. Done (or Stop) stops it; the core closing it dismisses this.
+@MainActor
+final class CorePlayerViewController: UIViewController {
+    private let state: AppState
+    private let heading = UILabel()
+    private var closingFromCore = false
+
+    init(state: AppState, title: String) {
+        self.state = state
+        super.init(nibName: nil, bundle: nil)
+        retitle(title)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func retitle(_ title: String) {
+        self.title = title.isEmpty ? "Media" : title
+        heading.text = self.title
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .done, target: self, action: #selector(stop))
+
+        heading.font = .preferredFont(forTextStyle: .title2)
+        heading.adjustsFontForContentSizeCategory = true
+        heading.numberOfLines = 0
+        heading.textAlignment = .center
+        heading.accessibilityTraits = .header
+
+        func button(_ title: String, _ action: Selector) -> UIButton {
+            let b = UIButton(type: .system)
+            b.setTitle(title, for: .normal)
+            b.titleLabel?.font = .preferredFont(forTextStyle: .title3)
+            b.titleLabel?.adjustsFontForContentSizeCategory = true
+            b.addTarget(self, action: action, for: .touchUpInside)
+            return b
+        }
+        let stack = UIStackView(arrangedSubviews: [
+            heading,
+            button("Play or Pause", #selector(toggle)),
+            button("Back 5 Seconds", #selector(back)),
+            button("Forward 5 Seconds", #selector(forward)),
+            button("Where Am I", #selector(position)),
+            button("Volume Up", #selector(louder)),
+            button("Volume Down", #selector(quieter)),
+            button("Stop", #selector(stop)),
+        ])
+        stack.axis = .vertical
+        stack.spacing = 18
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
+        ])
+    }
+
+    @objc private func toggle() { state.mediaToggle() }
+    @objc private func back() { state.mediaSeek(by: -5) }
+    @objc private func forward() { state.mediaSeek(by: 5) }
+    @objc private func position() { state.mediaPosition() }
+    @objc private func louder() { state.mediaVolume(by: 10) }
+    @objc private func quieter() { state.mediaVolume(by: -10) }
+    @objc private func stop() {
+        state.mediaStop()
+        closeFromCore()
+    }
+
+    /// The core stopped it (ended, failed, stopped): dismiss without telling it again.
+    func closeFromCore() {
+        guard !closingFromCore else { return }
+        closingFromCore = true
+        (navigationController ?? self).dismiss(animated: true)
+    }
+}
+
 /// Plays a video/audio attachment (AVPlayerViewController embedded so we can add
 /// Save and Share around it).
 @MainActor

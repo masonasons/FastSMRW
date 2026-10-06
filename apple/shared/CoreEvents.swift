@@ -408,6 +408,15 @@ struct ClientFilterEvent: Decodable { let available: Bool; let filter: ClientFil
 struct MediaOpen: Decodable { let url: String; let kind: String; var title = "" }
 struct MediaItem: Decodable { let title: String; let url: String; let kind: String }
 struct MediaPicker: Decodable { let id: String; let items: [MediaItem] }
+/// The core's own media player (audio and YouTube, through FastPlay's engine):
+/// state ∈ opening/playing/ended/failed/closed. The app shows a player while it
+/// is opening or playing (unless `background`), and sends its keys as commands.
+struct MediaPlayerState: Decodable {
+    let state: String
+    var title = ""
+    var url = ""
+    var background = false
+}
 
 /// Links in a post, when there's more than one to choose from.
 struct URLLink: Decodable { let title: String; let url: String }
@@ -613,6 +622,7 @@ enum CoreEvent {
     case clientFilter(ClientFilterEvent)
     case mediaOpen(MediaOpen)
     case mediaPicker(MediaPicker)
+    case mediaPlayer(MediaPlayerState)
     case urlPicker(URLPicker)
     case speechCatalog(SpeechCatalog)
     case movementCatalog(MovementCatalog)
@@ -661,6 +671,7 @@ enum CoreEvent {
         case "client_filter": return decode(ClientFilterEvent.self).map(CoreEvent.clientFilter)
         case "media_open": return decode(MediaOpen.self).map(CoreEvent.mediaOpen)
         case "media_picker": return decode(MediaPicker.self).map(CoreEvent.mediaPicker)
+        case "media_player": return decode(MediaPlayerState.self).map(CoreEvent.mediaPlayer)
         case "url_picker": return decode(URLPicker.self).map(CoreEvent.urlPicker)
         case "speech_catalog": return decode(SpeechCatalog.self).map(CoreEvent.speechCatalog)
         case "movement_catalog":

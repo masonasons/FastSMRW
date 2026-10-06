@@ -4,6 +4,10 @@ FastSMRW changelog
 0.6.1
 -----
 
+- New: audio attachments now play through FastPlay's audio engine on Windows, Mac and iPhone, so far more formats and streams play in the app instead of sending you to another player.
+- New: on Windows and Mac, View Media plays YouTube videos linked in a post right in the app; the first one takes a little longer while the YouTube tools download, and they keep themselves up to date.
+- New: the media player can tell you how far through you are and how long it is (P on Windows and Mac, Where Am I on iPhone), and on iPhone it has its own volume buttons.
+- Changed: the Mac app is no longer sandboxed, which it needed to be for YouTube; your accounts and settings carry over by themselves.
 - New: two more timelines in the new timeline list for finding people to follow - Suggested Follows, and on Mastodon a Profile Directory of people on your instance who chose to be listed.
 - Fixed: quoted posts no longer repeat their RE: link when displaying or copying paragraphs, Post Info includes the quoted post, and refreshing updates quotes that became available after the post first arrived.
 - Fixed: a new post now opens at your account's default posting visibility from your Mastodon settings, instead of always Public; replies still follow the visibility of the post you're answering.

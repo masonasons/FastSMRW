@@ -27,6 +27,16 @@ if not exist deps\stb_vorbis\stb_vorbis.c (
     curl -fsSL -o deps\stb_vorbis\stb_vorbis.c https://raw.githubusercontent.com/nothings/stb/master/stb_vorbis.c || goto err
 )
 
+REM --- FastPlay Engine: media playback (FastPlay's engine as a DLL), from FastPlay's
+REM CI. "download-deps.bat engine" fetches the newest again. ---
+if /i "%~1"=="engine" if exist deps\fastplay_engine rmdir /s /q deps\fastplay_engine
+if not exist deps\fastplay_engine\lib\fastplay_engine.dll (
+    echo Fetching FastPlay Engine...
+    curl -fsSL -o deps\fastplay-engine.zip https://github.com/masonasons/FastPlay/releases/download/engine-latest/fastplay-engine-windows-x64.zip || goto err
+    powershell -NoProfile -Command "Expand-Archive -Force 'deps\fastplay-engine.zip' 'deps\fastplay_engine'" || goto err
+    del deps\fastplay-engine.zip
+)
+
 REM --- UniversalSpeech (samtupy/UniversalSpeechMSVCStatic): build static lib + bridge DLLs ---
 REM Built from source with SCons (needs Python + Visual C++ build tools), like
 REM FastPlay. If the build can't run, speech is simply disabled.

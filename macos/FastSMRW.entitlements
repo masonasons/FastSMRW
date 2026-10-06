@@ -2,14 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<!-- Lets the sandboxed app read files the user picks in an Open panel (post
-	     attachments). Without it the system refuses to show the panel at all, so
-	     the compose window's "Add…" button silently does nothing. -->
-	<key>com.apple.security.files.user-selected.read-only</key>
-	<true/>
+	<!-- Not sandboxed: media plays through FastPlay's engine, which runs yt-dlp
+	     (and deno) for YouTube links, and a sandbox would stop them. The app is
+	     still hardened-runtime signed and notarized. Settings made while it was
+	     sandboxed are brought out of the old container on first run
+	     (AppState.moveOutOfSandbox). -->
 </dict>
 </plist>

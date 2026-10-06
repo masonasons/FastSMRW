@@ -27,6 +27,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private var userAnalysisController: UserAnalysisWindowController?
     private var detailController: NSWindowController?
     private var mediaControllers: [NSWindowController] = []
+    private var corePlayer: CorePlayerWindowController?
     private var hashtagsController: HashtagsWindowController?
     private var trendingHashtagsController: TrendingHashtagsWindowController?
     private var listsController: ListsWindowController?
@@ -143,6 +144,26 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             else { return }
             self.mediaControllers.removeAll { $0.window?.isVisible != true }
             self.mediaControllers.append(controller)
+        }
+        state.onMediaPlayer = { [weak self] media in
+            guard let self else { return }
+            switch media.state {
+            case "opening":
+                if media.background { return } // no window: Stop Media stops it
+                if let player = self.corePlayer {
+                    player.retitle(media.title)
+                    player.show()
+                } else {
+                    let player = CorePlayerWindowController(state: state, title: media.title)
+                    self.corePlayer = player
+                    player.show()
+                }
+            case "playing":
+                self.corePlayer?.retitle(media.title)
+            default: // ended, failed, stopped
+                self.corePlayer?.closeFromCore()
+                self.corePlayer = nil
+            }
         }
         state.onMediaPicker = { [weak self] picker in
             guard let self, let window = self.window, self.detailController == nil else { return }

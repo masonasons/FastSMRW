@@ -33,11 +33,16 @@ if not exist "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" (
 call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 
 REM ---- ensure dependencies are present (not committed; fetched into deps\) ----
-if not exist deps\nlohmann\json.hpp (
+if not exist deps\fastplay_engine\include\fastplay_engine\fastplay_engine.h goto fetch_deps
+if not exist deps\nlohmann\json.hpp goto fetch_deps
+goto deps_ready
+:fetch_deps
+(
     echo Dependencies missing - running download-deps.bat...
     call download-deps.bat
     if errorlevel 1 exit /b 1
 )
+:deps_ready
 
 REM ---- parse arguments ----
 set "CONFIG=release"
@@ -80,7 +85,10 @@ if /i "%CONFIG%"=="debug" (
     set "RUNTIME=/MT"
     set "LINKFLAGS="
 )
-set "COREINC=/I core\include"
+REM FastPlay's engine plays media in the core (fastsm::media::MediaPlayer):
+REM fastplay_engine.dll beside the exe, from FastPlay's CI (download-deps.bat).
+set "COREINC=/I core\include /DFASTSM_FASTPLAY_ENGINE /I deps\fastplay_engine\include"
+set "FPE_LIB=deps\fastplay_engine\lib\fastplay_engine.lib"
 
 REM ---- embed the short git commit so the "latest" update branch can tell builds
 REM apart (empty for a build outside a git checkout) ----
@@ -101,7 +109,7 @@ set "CORE_SRC=%CORE_SRC% core\src\util\base64.cpp core\src\store\paths.cpp core\
 set "CORE_SRC=%CORE_SRC% core\src\runtime\worker_queue.cpp core\src\timeline\timeline_controller.cpp core\src\timeline\streaming_client.cpp core\src\timeline\movement.cpp core\src\timeline\client_filter.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\presentation\status_presenter.cpp core\src\presentation\speech_settings.cpp core\src\presentation\alias_store.cpp core\src\presentation\reply_helper.cpp core\src\sound\sound_manager.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\languages.cpp core\src\util\demojify.cpp"
-set "CORE_SRC=%CORE_SRC% core\src\store\app_settings.cpp"
+set "CORE_SRC=%CORE_SRC% core\src\store\app_settings.cpp core\src\media\media_player.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\input\keymap.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\update\update_checker.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\session\core_session.cpp core\src\capi\fastsm_core.cpp"
@@ -120,7 +128,7 @@ if "%BUILD_DLL%"=="1" (
     cl %CFLAGS% /DFASTSM_CORE_DLL /DFASTSM_CORE_BUILD %COREINC% /c core\src\capi\fastsm_core.cpp /Fo"%OBJ%\dll_capi.obj"
     if errorlevel 1 goto error
     REM dll_capi.obj defines the exports; the rest is pulled from the static lib.
-    link /nologo /DLL "%OBJ%\dll_capi.obj" "%BUILD%\fastsm_core.lib" winhttp.lib crypt32.lib ole32.lib winmm.lib /OUT:"%BUILD%\fastsm_core.dll" /IMPLIB:"%BUILD%\fastsm_core_dll.lib"
+    link /nologo /DLL "%OBJ%\dll_capi.obj" "%BUILD%\fastsm_core.lib" %FPE_LIB% winhttp.lib crypt32.lib ole32.lib winmm.lib /OUT:"%BUILD%\fastsm_core.dll" /IMPLIB:"%BUILD%\fastsm_core_dll.lib"
     if errorlevel 1 goto error
 )
 
@@ -141,7 +149,7 @@ rc /nologo /I windows\resources /fo "%BUILD%\app.res" windows\resources\app.rc
 if errorlevel 1 goto error
 echo Compiling and linking FastSMRW.exe...
 set "APP_SRC=windows\src\main.cpp windows\src\main_window.cpp windows\src\compose_dialog.cpp windows\src\add_account_dialog.cpp windows\src\new_timeline_dialog.cpp windows\src\settings_dialog.cpp windows\src\post_info_dialog.cpp windows\src\report_dialog.cpp windows\src\edit_profile_dialog.cpp windows\src\user_analysis_dialog.cpp windows\src\user_profile_dialog.cpp windows\src\client_filters_dialog.cpp windows\src\server_filters_dialog.cpp windows\src\list_membership_dialog.cpp windows\src\lists_manager_dialog.cpp windows\src\hashtag_dialog.cpp windows\src\aliases_dialog.cpp windows\src\account_settings_dialog.cpp windows\src\media_player_window.cpp windows\src\invisible_hotkeys.cpp windows\src\invisible_keyhook.cpp windows\src\keymap_manager_dialog.cpp windows\src\win_speech.cpp"
-cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib oleaut32.lib winmm.lib strmiids.lib %USPEECH_LIB%
+cl %CFLAGS% %USPEECH_DEF% %COREINC% /I windows\src %USPEECH_INC% %APP_SRC% "%BUILD%\fastsm_core.lib" "%BUILD%\app.res" /Fo"%OBJ%\app\\" /Fe"%BUILD%\FastSMRW.exe" /link %LINKFLAGS% user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib winhttp.lib crypt32.lib ole32.lib oleaut32.lib winmm.lib %FPE_LIB% %USPEECH_LIB%
 if errorlevel 1 goto error
 
 REM ---- 2a) Windows 7 floor: the exe must not statically import a newer API ----
@@ -174,6 +182,7 @@ echo Assembling dist...
 if not exist dist mkdir dist
 xcopy /e /i /y assets\* dist\ >nul
 copy /y "%BUILD%\FastSMRW.exe" dist\ >nul
+copy /y deps\fastplay_engine\lib\fastplay_engine.dll dist\ >nul
 REM A FAILED copy here used to pass silently, so the build said "successful" while
 REM dist\ still held yesterday's exe -- usually because the app was running and
 REM holding it open. Running a stale binary while believing it is current wastes
@@ -212,7 +221,8 @@ if defined ISCC (
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_bluesky_richtext.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_push.cpp tests\test_confirm.cpp tests\test_sound.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_bluesky_richtext.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_push.cpp tests\test_confirm.cpp tests\test_sound.cpp tests\test_media.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" %FPE_LIB% /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    copy /y deps\fastplay_engine\lib\fastplay_engine.dll "%BUILD%\" >nul
     if errorlevel 1 goto error
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"

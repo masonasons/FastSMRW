@@ -45,6 +45,9 @@ targets:
           - ../core/include
           - ../deps
           - ../deps/stb_vorbis
+          - ../deps/fastplay_engine_ios/include
+        # Media plays in the core through FastPlay's engine (fastsm::media)
+        GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "FASTSM_FASTPLAY_ENGINE=1"]
         # stb_vorbis.c is noisy; don't let its warnings clutter the build.
         GCC_WARN_UNUSED_FUNCTION: NO
         GCC_WARN_UNUSED_VARIABLE: NO
@@ -61,6 +64,10 @@ targets:
       - path: src/Assets.xcassets
     dependencies:
       - target: fastsm_core
+      # FastPlay's engine, which the core plays audio through
+      - framework: ../deps/fastplay_engine_ios/FastPlayEngine.xcframework
+        embed: true
+        codeSign: true
       - sdk: UIKit.framework
       - sdk: Foundation.framework
       # miniaudio's iOS backend (earcons play in the core).

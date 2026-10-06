@@ -72,6 +72,7 @@ final class AppState {
     var onUserLists: ((UserLists) -> Void)?
     var onMediaOpen: ((MediaOpen) -> Void)?
     var onMediaPicker: ((MediaPicker) -> Void)?
+    var onMediaPlayer: ((MediaPlayerState) -> Void)?
     var onURLPicker: ((URLPicker) -> Void)?
     var onUpdateStatus: ((UpdateStatus) -> Void)?
     /// Enter on a follow-request notification: show Accept/Reject for
@@ -112,11 +113,36 @@ final class AppState {
         accounts.first { $0.key == selectedAccountKey }.map { "@\($0.handle)" }
     }
 
+    #if os(macOS)
+    /// The Mac app was sandboxed until it played YouTube itself (yt-dlp cannot run
+    /// inside a sandbox): its settings, accounts and caches are in the old
+    /// container. The first run without the sandbox brings them out.
+    private static func moveOutOfSandbox(to configDir: URL) {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: configDir.appendingPathComponent("config.json").path),
+              let bundleId = Bundle.main.bundleIdentifier else { return }
+        let old = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Containers/\(bundleId)/Data/Library/Application Support/FastSMRW",
+                                    isDirectory: true)
+        guard fm.fileExists(atPath: old.appendingPathComponent("config.json").path) else { return }
+        try? fm.createDirectory(at: configDir, withIntermediateDirectories: true)
+        for item in (try? fm.contentsOfDirectory(at: old, includingPropertiesForKeys: nil)) ?? [] {
+            let destination = configDir.appendingPathComponent(item.lastPathComponent)
+            if !fm.fileExists(atPath: destination.path) {
+                try? fm.copyItem(at: item, to: destination)
+            }
+        }
+    }
+    #endif
+
     init?() {
         let fm = FileManager.default
         guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                         appropriateFor: nil, create: true) else { return nil }
         let configDir = support.appendingPathComponent("FastSMRW", isDirectory: true)
+        #if os(macOS)
+        AppState.moveOutOfSandbox(to: configDir)
+        #endif
         try? fm.createDirectory(at: configDir, withIntermediateDirectories: true)
         let soundpacks = Bundle.main.resourceURL?.appendingPathComponent("soundpacks",
                                                                           isDirectory: true)
@@ -302,6 +328,8 @@ final class AppState {
             onMediaOpen?(e)
         case let .mediaPicker(e):
             onMediaPicker?(e)
+        case let .mediaPlayer(e):
+            onMediaPlayer?(e)
         case let .urlPicker(e):
             onURLPicker?(e)
         case let .speechCatalog(e):
@@ -618,6 +646,12 @@ final class AppState {
     func clearAllTimelines() { client.send("clear_all_timelines") }
     func removeAccount(key: String) { client.send("remove_account", ["key": key]) }
     func playMedia(id: String) { client.send("play_media", ["id": id]) }
+    // The core's player: what its keys and buttons do. The core says what happened.
+    func mediaToggle() { client.send("media_toggle", [:]) }
+    func mediaSeek(by seconds: Double) { client.send("media_seek", ["by": seconds]) }
+    func mediaVolume(by percent: Int) { client.send("media_volume", ["by": percent]) }
+    func mediaPosition() { client.send("media_position", [:]) }
+    func mediaStop() { client.send("media_stop", [:]) }
     func playMedia(url: String, kind: String, title: String) {
         client.send("play_media", ["url": url, "kind": kind, "title": title])
     }

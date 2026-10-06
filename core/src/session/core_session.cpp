@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <fstream>
 #include <future>
 #include <iterator>
@@ -368,6 +369,17 @@ CoreSession::CoreSession(Paths paths, std::unique_ptr<net::IHttpClient> http,
 
 CoreSession::~CoreSession() {
     log::write("session ending, stopping all streams (app exit)");
+    {
+        // The media player stops on the loop that owns it; after this no event of
+        // its can be posted
+        std::promise<void> done;
+        std::future<void> stopped = done.get_future();
+        loop_.post([this, &done] {
+            media_.reset();
+            done.set_value();
+        });
+        stopped.wait();
+    }
     auto_refresh_running_.store(false);
     if (auto_refresh_thread_.joinable())
         auto_refresh_thread_.join();
@@ -492,6 +504,16 @@ void CoreSession::handle(const json& cmd) {
         cmd_vote_poll(cmd);
     else if (c == "play_media")
         cmd_play_media(cmd);
+    else if (c == "media_toggle")
+        cmd_media_toggle();
+    else if (c == "media_seek")
+        cmd_media_seek(cmd);
+    else if (c == "media_volume")
+        cmd_media_volume(cmd);
+    else if (c == "media_stop")
+        cmd_media_stop();
+    else if (c == "media_position")
+        cmd_media_position();
     else if (c == "move")
         cmd_move(cmd);
     else if (c == "cycle_movement")
@@ -3417,6 +3439,37 @@ std::string media_kind_str(MediaAttachment::Kind k) {
         return "media";
     }
 }
+// A post's YouTube video links, playable in the app where the engine plays them.
+// The cheap look first: most posts never mention YouTube, and this runs for
+// every row sent to the UI.
+std::vector<present::PostLink> youtube_links(const Status& status) {
+    std::vector<present::PostLink> out;
+    if (!media::MediaPlayer::youtube_supported())
+        return out;
+    const Status& s = status.display_status();
+    auto mentions = [](const std::string& text) { return text.find("youtu") != std::string::npos; };
+    bool any = mentions(s.content) || mentions(s.text) || (s.card && mentions(s.card->url));
+    for (const auto& link : s.text_links)
+        any = any || mentions(link.url);
+    if (!any)
+        return out;
+    for (auto& link : present::post_links(s))
+        if (media::MediaPlayer::is_youtube_url(link.url))
+            out.push_back(std::move(link));
+    return out;
+}
+
+// "1:05", or "1:02:05"
+std::string clock_time(double seconds) {
+    const long total = seconds > 0 ? static_cast<long>(seconds + 0.5) : 0;
+    char buf[32];
+    if (total >= 3600)
+        std::snprintf(buf, sizeof buf, "%ld:%02ld:%02ld", total / 3600, total / 60 % 60, total % 60);
+    else
+        std::snprintf(buf, sizeof buf, "%ld:%02ld", total / 60, total % 60);
+    return buf;
+}
+
 // Player/menu label: the alt text if any, prefixed with the capitalized kind.
 std::string media_label(const MediaAttachment& m) {
     std::string kind = media_kind_str(m.type);
@@ -3431,6 +3484,12 @@ void CoreSession::play_one_media(const std::string& url, const std::string& kind
     if (url.empty()) {
         sound_.play(sound::Earcon::Error);
         emit_announce("No media to play");
+        return;
+    }
+    // Audio, and YouTube links, play in the app itself where the core has the
+    // engine; the rest (images, video) is the front end's to show
+    if (media::MediaPlayer::available() && (kind == "audio" || kind == "youtube")) {
+        play_in_app(url, title, kind == "youtube");
         return;
     }
     // One media_open event carries the kind; each front end decides how to render
@@ -3457,21 +3516,31 @@ void CoreSession::cmd_play_media(const json& cmd) {
         for (const auto& m : s->media_attachments)
             if (!m.url.empty())
                 media.push_back(&m);
-    if (media.empty()) {
+    // YouTube videos linked from the post count as its media too
+    const std::vector<present::PostLink> videos = s ? youtube_links(*s) : std::vector<present::PostLink>{};
+    auto video_label = [](const present::PostLink& l) {
+        return "YouTube: " + (l.title.empty() ? l.url : l.title);
+    };
+    if (media.empty() && videos.empty()) {
         sound_.play(sound::Earcon::Error);
         emit_announce("No media to play");
         return;
     }
-    if (media.size() == 1) {
-        play_one_media(media[0]->url, media_kind_str(media[0]->type), media_label(*media[0]));
+    if (media.size() + videos.size() == 1) {
+        if (!media.empty())
+            play_one_media(media[0]->url, media_kind_str(media[0]->type), media_label(*media[0]));
+        else
+            play_one_media(videos[0].url, "youtube", video_label(videos[0]));
         return;
     }
-    // Multiple attachments: let the user pick which one to play.
+    // Several: let the user pick which one to play.
     json items = json::array();
     for (const auto* m : media)
         items.push_back({{"title", media_label(*m)},
                          {"url", m->url},
                          {"kind", media_kind_str(m->type)}});
+    for (const auto& v : videos)
+        items.push_back({{"title", video_label(v)}, {"url", v.url}, {"kind", "youtube"}});
     emit({{"event", "media_picker"}, {"id", row}, {"items", std::move(items)}});
 }
 
@@ -3854,10 +3923,138 @@ void CoreSession::cmd_set_media_volume(const json& cmd) {
     if (volume == settings_.media_volume)
         return;
     settings_.media_volume = volume;
+    if (media_)
+        media_->set_volume(volume); // heard at once
     save_config();
     // Reuse the cached device list: this runs on every press of the player's
     // volume key, and re-enumerating the sound hardware each time would drag.
     emit_settings(/*refresh_devices=*/false);
+}
+
+// ---------------------------------------------------------------------------
+// In-app media
+// ---------------------------------------------------------------------------
+
+void CoreSession::play_in_app(const std::string& url, const std::string& title, bool youtube) {
+    if (!media_)
+        media_ = std::make_unique<media::MediaPlayer>(
+            config_path_.parent_path() / "media", [this](media::MediaPlayer::Event e, int request, std::string text) {
+                // From the engine's thread to the loop, where the player lives
+                loop_.post([this, e, request, text = std::move(text)] { on_media_event(e, request, text); });
+            });
+    media_->set_device(settings_.media_device);
+    media_->set_volume(settings_.media_volume);
+    media_url_ = url;
+    media_title_ = title;
+    media_youtube_ = youtube;
+    media_request_ = media_->open(url);
+    if (media_request_ == 0) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("Couldn't start the media player.");
+        emit({{"event", "open_url"}, {"url", url}});
+        return;
+    }
+    emit_media_player("opening");
+    // A video takes a few seconds to find; say something meanwhile
+    if (youtube)
+        emit_announce("Loading " + title);
+}
+
+void CoreSession::emit_media_player(const std::string& state) {
+    emit({{"event", "media_player"},
+          {"state", state},
+          {"title", media_title_},
+          {"url", media_url_},
+          {"background", settings_.media_background}});
+}
+
+void CoreSession::on_media_event(media::MediaPlayer::Event event, int request, const std::string& text) {
+    if (!media_ || request != media_request_)
+        return; // about something since replaced or stopped
+    using Event = media::MediaPlayer::Event;
+    switch (event) {
+    case Event::Status:
+        emit_announce(text);
+        break;
+    case Event::Opened:
+        if (!text.empty() && (media_youtube_ || media_title_.empty()))
+            media_title_ = text; // the video's own title, not the link's
+        emit_media_player("playing");
+        if (settings_.media_background || media_youtube_)
+            emit_announce("Playing " + media_title_);
+        break;
+    case Event::Failed: {
+        sound_.play(sound::Earcon::Error);
+        emit_media_player("failed");
+        media_request_ = 0;
+        // As before the engine: what can't be played here goes to the system
+        emit_announce("Couldn't play " + (media_title_.empty() ? std::string("it") : media_title_) +
+                      (text.empty() ? std::string() : ": " + text) + ". Opening it in your browser.");
+        emit({{"event", "open_url"}, {"url", media_url_}});
+        break;
+    }
+    case Event::Ended:
+        media_request_ = 0;
+        emit_media_player("ended");
+        emit_announce("Finished");
+        break;
+    case Event::Title:
+        media_title_ = text;
+        emit_media_player("playing");
+        break;
+    }
+}
+
+void CoreSession::cmd_media_toggle() {
+    if (!media_ || !media_->active()) {
+        emit_announce("Nothing is playing");
+        return;
+    }
+    emit_announce(media_->toggle_pause() ? "Playing" : "Paused");
+}
+
+void CoreSession::cmd_media_seek(const json& cmd) {
+    if (!media_ || !media_->active())
+        return;
+    if (media_->live()) {
+        emit_announce("Live stream");
+        return;
+    }
+    media_->seek_by(cmd.value("by", 5.0));
+    cmd_media_position();
+}
+
+void CoreSession::cmd_media_position() {
+    if (!media_ || !media_->active()) {
+        emit_announce("Nothing is playing");
+        return;
+    }
+    if (media_->live()) {
+        emit_announce("Live stream, " + clock_time(media_->position()));
+        return;
+    }
+    const double length = media_->length();
+    emit_announce(clock_time(media_->position()) + (length > 0 ? " of " + clock_time(length) : std::string()));
+}
+
+void CoreSession::cmd_media_volume(const json& cmd) {
+    const int level = std::clamp(settings_.media_volume + cmd.value("by", 10), 0, 100);
+    cmd_set_media_volume({{"volume", level}}); // persists, and is heard at once
+    emit_announce("Volume " + std::to_string(level) + " percent");
+}
+
+void CoreSession::cmd_media_stop() {
+    if (!media_ || !media_->active()) {
+        if (media_request_ == 0)
+            return;
+    }
+    const bool was = media_ && media_->active();
+    if (media_)
+        media_->close();
+    media_request_ = 0;
+    emit_media_player("closed");
+    if (was)
+        emit_announce("Stopped");
 }
 
 void CoreSession::cmd_check_for_update(const json& cmd) {
@@ -5258,18 +5455,25 @@ void CoreSession::emit_settings(bool refresh_devices) {
     for (const auto& p : sound_.list_soundpacks())
         packs.push_back(p);
     // The output devices earcons can play through, for the Sounds settings page.
-    // Media devices are enumerated by each app instead: they come from that
-    // platform's media framework, not from our mixer.
+    // Media devices too where the core plays media itself (otherwise each app
+    // lists its own media framework's).
     if (refresh_devices || sound_devices_.empty())
         sound_devices_ = sound_.list_output_devices();
     json devices = json::array();
     for (const auto& d : sound_devices_)
         devices.push_back(d);
-    emit({{"event", "settings"},
-		  {"push_alert_types", std::move(push_types)},
-          {"settings", store::settings_to_json(settings_)},
-          {"soundpacks", packs},
-          {"sound_devices", std::move(devices)}});
+    json out = {{"event", "settings"},
+                {"push_alert_types", std::move(push_types)},
+                {"settings", store::settings_to_json(settings_)},
+                {"soundpacks", packs},
+                {"sound_devices", std::move(devices)}};
+    if (media::MediaPlayer::available()) {
+        if (refresh_devices || media_devices_.empty())
+            media_devices_ = media::MediaPlayer::output_devices();
+        out["media_devices"] = media_devices_;
+        out["media_in_core"] = true; // the apps' players are the core's (media_player)
+    }
+    emit(out);
 }
 
 void CoreSession::emit_account_settings() {
@@ -5412,6 +5616,8 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
 				break;
 			}
 		}
+		if (!r.contains("has_playable_media") && !youtube_links(*s).empty())
+			r["has_playable_media"] = true; // a YouTube video plays in the app
         if (!s->tags.empty())
             r["has_hashtags"] = true; // gates the "Open hashtag timeline" action
         if (s->in_reply_to_id && !s->in_reply_to_id->empty())

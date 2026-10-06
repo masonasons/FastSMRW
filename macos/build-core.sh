@@ -46,6 +46,7 @@ CORE_SRC=(
     presentation/status_presenter.cpp presentation/speech_settings.cpp
     presentation/reply_helper.cpp presentation/alias_store.cpp
     sound/sound_manager.cpp
+    media/media_player.cpp
     input/keymap.cpp
     update/update_checker.cpp
     session/core_session.cpp

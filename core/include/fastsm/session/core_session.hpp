@@ -25,6 +25,7 @@
 #include "fastsm/timeline/movement.hpp"
 #include "fastsm/timeline/streaming_client.hpp"
 #include "fastsm/timeline/timeline_controller.hpp"
+#include "fastsm/media/media_player.hpp"
 
 // CoreSession is the engine's orchestration layer, owned by the C ABI. It runs
 // all state on its own "core loop" thread and does blocking I/O on a worker
@@ -91,6 +92,18 @@ private:
     void cmd_post_info(const nlohmann::json& cmd);
     void cmd_vote_poll(const nlohmann::json& cmd); // {id, choices[]} -> vote + reopen results
     void cmd_play_media(const nlohmann::json& cmd); // {id} -> play the post's media
+    // In-app playback (audio attachments and YouTube links) through FastPlay's
+    // engine, where the core has it (media::MediaPlayer::available()). The UI
+    // shows a player on media_player {state: opening} unless media_background,
+    // sends these commands from its keys, and speaks what the core announces.
+    void play_in_app(const std::string& url, const std::string& title, bool youtube);
+    void on_media_event(media::MediaPlayer::Event event, int request, const std::string& text);
+    void emit_media_player(const std::string& state);
+    void cmd_media_toggle();                         // play/pause
+    void cmd_media_seek(const nlohmann::json& cmd);  // {by: seconds}
+    void cmd_media_volume(const nlohmann::json& cmd); // {by: percent}
+    void cmd_media_stop();
+    void cmd_media_position();                       // speak where it is
     void play_one_media(const std::string& url, const std::string& kind, const std::string& title);
     void cmd_move(const nlohmann::json& cmd);
     void cmd_cycle_movement(const nlohmann::json& cmd);
@@ -390,6 +403,14 @@ private:
 
     std::unique_ptr<net::IHttpClient> http_;
     sound::SoundManager sound_;
+    // In-app media, made on first use (core loop only). Reset in the destructor
+    // first, on the loop, so no engine event can arrive once the loop is gone.
+    std::unique_ptr<media::MediaPlayer> media_;
+    int media_request_ = 0;      // the open() whose events count
+    std::string media_url_;      // what it is playing, for the browser if it can't
+    std::string media_title_;
+    bool media_youtube_ = false;
+    std::vector<std::string> media_devices_; // cached like sound_devices_
     // The mixer's output devices as of the last enumeration, sent with every
     // settings event. Empty means "not enumerated yet" (see emit_settings).
     std::vector<std::string> sound_devices_;

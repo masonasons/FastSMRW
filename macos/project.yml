@@ -51,7 +51,10 @@ targets:
           - ../core/include
           - ../deps
           - ../deps/stb_vorbis
+          - ../deps/fastplay_engine/include
           - $(DERIVED_FILE_DIR)
+        # Media plays in the core through FastPlay's engine (fastsm::media)
+        GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "FASTSM_FASTPLAY_ENGINE=1"]
         # stb_vorbis.c is noisy; don't let its warnings clutter the build.
         GCC_WARN_UNUSED_FUNCTION: NO
         GCC_WARN_UNUSED_VARIABLE: NO
@@ -69,6 +72,11 @@ targets:
         buildPhase: resources
     dependencies:
       - target: fastsm_core
+      # FastPlay's engine, which the core plays media through: linked, and
+      # embedded (signed) in Contents/Frameworks
+      - framework: ../deps/fastplay_engine/lib/libfastplay_engine.dylib
+        embed: true
+        codeSign: true
       - sdk: AppKit.framework
       - sdk: Foundation.framework
       - sdk: CoreAudio.framework
@@ -83,6 +91,7 @@ targets:
         # The app has no C++ sources, so Xcode won't auto-link the C++ runtime
         # the static core needs. Pull it in explicitly.
         OTHER_LDFLAGS: ["-lc++"]
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/../Frameworks"]
         HEADER_SEARCH_PATHS:
           - ../core/include
         CODE_SIGN_ENTITLEMENTS: FastSMRW.entitlements

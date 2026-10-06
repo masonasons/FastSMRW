@@ -118,6 +118,83 @@ final class MediaPlayerWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) { player.pause() }
 }
 
+/// The core's own player (audio attachments and YouTube, through FastPlay's
+/// engine), as on Windows: a window that is somewhere for the keys to go. Space
+/// plays or pauses, Left/Right seek, Up/Down change the volume, P says where it
+/// is, Escape (or closing the window) stops. The core speaks what happens.
+@MainActor
+final class CorePlayerWindowController: NSWindowController, NSWindowDelegate {
+    private let state: AppState
+    private var closingFromCore = false
+
+    init(state: AppState, title: String) {
+        self.state = state
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 120),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        super.init(window: window)
+        window.delegate = self
+        let keys = PlayerKeyView(state: state)
+        keys.setAccessibilityElement(true)
+        keys.setAccessibilityRole(.group)
+        keys.setAccessibilityLabel("Media player. Space plays or pauses, the arrows seek and change "
+            + "the volume, P says where it is, Escape stops.")
+        window.contentView = keys
+        retitle(title)
+        window.center()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func retitle(_ title: String) { window?.title = "Playing: " + (title.isEmpty ? "Media" : title) }
+
+    func show() {
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(window?.contentView)
+    }
+
+    /// The core stopped it (ended, failed, stopped elsewhere): close without
+    /// telling it to stop again.
+    func closeFromCore() {
+        closingFromCore = true
+        close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if !closingFromCore { state.mediaStop() }
+    }
+}
+
+/// The player window's keys, each a command to the core.
+@MainActor
+final class PlayerKeyView: NSView {
+    private let state: AppState
+
+    init(state: AppState) {
+        self.state = state
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 49: state.mediaToggle()          // Space
+        case 123: state.mediaSeek(by: -5)     // Left
+        case 124: state.mediaSeek(by: 5)      // Right
+        case 126: state.mediaVolume(by: 10)   // Up
+        case 125: state.mediaVolume(by: -10)  // Down
+        case 35: state.mediaPosition()        // P
+        case 53: window?.close()              // Escape
+        default: super.keyDown(with: event)
+        }
+    }
+}
+
 /// Pick which attachment to view when a post has several.
 @MainActor
 final class MediaPickerWindowController: ListPickerWindowController {

@@ -145,6 +145,9 @@ void test_restored_position_survives_default_edge_echo();
 
 // From test_sound.cpp
 void test_sound_wake_recovery();
+// From test_media.cpp
+void test_media_player();
+void test_core_media_flow();
 void test_sound_background_burst();
 
 // From test_push.cpp
@@ -172,6 +175,8 @@ static void test_http_header_lookup() {
 
 int main() {
 	test_sound_wake_recovery();
+	test_media_player();
+	test_core_media_flow();
 	test_sound_background_burst();
     test_version();
     test_http_header_lookup();
