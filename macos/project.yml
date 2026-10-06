@@ -92,6 +92,8 @@ targets:
         # the static core needs. Pull it in explicitly.
         OTHER_LDFLAGS: ["-lc++"]
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/../Frameworks"]
+        # Where the engine dylib links from (it is embedded in Frameworks)
+        LIBRARY_SEARCH_PATHS: ["$(inherited)", "$(SRCROOT)/../deps/fastplay_engine/lib"]
         HEADER_SEARCH_PATHS:
           - ../core/include
         CODE_SIGN_ENTITLEMENTS: FastSMRW.entitlements
