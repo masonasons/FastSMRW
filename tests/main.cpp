@@ -80,6 +80,7 @@ void test_presenter_user_profile_joined();
 void test_presenter_poll();
 void test_presenter_boosted_by_handle();
 void test_presenter_copy_keeps_line_breaks();
+void test_presenter_quotes();
 void test_presenter_post_info_visibility();
 void test_reply_participants();
 void test_post_links();
@@ -128,6 +129,7 @@ void test_server_filter_metadata();
 // From test_timeline_refresh.cpp
 void test_refresh_fills_gap_below_streamed_top();
 void test_refresh_steady_state_stops_early();
+void test_refresh_updates_loaded_quotes();
 void test_refresh_fills_multipage_gap();
 void test_refresh_keeps_updated_conversation();
 void test_marker_recovery_pages_until_found();
@@ -229,6 +231,7 @@ int main() {
     test_presenter_poll();
     test_presenter_boosted_by_handle();
     test_presenter_copy_keeps_line_breaks();
+	test_presenter_quotes();
     test_presenter_post_info_visibility();
     test_reply_participants();
     test_post_links();
@@ -261,6 +264,7 @@ int main() {
     test_server_filter_metadata();
     test_refresh_fills_gap_below_streamed_top();
     test_refresh_steady_state_stops_early();
+	test_refresh_updates_loaded_quotes();
     test_refresh_fills_multipage_gap();
     test_refresh_keeps_updated_conversation();
     test_marker_recovery_pages_until_found();

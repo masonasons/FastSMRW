@@ -5,6 +5,7 @@
 
 #include "fastsm/presentation/reply_helper.hpp"
 #include "fastsm/presentation/status_presenter.hpp"
+#include "fastsm/platform/mastodon/mastodon_map.hpp"
 
 using namespace fastsm;
 
@@ -448,6 +449,65 @@ void test_presenter_copy_keeps_line_breaks() {
     auto fields = present::SpeechSettings::defaults();
     present::SpeechConfig::set_current(fields);
     CHECK(contains(present::copy_label(TimelineItem{mastodon}, now), "first para\n\nsecond para"));
+}
+
+void test_presenter_quotes() {
+	// The shape returned by dragonscave.space for Niléane's quoted reply.
+	const auto payload = nlohmann::json::parse(R"JSON({
+		"id": "117387365092110003",
+		"account": {"id": "1", "acct": "nileane@nileane.fr", "display_name": "Niléane"},
+		"content": "<p class=\"quote-inline\">RE: <a href=\"https://digipres.club/@misty/117385398796935055\"><span class=\"invisible\">https://</span><span class=\"ellipsis\">digipres.club/@misty/117385398</span><span class=\"invisible\">796935055</span></a></p><p>ie. posts like this one</p><p>Because… I don’t think that can happen?</p>",
+		"quote": {"state": "accepted", "quoted_status": {
+			"id": "117385398988403174",
+			"url": "https://digipres.club/@misty/117385398796935055",
+			"account": {"id": "2", "acct": "misty@digipres.club", "display_name": "Misty"},
+			"content": "<p>I’m not anti-passkey.</p><p>Imagine if I’d logged in on a shared device!</p>"
+		}}
+	})JSON");
+	const Status s = mastodon::map_status(payload);
+	CHECK(s.quote != nullptr);
+	const std::int64_t now = 1000;
+	present::SpeechConfig::set_current(present::SpeechSettings::defaults());
+	present::TextConfig::set_current({});
+	const auto fields = present::SpeechSettings::defaults().status;
+	for (bool keep_breaks : {false, true}) {
+		const auto label = present::accessibility_label(s, now, fields, keep_breaks);
+		CHECK(!contains(label, "RE:"));
+		CHECK(!contains(label, "https://digipres.club/"));
+		CHECK(contains(label, "Quoting Misty:"));
+		CHECK(contains(label, "Imagine if I’d logged in on a shared device!"));
+		if (keep_breaks) {
+			CHECK(contains(label, "ie. posts like this one\n\nBecause…"));
+			CHECK(contains(label, "I’m not anti-passkey.\n\nImagine"));
+		}
+	}
+	for (const auto& label : {present::copy_label(TimelineItem{s}, now),
+							 present::autoread_label(TimelineItem{s}, now),
+							 present::post_info(s, now)}) {
+		CHECK(!contains(label, "RE:"));
+		CHECK(!contains(label, "https://digipres.club/"));
+		CHECK(contains(label, "Quoting Misty"));
+		CHECK(contains(label, "Imagine if I’d logged in on a shared device!"));
+	}
+
+	// Leave the fallback readable when the server has not supplied a quote yet.
+	auto pending = payload;
+	pending["quote"] = {{"state", "pending"}, {"quoted_status", nullptr}};
+	const Status p = mastodon::map_status(pending);
+	CHECK(!p.quote);
+	CHECK(contains(present::accessibility_label(p, now, fields, true), "RE:"));
+	CHECK(contains(present::post_info(p, now), "https://digipres.club/"));
+
+	// Bluesky keeps its paragraphs in plain text rather than HTML.
+	Status bluesky;
+	bluesky.text = "My thoughts\nAnother line";
+	bluesky.quote = std::make_shared<Status>();
+	bluesky.quote->account.display_name = "Alice";
+	bluesky.quote->text = "Original\nSecond line";
+	const auto info = present::post_info(bluesky, now);
+	CHECK(contains(info, "My thoughts\nAnother line"));
+	CHECK(contains(info, "Quoting Alice"));
+	CHECK(contains(info, "Original\nSecond line"));
 }
 
 // Issue 14: the view-post dialog never said whether a post was public, quiet

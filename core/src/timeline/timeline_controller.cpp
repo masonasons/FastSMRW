@@ -199,8 +199,12 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
                 continue;
             }
         }
-        if (seen.insert(it.id()).second)
-            added.push_back(std::move(it));
+		// A quote can be accepted after the row was first received or cached.
+		// Keep the server's current copy without counting it as a new post.
+		if (seen.insert(it.id()).second)
+			added.push_back(std::move(it));
+		else if (TimelineItem* existing = find_raw(it.id()))
+			*existing = std::move(it);
     }
 
     if (raw_.empty()) {
@@ -479,6 +483,7 @@ TimelineController::RefreshScan TimelineController::scan_refresh(
         bool page_had_unknown = false;
         for (auto& it : p.items) {
             if (known.find(it.refresh_key()) != known.end()) {
+				out.updated.push_back(std::move(it));
                 // A known id BELOW fresh posts means we've paged back to content we
                 // already have -> stop. A known id ABOVE any fresh one is a post
                 // sitting at the top that this scan didn't fetch — a realtime-
@@ -632,8 +637,9 @@ void TimelineController::refresh() {
         RefreshScan scan = scan_refresh(
             known, was_empty, kMaxRefreshPages, fetch_limit_,
             [this](const PageCursor& c) { return account_->items(source_, fetch_limit_, c); });
-        main_->post([this, fresh = std::move(scan.fresh), tail = scan.tail, was_empty,
-                     hit_known = scan.hit_known, marks = std::move(scan.marks)]() mutable {
+		main_->post([this, fresh = std::move(scan.fresh), updated = std::move(scan.updated),
+					 tail = scan.tail, was_empty, hit_known = scan.hit_known,
+					 marks = std::move(scan.marks)]() mutable {
             for (auto& m : marks)
                 page_marks_[m.first] = m.second;
             // The fresh posts didn't reach the cached posts -> there's a gap below
@@ -641,6 +647,8 @@ void TimelineController::refresh() {
             const bool disconnected = !was_empty && !hit_known && tail && !fresh.empty();
             const std::string gap_after = disconnected ? fresh.back().id() : std::string{};
             const std::optional<PageCursor> gap_cursor = tail;
+			fresh.insert(fresh.end(), std::make_move_iterator(updated.begin()),
+						 std::make_move_iterator(updated.end()));
             // On a first load (nothing known) seed the scrollback cursor; on a
             // refresh keep the existing one (it points below the current bottom).
             merge_fresh(std::move(fresh), was_empty ? tail : scrollback_cursor_);
