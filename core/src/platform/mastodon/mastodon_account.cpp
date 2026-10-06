@@ -81,7 +81,8 @@ std::vector<TimelineSource> MastodonAccount::spawnable_timelines() const {
     return {TimelineSource::local(),     TimelineSource::federated(),
             TimelineSource::mentions(),  TimelineSource::bookmarks(),
             TimelineSource::favorites(), TimelineSource::trends(),
-            TimelineSource::conversations()};
+            TimelineSource::conversations(), TimelineSource::directory(),
+            TimelineSource::suggestions()};
 }
 
 void MastodonAccount::load_configuration() {
@@ -525,6 +526,25 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         // Rows are request objects wrapping an account, not bare accounts.
         path = "/api/v1/notifications/requests";
         break;
+    case TimelineSource::Kind::Directory:
+        // People on this instance who opted into being listed. "active" puts the
+        // recently-posting first, which is the useful order for finding someone to
+        // follow; local=true keeps it to this server rather than everyone it federates
+        // with, which would be unbounded.
+        //
+        // This one pages by offset, not by id, and sends no Link header -- so the
+        // cursor carries the offset and "load older" asks for the next slice. Without
+        // it the directory would be one page and no more.
+        path = "/api/v1/directory";
+        extra += "&order=active&local=true";
+        if (cursor.kind == CursorKind::Token && !cursor.value.empty())
+            extra += "&offset=" + cursor.value;
+        break;
+    case TimelineSource::Kind::Suggestions:
+        // v2 wraps each account in a {source, account} object; the parse below unwraps
+        // it. v1 returned bare accounts but is deprecated.
+        path = "/api/v2/suggestions";
+        break;
     case TimelineSource::Kind::Thread:
     case TimelineSource::Kind::SearchPosts:
     case TimelineSource::Kind::SearchPeople:
@@ -562,9 +582,19 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     const bool mentions = source.kind == TimelineSource::Kind::Mentions;
     const bool user_list = source.is_user_list();
     const bool notif_requests = source.kind == TimelineSource::Kind::NotificationRequests;
+    // /api/v2/suggestions rows are {source, account}, not bare accounts.
+    const bool wrapped_account = source.kind == TimelineSource::Kind::Suggestions;
     std::string last_id;
     for (const auto& entry : j) {
-        if (notif_requests) {
+        if (wrapped_account) {
+            const auto acc = entry.find("account");
+            User u = mastodon::map_user(acc != entry.end() && acc->is_object() ? *acc
+                                                                              : nlohmann::json());
+            if (u.id.empty())
+                continue; // a malformed row shouldn't become a blank entry
+            last_id = u.id;
+            page.items.push_back(TimelineItem{std::move(u)});
+        } else if (notif_requests) {
             // The row shows the person, but accept/dismiss act on the request, so the
             // request id and the held count ride along on the user.
             User u = mastodon::map_notification_request(entry);
@@ -600,6 +630,14 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     // relationship id, not an account id), so don't fall back to the last id.
     if (!page.next_cursor && !last_id.empty() && !user_list)
         page.next_cursor = PageCursor::max_id(last_id);
+    // The directory's cursor is how far in we are. Stop when a page comes back short,
+    // so paging ends instead of asking forever past the end of the list.
+    if (source.kind == TimelineSource::Kind::Directory &&
+        static_cast<int>(page.items.size()) == limit) {
+        const int seen = (cursor.kind == CursorKind::Token ? std::atoi(cursor.value.c_str()) : 0) +
+                         static_cast<int>(page.items.size());
+        page.next_cursor = PageCursor::token(std::to_string(seen));
+    }
 
     // User timelines: float the account's pinned posts to the top, but only on the
     // first page (never while paging older). Mastodon returns them from a separate

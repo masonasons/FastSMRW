@@ -50,7 +50,7 @@ std::vector<TimelineSource> BlueskyAccount::default_timelines() const {
 }
 
 std::vector<TimelineSource> BlueskyAccount::spawnable_timelines() const {
-    return {TimelineSource::mentions()};
+    return {TimelineSource::mentions(), TimelineSource::suggestions()};
 }
 
 bool BlueskyAccount::refresh_session() {
@@ -266,6 +266,12 @@ TimelinePage BlueskyAccount::items(const TimelineSource& source, int limit,
                            util::percent_encode(source.param) + "&limit=" + std::to_string(limit) +
                            cur))
             take_posts(*j);
+        break;
+    case TimelineSource::Kind::Suggestions:
+        // Same {actors: [...]} shape as searchActors, so take_actors handles it.
+        if (auto j = fetch(base + "app.bsky.actor.getSuggestions?limit=" + std::to_string(limit) +
+                           cur))
+            take_actors(*j);
         break;
     case TimelineSource::Kind::SearchPeople:
         if (auto j = fetch(base + "app.bsky.actor.searchActors?q=" +

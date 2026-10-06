@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.1
 -----
 
+- New: two more timelines in the new timeline list for finding people to follow - Suggested Follows, and on Mastodon a Profile Directory of people on your instance who chose to be listed.
 - Fixed: quoted posts no longer repeat their RE: link when displaying or copying paragraphs, Post Info includes the quoted post, and refreshing updates quotes that became available after the post first arrived.
 - Fixed: a new post now opens at your account's default posting visibility from your Mastodon settings, instead of always Public; replies still follow the visibility of the post you're answering.
 - Fixed: following, muting or blocking someone from a remote instance timeline no longer fails.

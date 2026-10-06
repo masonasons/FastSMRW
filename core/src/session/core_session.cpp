@@ -5235,6 +5235,10 @@ std::optional<TimelineSource> CoreSession::source_from_kind(const std::string& k
         return TimelineSource::trends();
     if (kind == "conversations")
         return TimelineSource::conversations();
+    if (kind == "directory")
+        return TimelineSource::directory();
+    if (kind == "suggestions")
+        return TimelineSource::suggestions();
     return std::nullopt;
 }
 

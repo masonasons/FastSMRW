@@ -273,3 +273,43 @@ void test_notification_requests_source() {
     CHECK(!src.paginates_by_item_id()); // pages via the Link header
     CHECK(!src.new_items_sound_name().has_value()); // not a streaming feed
 }
+
+void test_directory_and_suggestions_sources() {
+    const TimelineSource dir = TimelineSource::directory();
+    CHECK_EQ(dir.cache_key(), std::string("directory"));
+    CHECK_EQ(dir.title(), std::string("Profile Directory"));
+    CHECK(dir.is_user_list());   // rows are people: the user actions apply
+    CHECK(dir.is_dismissable()); // spawned, so Delete closes it
+    CHECK(!dir.is_static());     // fetched and paged, unlike the analysis lists
+    CHECK(!dir.new_items_sound_name().has_value()); // not a streaming feed
+
+    const TimelineSource sug = TimelineSource::suggestions();
+    CHECK_EQ(sug.cache_key(), std::string("suggestions"));
+    CHECK_EQ(sug.title(), std::string("Suggested Follows"));
+    CHECK(sug.is_user_list());
+    CHECK(sug.is_dismissable());
+    CHECK(!sug.new_items_sound_name().has_value());
+
+    // Both are user lists, so neither re-sorts newest-first on merge: the server's
+    // order IS the ranking, and re-sorting would throw away the suggestion order.
+    CHECK(!dir.is_time_ordered());
+    CHECK(!sug.is_time_ordered());
+}
+
+void test_suggestions_row_unwrapping() {
+    // /api/v2/suggestions wraps each account: {source, account}. Reading the row as a
+    // bare account yields a blank user, so the unwrap is what makes the list usable.
+    const char* kEntry = R"JSON({
+      "source": "staff",
+      "account": {"id": "77", "acct": "amy@example.social", "username": "amy",
+                  "display_name": "Amy"}
+    })JSON";
+    const json j = json::parse(kEntry);
+    const auto acc = j.find("account");
+    CHECK(acc != j.end());
+    const User u = mastodon::map_user(*acc);
+    CHECK_EQ(u.id, std::string("77"));
+    CHECK_EQ(u.display_name, std::string("Amy"));
+    // The wrapper's own keys must not be mistaken for the account's.
+    CHECK(mastodon::map_user(j).id.empty());
+}

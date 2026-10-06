@@ -38,6 +38,8 @@ void test_url_host();
 void test_bluesky_feed_mapping();
 void test_mastodon_notification_request_mapping();
 void test_notification_requests_source();
+void test_directory_and_suggestions_sources();
+void test_suggestions_row_unwrapping();
 void test_confirm_settings_roundtrip();
 void test_confirm_follow_toggle();
 void test_bluesky_profile_created_at();
@@ -196,6 +198,8 @@ int main() {
     test_bluesky_feed_mapping();
     test_mastodon_notification_request_mapping();
     test_notification_requests_source();
+    test_directory_and_suggestions_sources();
+    test_suggestions_row_unwrapping();
     test_confirm_settings_roundtrip();
     test_confirm_follow_toggle();
     test_bluesky_profile_created_at();
