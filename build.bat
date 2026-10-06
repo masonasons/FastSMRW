@@ -222,11 +222,12 @@ REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
     cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_bluesky_richtext.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_push.cpp tests\test_confirm.cpp tests\test_sound.cpp tests\test_media.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" %FPE_LIB% /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
-    copy /y deps\fastplay_engine\lib\fastplay_engine.dll "%BUILD%\" >nul
     if errorlevel 1 goto error
+    copy /y deps\fastplay_engine\lib\fastplay_engine.dll "%BUILD%\" >nul
     echo Running tests...
     "%BUILD%\fastsm_tests.exe"
-    if errorlevel 1 (
+    REM Not "if errorlevel 1": a crash exits with a negative code, which that misses
+    if not "!errorlevel!"=="0" (
         echo.
         echo Tests FAILED.
         exit /b 1
