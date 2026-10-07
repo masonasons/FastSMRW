@@ -1141,6 +1141,10 @@ void CoreSession::remember_position(const TimelineController* tc, const std::str
 // toggleable in settings; the mention cue is skipped in the mentions/notifications
 // buffers where it would be redundant. Fires only on a genuine cursor move (its sole
 // caller, remember_position, is guarded against re-selecting the same row).
+namespace {
+std::vector<present::PostLink> youtube_links(const Status& status); // below, with View Media
+} // namespace
+
 void CoreSession::play_row_earcons(const TimelineController* tc, const TimelineItem& item) {
     const Status* s = item.actionable_status();
     if (!s)
@@ -1150,20 +1154,24 @@ void CoreSession::play_row_earcons(const TimelineController* tc, const TimelineI
         sound_.play_named("pinned", pack);
     if (settings_.earcon_poll && s->poll)
         sound_.play_named("poll", pack);
-    // An image takes priority over other media (matches FastSM), but each cue is
-    // independently toggleable.
-    bool has_image = false, has_other = false;
+    // Something to listen to - audio, video, an attachment of unknown kind, a
+    // YouTube video linked where the app plays them - is the media cue, and
+    // takes priority, being what View Media plays. Otherwise a picture, or a
+    // GIF-style video (a silent loop), is the image cue. Each is toggleable.
+    bool has_image = false, has_playable = false;
     for (const auto& m : s->media_attachments) {
-        if (m.type == MediaAttachment::Kind::Image)
+        if (m.type == MediaAttachment::Kind::Image || m.type == MediaAttachment::Kind::Gifv)
             has_image = true;
         else
-            has_other = true;
+            has_playable = true;
     }
-    if (has_image) {
-        if (settings_.earcon_image)
-            sound_.play_named("image", pack);
-    } else if (has_other && settings_.earcon_media) {
-        sound_.play_named("media", pack);
+    if (!has_playable && !youtube_links(*s).empty())
+        has_playable = true;
+    if (has_playable) {
+        if (settings_.earcon_media)
+            sound_.play_named("media", pack);
+    } else if (has_image && settings_.earcon_image) {
+        sound_.play_named("image", pack);
     }
     // A post that mentions you — redundant in the mentions/notifications buffers.
     if (settings_.earcon_mention && tc->account() && !tc->source().is_notification_timeline()) {
