@@ -171,6 +171,16 @@ final class SettingsWindowController: NSWindowController {
 			p.label("Use Application > Check for Updates to check now.")
 		}
 
+        tab("FastPlay", "play.circle") { [weak self] p in
+            p.label("The media player is FastPlay's. Its settings (tempo, pitch and rate, and the "
+                + "effects with all their settings) can be brought over from FastPlay, saved, or reset.")
+            p.button("Import Settings from FastPlay.ini…") { self?.importPlayerSettings() }
+            p.button("Export Player Settings…") { self?.exportPlayerSettings() }
+            p.button("Reset Player Settings") { self?.resetPlayerSettings() }
+            p.label("These take effect at once. FastPlay keeps its settings in "
+                + "~/Library/Application Support/FastPlay/FastPlay.ini.")
+        }
+
         tab("Confirmation", "checkmark.shield") { p in
             p.checkbox("Confirm boost", key: "confirm_boost", default: false)
             p.checkbox("Confirm un-boost", key: "confirm_unboost", default: false)
@@ -192,6 +202,47 @@ final class SettingsWindowController: NSWindowController {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // MARK: FastPlay player settings
+
+    private func importPlayerSettings() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Settings from FastPlay.ini"
+        panel.allowedFileTypes = ["ini"]
+        panel.allowsOtherFileTypes = true
+        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            panel.directoryURL = support.appendingPathComponent("FastPlay", isDirectory: true)
+        }
+        guard let window else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.state.importPlayerSettings(from: url.path)
+        }
+    }
+
+    private func exportPlayerSettings() {
+        let panel = NSSavePanel()
+        panel.title = "Export Player Settings"
+        panel.nameFieldStringValue = "FastPlay player settings.ini"
+        panel.allowedFileTypes = ["ini"]
+        guard let window else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.state.exportPlayerSettings(to: url.path)
+        }
+    }
+
+    private func resetPlayerSettings() {
+        let alert = NSAlert()
+        alert.messageText = "Reset the player settings?"
+        alert.informativeText = "The player's tempo, pitch, rate and effects go back to their defaults."
+        alert.addButton(withTitle: "Reset")
+        alert.addButton(withTitle: "Cancel")
+        guard let window else { return }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn { self?.state.resetPlayerSettings() }
+        }
+    }
 }
 
 /// A single settings tab: a vertical stack of controls that read the core's

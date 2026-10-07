@@ -73,6 +73,8 @@ final class AppState {
     var onMediaOpen: ((MediaOpen) -> Void)?
     var onMediaPicker: ((MediaPicker) -> Void)?
     var onMediaPlayer: ((MediaPlayerState) -> Void)?
+    /// The player's settings were written to this path (media_settings_exported).
+    var onPlayerSettingsExported: ((String) -> Void)?
     var onURLPicker: ((URLPicker) -> Void)?
     var onUpdateStatus: ((UpdateStatus) -> Void)?
     /// Enter on a follow-request notification: show Accept/Reject for
@@ -330,6 +332,8 @@ final class AppState {
             onMediaPicker?(e)
         case let .mediaPlayer(e):
             onMediaPlayer?(e)
+        case let .mediaSettingsExported(e):
+            onPlayerSettingsExported?(e.path)
         case let .urlPicker(e):
             onURLPicker?(e)
         case let .speechCatalog(e):
@@ -652,6 +656,10 @@ final class AppState {
     func mediaVolume(by percent: Int) { client.send("media_volume", ["by": percent]) }
     func mediaPosition() { client.send("media_position", [:]) }
     func mediaStop() { client.send("media_stop", [:]) }
+    // The player's settings as FastPlay keeps them (FastPlay.ini)
+    func importPlayerSettings(from path: String) { client.send("media_settings_import", ["path": path]) }
+    func exportPlayerSettings(to path: String) { client.send("media_settings_export", ["path": path]) }
+    func resetPlayerSettings() { client.send("media_settings_reset", [:]) }
     func playMedia(url: String, kind: String, title: String) {
         client.send("play_media", ["url": url, "kind": kind, "title": title])
     }

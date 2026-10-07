@@ -31,6 +31,8 @@ enum SettingRow {
     case stepper(String, key: String, def: Int, min: Int, max: Int, step: Int)
     case slider(String, key: String, def: Int, min: Int, max: Int)
     case speech(String, category: String)
+    // A button that does something at once (`action` names what, below)
+    case action(String, action: String)
 }
 
 struct SettingPanel {
@@ -175,6 +177,15 @@ final class SettingsViewController: UITableViewController {
                 .stepper("API pages per fetch", key: "fetch_pages", def: 3,
                          min: 1, max: 10, step: 1),
             ]),
+            SettingPanel(title: "FastPlay",
+                    footer: "The media player is FastPlay's. Its settings (tempo, pitch and rate, "
+                          + "and the effects with all their settings) can be brought over from "
+                          + "FastPlay as a FastPlay.ini file, saved, or reset. They take effect at once.",
+                    rows: [
+                .action("Import Settings from FastPlay.ini", action: "import_fastplay"),
+                .action("Export Player Settings", action: "export_fastplay"),
+                .action("Reset Player Settings", action: "reset_fastplay"),
+            ]),
             SettingPanel(title: "Confirmation", footer: "Show a confirmation before each of these.",
                     rows: [
                 .toggle("Boost", key: "confirm_boost", def: false),
@@ -208,6 +219,41 @@ final class SettingsPanelViewController: UITableViewController {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // MARK: FastPlay player settings
+
+    private func runAction(_ action: String) {
+        switch action {
+        case "import_fastplay":
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+            picker.delegate = self
+            present(picker, animated: true)
+        case "export_fastplay":
+            // Written to a file of its own, then handed to the share sheet (Save to Files)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("FastPlay player settings.ini")
+            state.onPlayerSettingsExported = { [weak self] path in
+                guard let self else { return }
+                self.state.onPlayerSettingsExported = nil
+                let share = UIActivityViewController(activityItems: [URL(fileURLWithPath: path)],
+                                                     applicationActivities: nil)
+                share.popoverPresentationController?.sourceView = self.view
+                self.present(share, animated: true)
+            }
+            state.exportPlayerSettings(to: url.path)
+        case "reset_fastplay":
+            let alert = UIAlertController(title: "Reset the player settings?",
+                                          message: "The player's tempo, pitch, rate and effects go back to their defaults.",
+                                          preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Reset", style: .destructive) { [weak self] _ in
+                self?.state.resetPlayerSettings()
+            })
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            present(alert, animated: true)
+        default:
+            break
+        }
+    }
 
     // MARK: Value access
 
@@ -274,6 +320,14 @@ final class SettingsPanelViewController: UITableViewController {
                               min: min, max: max) { [weak self] value in
                 self?.state.updateSettings { $0[key] = value }
             }
+        case let .action(title, _):
+            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            var content = cell.defaultContentConfiguration()
+            content.text = title
+            content.textProperties.color = .tintColor
+            cell.contentConfiguration = content
+            cell.accessibilityTraits = .button
+            return cell
         case let .speech(title, _), let .movement(title), let .postActions(title):
             let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
             var content = cell.defaultContentConfiguration()
@@ -324,6 +378,8 @@ final class SettingsPanelViewController: UITableViewController {
 			state.setPushAlert(key, enabled: on,
 				applyToSubscriptions: PushManager.shared.isEnabled)
 			(tableView.cellForRow(at: indexPath) as? ToggleCell)?.set(on: on)
+        case let .action(_, action):
+            runAction(action)
         default:
             break
         }
@@ -497,4 +553,12 @@ final class SliderCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     @objc private func slid() { onChange(Int(slider.value)) }
+}
+
+extension SettingsPanelViewController: UIDocumentPickerDelegate {
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        // A copy (asCopy), inside the app's own container: the core can read it
+        guard let url = urls.first else { return }
+        state.importPlayerSettings(from: url.path)
+    }
 }

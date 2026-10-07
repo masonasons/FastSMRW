@@ -99,6 +99,10 @@ struct AppSettings {
     bool check_updates_on_startup = true;      // check automatically: on launch, and...
     int update_check_hours = 0;                // ...every this many hours while running (0: launch only)
     bool update_auto_install = false;          // an automatic check installs what it finds without asking
+    // The media player's own settings (tempo, effects and their parameters...)
+    // as FastPlay keeps them: FastPlay.ini text. Imported, exported and reset
+    // from the FastPlay settings page; never edited as a whole by the apps.
+    std::string media_player_settings;
     // Desktop only: put the focused account and its server in the window title. A
     // screen reader reads the title when the window takes focus, which is the cheapest
     // way to know which account you are about to post from. Mobile has no window title,

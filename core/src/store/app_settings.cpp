@@ -188,6 +188,7 @@ AppSettings settings_from_json(const json& root) {
     settings.check_updates_on_startup = root.value("check_updates_on_startup", true);
     settings.update_check_hours = std::clamp(root.value("update_check_hours", 0), 0, 24 * 7);
     settings.update_auto_install = root.value("update_auto_install", false);
+    settings.media_player_settings = root.value("media_player_settings", std::string{});
     settings.show_account_in_title = root.value("show_account_in_title", true);
 
     if (CwMode cw; cw_mode_from_key(root.value("cw_mode", std::string("hide")), cw))
@@ -297,6 +298,7 @@ json settings_to_json(const AppSettings& settings) {
     root["check_updates_on_startup"] = settings.check_updates_on_startup;
     root["update_check_hours"] = settings.update_check_hours;
     root["update_auto_install"] = settings.update_auto_install;
+    root["media_player_settings"] = settings.media_player_settings;
     root["show_account_in_title"] = settings.show_account_in_title;
     root["cw_mode"] = cw_mode_key(settings.text.cw);
     root["post_emoji_removal"] = emoji_removal_key(settings.text.post_emoji);

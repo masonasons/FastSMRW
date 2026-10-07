@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -216,6 +218,29 @@ void test_core_media_flow() {
     // A GIF-style video is silent: still the app's to show
     session->dispatch(R"({"cmd":"play_media","url":"https://example.com/a.mp4","kind":"gifv","title":"GIF"})");
     CHECK(find("media_open", "kind", "gifv", at));
+
+    // The player's settings from a FastPlay.ini, out again, and reset
+    {
+        const auto ini = dir / "FastPlay.ini";
+        std::ofstream(ini) << "[Window]\nX=1\n[Playback]\nTempo=25\n[DSPEffects]\nEcho=1\n"
+                              "[DSPParams]\nEchoDelay=450\n";
+        nlohmann::json import_cmd = {{"cmd", "media_settings_import"}, {"path", ini.string()}};
+        session->dispatch(import_cmd.dump());
+        CHECK(find("announce", "message", "Imported 3 FastPlay settings.", at));
+        const auto out = dir / "exported.ini";
+        nlohmann::json export_cmd = {{"cmd", "media_settings_export"}, {"path", out.string()}};
+        session->dispatch(export_cmd.dump());
+        CHECK(find("media_settings_exported", "", "", at));
+        std::ifstream in(out);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        CHECK(text.find("Tempo=25.00") != std::string::npos && text.find("Echo=1") != std::string::npos &&
+              text.find("EchoDelay=450.00") != std::string::npos);
+        session->dispatch(R"({"cmd":"media_settings_reset"})");
+        CHECK(find("announce", "message", "The player settings are back to their defaults.", at));
+        nlohmann::json nothing = {{"cmd", "media_settings_import"}, {"path", (dir / "tone.wav").string()}};
+        session->dispatch(nothing.dump());
+        CHECK(find("announce", "message", "No FastPlay settings were found in that file.", at));
+    }
 
     // An image is still the app's to show
     session->dispatch(R"({"cmd":"play_media","url":"https://example.com/a.png","kind":"image","title":"Image"})");

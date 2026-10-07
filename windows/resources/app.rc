@@ -305,6 +305,20 @@ BEGIN
                -1, 10, 110, 224, 26
 END
 
+IDD_SET_FASTPLAY DIALOGEX 0, 0, 240, 160
+STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
+CAPTION "FastPlay"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT      "The media player is FastPlay's. Its settings - tempo, pitch and rate, and the effects with all their settings - can be brought over from FastPlay, saved, or reset.",
+               -1, 10, 10, 224, 34
+    PUSHBUTTON "&Import settings from FastPlay.ini...", IDC_SET_FP_IMPORT, 10, 50, 170, 15
+    PUSHBUTTON "&Export player settings...", IDC_SET_FP_EXPORT, 10, 70, 170, 15
+    PUSHBUTTON "&Reset player settings", IDC_SET_FP_RESET, 10, 90, 170, 15
+    LTEXT      "These take effect at once. FastPlay keeps its settings in FastPlay.ini, beside FastPlay.exe or in %APPDATA%\\FastPlay.",
+               -1, 10, 114, 224, 26
+END
+
 IDD_SET_BEHAVIOR DIALOGEX 0, 0, 240, 184
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_CAPTION
 CAPTION "Behavior"

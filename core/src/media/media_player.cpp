@@ -151,6 +151,27 @@ double MediaPlayer::position() const { return impl_->player ? fpe_position(impl_
 double MediaPlayer::length() const { return impl_->player ? fpe_length(impl_->player) : 0.0; }
 bool MediaPlayer::live() const { return impl_->player && fpe_is_live(impl_->player) != 0; }
 
+int MediaPlayer::import_settings(const std::string& ini) {
+    fpe_player* p = impl_->ensure_player();
+    return p ? fpe_settings_import(p, ini.c_str()) : 0;
+}
+
+std::string MediaPlayer::export_settings() {
+    fpe_player* p = impl_->ensure_player();
+    if (!p)
+        return {};
+    const int n = fpe_settings_export(p, nullptr, 0);
+    std::string text(static_cast<size_t>(n) + 1, '\0');
+    fpe_settings_export(p, text.data(), n + 1);
+    text.resize(static_cast<size_t>(n));
+    return text;
+}
+
+void MediaPlayer::reset_settings() {
+    if (fpe_player* p = impl_->ensure_player())
+        fpe_settings_reset(p);
+}
+
 std::string MediaPlayer::title() const {
     if (!impl_->player)
         return {};
@@ -186,6 +207,9 @@ double MediaPlayer::position() const { return 0.0; }
 double MediaPlayer::length() const { return 0.0; }
 bool MediaPlayer::live() const { return false; }
 std::string MediaPlayer::title() const { return {}; }
+int MediaPlayer::import_settings(const std::string&) { return 0; }
+std::string MediaPlayer::export_settings() { return {}; }
+void MediaPlayer::reset_settings() {}
 
 #endif
 

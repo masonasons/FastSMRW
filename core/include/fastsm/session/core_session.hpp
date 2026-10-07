@@ -104,6 +104,13 @@ private:
     void cmd_media_volume(const nlohmann::json& cmd); // {by: percent}
     void cmd_media_stop();
     void cmd_media_position();                       // speak where it is
+    // The player's settings as FastPlay keeps them: {path} of a FastPlay.ini to
+    // take them from, {path} to write them to (then media_settings_exported),
+    // and back to the defaults.
+    void cmd_media_settings_import(const nlohmann::json& cmd);
+    void cmd_media_settings_export(const nlohmann::json& cmd);
+    void cmd_media_settings_reset();
+    void ensure_media(); // the player, made with the saved settings
     void play_one_media(const std::string& url, const std::string& kind, const std::string& title);
     void cmd_move(const nlohmann::json& cmd);
     void cmd_cycle_movement(const nlohmann::json& cmd);

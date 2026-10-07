@@ -7,6 +7,7 @@
 #include <utility>
 
 #include <commctrl.h>
+#include <commdlg.h>
 #include <prsht.h>
 #include <shellapi.h>
 
@@ -28,6 +29,7 @@ struct Ctx {
     AppSettings settings;
     AudioChoices audio;
     std::function<void(HWND)> open_manager;
+    std::function<void(const std::string&, const std::string&)> media_command;
     bool applied = false;
 };
 
@@ -846,6 +848,62 @@ INT_PTR CALLBACK UpdatesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
     return FALSE;
 }
 
+// FastPlay page: the media player's settings, imported from a FastPlay.ini,
+// exported to one, or reset, at once (they are not part of OK).
+std::wstring pick_ini_file(HWND owner, bool save) {
+    wchar_t path[MAX_PATH] = L"";
+    if (save)
+        lstrcpynW(path, L"FastPlay player settings.ini", MAX_PATH);
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = owner;
+    ofn.lpstrFilter = L"FastPlay settings (*.ini)\0*.ini\0All files (*.*)\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = L"ini";
+    ofn.lpstrTitle = save ? L"Export player settings" : L"Import settings from FastPlay.ini";
+    ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY |
+                (save ? OFN_OVERWRITEPROMPT : (OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST));
+    const BOOL ok = save ? GetSaveFileNameW(&ofn) : GetOpenFileNameW(&ofn);
+    return ok ? std::wstring(path) : std::wstring();
+}
+
+INT_PTR CALLBACK FastPlayProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG:
+        on_init(dlg, lp);
+        return TRUE;
+    case WM_COMMAND: {
+        Ctx* ctx = ctx_of(dlg);
+        if (!ctx || !ctx->media_command)
+            break;
+        const int id = LOWORD(wp);
+        if (id == IDC_SET_FP_IMPORT || id == IDC_SET_FP_EXPORT) {
+            const bool save = id == IDC_SET_FP_EXPORT;
+            const std::wstring path = pick_ini_file(GetParent(dlg), save);
+            if (!path.empty())
+                ctx->media_command(save ? "media_settings_export" : "media_settings_import", to_utf8(path));
+            return TRUE;
+        }
+        if (id == IDC_SET_FP_RESET) {
+            if (MessageBoxW(GetParent(dlg),
+                            L"Put the player's tempo, pitch, rate and effects back to their defaults?",
+                            L"Reset Player Settings", MB_YESNO | MB_ICONQUESTION) == IDYES)
+                ctx->media_command("media_settings_reset", std::string());
+            return TRUE;
+        }
+        break;
+    }
+    case WM_NOTIFY:
+        if (is_apply(lp)) {
+            SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 // Behavior page: what pressing Enter on a post / a user does by default.
 // The actions offered for Enter / secondary interact — a curated subset of the
 // post-action catalog (the ones that make sense as a single tap). Enter and
@@ -935,11 +993,14 @@ PROPSHEETPAGEW make_page(HINSTANCE inst, int dlg, DLGPROC proc, Ctx* ctx) {
 std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
                                                 const AppSettings& current,
                                                 const AudioChoices& audio,
-                                                std::function<void(HWND)> open_manager) {
+                                                std::function<void(HWND)> open_manager,
+                                                std::function<void(const std::string&, const std::string&)>
+                                                    media_command) {
     Ctx ctx;
     ctx.settings = current;
     ctx.audio = audio;
     ctx.open_manager = std::move(open_manager);
+    ctx.media_command = std::move(media_command);
 
     PROPSHEETPAGEW pages[] = {
         make_page(inst, IDD_SET_GENERAL, GeneralProc, &ctx),
@@ -952,6 +1013,7 @@ std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
         make_page(inst, IDD_SET_BEHAVIOR, BehaviorProc, &ctx),
         make_page(inst, IDD_SET_INVISIBLE, InvisibleProc, &ctx),
         make_page(inst, IDD_SET_UPDATES, UpdatesProc, &ctx),
+        make_page(inst, IDD_SET_FASTPLAY, FastPlayProc, &ctx),
     };
 
     PROPSHEETHEADERW hdr{};

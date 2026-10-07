@@ -514,6 +514,12 @@ void CoreSession::handle(const json& cmd) {
         cmd_media_stop();
     else if (c == "media_position")
         cmd_media_position();
+    else if (c == "media_settings_import")
+        cmd_media_settings_import(cmd);
+    else if (c == "media_settings_export")
+        cmd_media_settings_export(cmd);
+    else if (c == "media_settings_reset")
+        cmd_media_settings_reset();
     else if (c == "move")
         cmd_move(cmd);
     else if (c == "cycle_movement")
@@ -872,7 +878,11 @@ void CoreSession::cmd_select_account(const json& cmd) {
 void CoreSession::cmd_get_settings() { emit_settings(); }
 
 void CoreSession::cmd_update_settings(const json& cmd) {
+    // The player's settings are changed only by their own commands: a settings
+    // page's copy may predate an import made from it
+    const std::string player_settings = settings_.media_player_settings;
     settings_ = store::settings_from_json(cmd.value("settings", json::object()));
+    settings_.media_player_settings = player_settings;
     apply_settings();
     save_config();
     emit_settings();
@@ -3946,13 +3956,74 @@ void CoreSession::cmd_set_media_volume(const json& cmd) {
 // In-app media
 // ---------------------------------------------------------------------------
 
+void CoreSession::ensure_media() {
+    if (media_)
+        return;
+    media_ = std::make_unique<media::MediaPlayer>(
+        config_path_.parent_path() / "media", [this](media::MediaPlayer::Event e, int request, std::string text) {
+            // From the engine's thread to the loop, where the player lives
+            loop_.post([this, e, request, text = std::move(text)] { on_media_event(e, request, text); });
+        });
+    if (!settings_.media_player_settings.empty())
+        media_->import_settings(settings_.media_player_settings);
+}
+
+void CoreSession::cmd_media_settings_import(const json& cmd) {
+    if (!media::MediaPlayer::available()) {
+        emit_announce("This version of FastSMRW has no FastPlay player.");
+        return;
+    }
+    const std::string path = cmd.value("path", std::string{});
+    std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
+    if (!in) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("That file could not be opened.");
+        return;
+    }
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    ensure_media();
+    const int found = media_->import_settings(text);
+    if (found == 0) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("No FastPlay settings were found in that file.");
+        return;
+    }
+    settings_.media_player_settings = media_->export_settings(); // what took, in full
+    save_config();
+    emit_announce("Imported " + std::to_string(found) + " FastPlay settings.");
+}
+
+void CoreSession::cmd_media_settings_export(const json& cmd) {
+    if (!media::MediaPlayer::available()) {
+        emit_announce("This version of FastSMRW has no FastPlay player.");
+        return;
+    }
+    const std::string path = cmd.value("path", std::string{});
+    ensure_media();
+    const std::string text = media_->export_settings();
+    std::ofstream out(std::filesystem::u8path(path), std::ios::binary | std::ios::trunc);
+    if (!out || !out.write(text.data(), static_cast<std::streamsize>(text.size()))) {
+        sound_.play(sound::Earcon::Error);
+        emit_announce("The settings could not be saved there.");
+        return;
+    }
+    out.close();
+    emit({{"event", "media_settings_exported"}, {"path", path}});
+    emit_announce("Exported the player settings.");
+}
+
+void CoreSession::cmd_media_settings_reset() {
+    if (!media::MediaPlayer::available())
+        return;
+    ensure_media();
+    media_->reset_settings();
+    settings_.media_player_settings.clear();
+    save_config();
+    emit_announce("The player settings are back to their defaults.");
+}
+
 void CoreSession::play_in_app(const std::string& url, const std::string& title, bool youtube) {
-    if (!media_)
-        media_ = std::make_unique<media::MediaPlayer>(
-            config_path_.parent_path() / "media", [this](media::MediaPlayer::Event e, int request, std::string text) {
-                // From the engine's thread to the loop, where the player lives
-                loop_.post([this, e, request, text = std::move(text)] { on_media_event(e, request, text); });
-            });
+    ensure_media();
     media_->set_device(settings_.media_device);
     media_->set_volume(settings_.media_volume);
     media_url_ = url;

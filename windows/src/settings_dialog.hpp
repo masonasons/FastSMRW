@@ -24,8 +24,12 @@ struct AudioChoices {
 // edited settings if the user clicked OK, else nullopt. `open_manager`, if set,
 // is invoked (with the settings dialog as parent) when the user clicks the
 // Keyboard Manager button on the Invisible interface tab.
+//
+// `media_command`, if set, sends one of the FastPlay page's commands to the core at
+// once (media_settings_import / _export with a path, media_settings_reset).
 std::optional<fastsm::store::AppSettings>
 show_settings_dialog(HWND parent, HINSTANCE inst, const fastsm::store::AppSettings& current,
-                     const AudioChoices& audio, std::function<void(HWND)> open_manager = {});
+                     const AudioChoices& audio, std::function<void(HWND)> open_manager = {},
+                     std::function<void(const std::string& cmd, const std::string& path)> media_command = {});
 
 } // namespace fastsmui

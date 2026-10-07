@@ -1756,7 +1756,13 @@ void MainWindow::do_settings() {
     audio.sound_devices = sound_devices_; // the core's mixer devices, from the settings event
     audio.media_devices = media_devices_; // the core's media player's, from the settings event
     auto open_mgr = [this](HWND parent) { open_keymap_manager(parent); };
-    if (auto result = show_settings_dialog(hwnd_, inst_, s, audio, open_mgr)) {
+    auto media_command = [this](const std::string& cmd, const std::string& path) {
+        json c = {{"cmd", cmd}};
+        if (!path.empty())
+            c["path"] = path;
+        dispatch_cmd(c);
+    };
+    if (auto result = show_settings_dialog(hwnd_, inst_, s, audio, open_mgr, media_command)) {
         // The Keyboard Manager (reachable from a button inside this dialog) switches
         // the active keymap directly in the core while the dialog is open. The dialog
         // has no control for it, so its snapshot still holds the old name — carry the

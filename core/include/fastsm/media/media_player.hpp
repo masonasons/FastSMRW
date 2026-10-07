@@ -53,6 +53,12 @@ public:
     bool live() const;
     std::string title() const;
 
+    // Its settings as FastPlay.ini text (see fpe_settings_export): taken from
+    // such text (how many settings were found), given as it, and reset.
+    int import_settings(const std::string& ini);
+    std::string export_settings();
+    void reset_settings();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.1
 -----
 
+- New: a FastPlay page in Settings (Windows, Mac and iPhone) imports the media player's settings - tempo, pitch, rate and every effect - from a FastPlay.ini, exports them to one, or resets them.
 - Changed: the media sound now plays on every post with something to listen to - audio, video, or a YouTube link where the app plays them - even alongside pictures; posts with only pictures or GIFs play the image sound.
 - New: on the Mac, Command-Period stops the media that is playing, from anywhere in the app; it is under Status, Stop Media.
 - Fixed: on the Mac, updating no longer leaves you with an app macOS calls damaged; FastSMRW now downloads the update, replaces itself and restarts, and tells you next time if it couldn't.
