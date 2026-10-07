@@ -518,6 +518,38 @@ final class ToggleHostCell: UITableViewCell {
     }
 }
 
+/// A labelled slider in a table row. The slider itself is the accessibility element,
+/// so VoiceOver's swipe-up/down adjusts it directly rather than making you find it --
+/// which is the whole point of using a slider here instead of a list.
+final class SliderHostCell: UITableViewCell {
+    init(title: String, slider: UISlider) {
+        super.init(style: .default, reuseIdentifier: nil)
+        selectionStyle = .none
+        let label = UILabel()
+        label.text = title
+        label.font = .preferredFont(forTextStyle: .body)
+        label.adjustsFontForContentSizeCategory = true
+        label.numberOfLines = 0
+        let stack = UIStackView(arrangedSubviews: [label, slider])
+        stack.axis = .vertical
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: contentView.layoutMarginsGuide.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: contentView.layoutMarginsGuide.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
+        ])
+        // The label is read as part of the slider (its accessibilityLabel), so it is
+        // not a stop of its own.
+        label.isAccessibilityElement = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
 // MARK: - Profile editor
 
 @MainActor

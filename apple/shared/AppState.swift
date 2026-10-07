@@ -37,6 +37,11 @@ final class AppState {
     private(set) var speechCatalog: SpeechCatalog?
 
     // UI subscriptions (set by the controllers).
+    /// The player's effects and their parameters, as the core last reported them.
+    /// Driven by getMediaEffects(); the Effects screen renders this and nothing else.
+    var mediaEffects = MediaEffects()
+    var onMediaEffects: (() -> Void)?
+
     /// The window title for the focused account, composed by the core (name + server,
     /// or plain "FastSMRW" when the General setting turns it off). The Mac window uses
     /// it; iOS has no window title.
@@ -250,6 +255,9 @@ final class AppState {
         }
         guard let event = CoreEvent.decode(json) else { return }
         switch event {
+        case let .mediaEffects(e):
+            mediaEffects = e
+            onMediaEffects?()
         case let .accountsChanged(e):
             accounts = e.accounts
             selectedAccountKey = e.selected
@@ -660,6 +668,18 @@ final class AppState {
     func importPlayerSettings(from path: String) { client.send("media_settings_import", ["path": path]) }
     func exportPlayerSettings(to path: String) { client.send("media_settings_export", ["path": path]) }
     func resetPlayerSettings() { client.send("media_settings_reset", [:]) }
+    /// Ask for the effects and their parameters; answered with a mediaEffects event.
+    func getMediaEffects() { client.send("get_media_effects", [:]) }
+    /// Turn an effect on or off. The core re-sends the catalog, because an effect's
+    /// parameters only apply while it is on.
+    func setMediaEffect(_ key: String, on: Bool) {
+        client.send("set_media_effect", ["effect": key, "on": on])
+    }
+    /// Set one parameter. The core speaks where the value landed (it clamps to the
+    /// parameter's range) and does NOT re-send the catalog, so dragging stays smooth.
+    func setMediaParam(_ key: String, value: Float) {
+        client.send("set_media_effect_param", ["key": key, "value": value])
+    }
     func playMedia(url: String, kind: String, title: String) {
         client.send("play_media", ["url": url, "kind": kind, "title": title])
     }

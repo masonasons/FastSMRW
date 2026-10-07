@@ -182,6 +182,7 @@ final class SettingsViewController: UITableViewController {
                           + "and the effects with all their settings) can be brought over from "
                           + "FastPlay as a FastPlay.ini file, saved, or reset. They take effect at once.",
                     rows: [
+                .action("Effects", action: "fastplay_effects"),
                 .action("Import Settings from FastPlay.ini", action: "import_fastplay"),
                 .action("Export Player Settings", action: "export_fastplay"),
                 .action("Reset Player Settings", action: "reset_fastplay"),
@@ -224,6 +225,9 @@ final class SettingsPanelViewController: UITableViewController {
 
     private func runAction(_ action: String) {
         switch action {
+        case "fastplay_effects":
+            navigationController?.pushViewController(EffectsViewController(state: state),
+                                                     animated: true)
         case "import_fastplay":
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
             picker.delegate = self

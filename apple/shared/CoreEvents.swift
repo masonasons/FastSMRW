@@ -414,6 +414,49 @@ struct MediaPicker: Decodable { let id: String; let items: [MediaItem] }
 /// The player's settings were written to `path` (media_settings_export).
 struct MediaSettingsExported: Decodable { let path: String }
 
+/// One of the player's audio effects. Off until turned on; its parameters only do
+/// anything while it is.
+struct MediaEffect: Decodable, Equatable {
+    let key: String
+    let name: String
+    var enabled = false
+}
+
+/// One adjustable value. `effect` is the effect it belongs to, empty for the ones
+/// that always apply (pitch, tempo, rate). `choices` names the values of a choice
+/// parameter and is empty for a plain number, where min/max/step/unit apply instead.
+/// `display` is the value already written out by the core ("+3.0 dB", "Cathedral").
+struct MediaParam: Decodable, Equatable {
+    let key: String
+    let name: String
+    var unit = ""
+    var effect = ""
+    var display = ""
+    var min: Float = 0
+    var max: Float = 1
+    var step: Float = 0.01
+    var value: Float = 0
+    var choices: [String] = []
+
+    enum CodingKeys: String, CodingKey {
+        case key, name, unit, effect, display, min, max, step, value, choices
+    }
+
+    /// Whether this parameter does anything right now, given which effects are on.
+    func applies(given effects: [MediaEffect]) -> Bool {
+        if effect.isEmpty { return true }
+        return effects.first { $0.key == effect }?.enabled ?? false
+    }
+}
+
+/// `available` is false where this build has no FastPlay engine, in which case there
+/// is nothing to configure and the lists are empty.
+struct MediaEffects: Decodable, Equatable {
+    var available = false
+    var effects: [MediaEffect] = []
+    var params: [MediaParam] = []
+}
+
 struct MediaPlayerState: Decodable {
     let state: String
     var title = ""
@@ -614,6 +657,7 @@ struct ServerFilters: Decodable {
 // MARK: Envelope
 
 enum CoreEvent {
+    case mediaEffects(MediaEffects)
     case accountsChanged(AccountsChanged)
     case timelinesChanged(TimelinesChanged)
     case timelineUpdated(TimelineUpdated)
@@ -682,6 +726,7 @@ enum CoreEvent {
         case "media_open": return decode(MediaOpen.self).map(CoreEvent.mediaOpen)
         case "media_picker": return decode(MediaPicker.self).map(CoreEvent.mediaPicker)
         case "media_player": return decode(MediaPlayerState.self).map(CoreEvent.mediaPlayer)
+        case "media_effects": return decode(MediaEffects.self).map(CoreEvent.mediaEffects)
         case "media_settings_exported":
             return decode(MediaSettingsExported.self).map(CoreEvent.mediaSettingsExported)
         case "url_picker": return decode(URLPicker.self).map(CoreEvent.urlPicker)

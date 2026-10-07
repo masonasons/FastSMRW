@@ -174,6 +174,7 @@ final class SettingsWindowController: NSWindowController {
         tab("FastPlay", "play.circle") { p in
             p.label("The media player is FastPlay's. Its settings (tempo, pitch and rate, and the "
                 + "effects with all their settings) can be brought over from FastPlay, saved, or reset.")
+            p.button("Effects…") { PlayerEffectsWindow.open(state: state) }
             p.button("Import Settings from FastPlay.ini…") { PlayerSettingsFiles.importSettings(state: state) }
             p.button("Export Player Settings…") { PlayerSettingsFiles.exportSettings(state: state) }
             p.button("Reset Player Settings") { PlayerSettingsFiles.resetSettings(state: state) }
@@ -398,6 +399,25 @@ final class SettingsPane: NSViewController {
 /// The FastPlay page's files: a FastPlay.ini to take the player's settings from,
 /// one to write them to, and the reset. The core does the work.
 @MainActor
+/// Opens the Effects window, keeping it alive while it is on screen. A window of its
+/// own rather than a sheet because the tabs are built before the settings controller
+/// exists, so there is nothing to parent a sheet to from here.
+enum PlayerEffectsWindow {
+    private static var controller: EffectsWindowController?
+
+    static func open(state: AppState) {
+        // A fresh one each time it is opened from a closed state: the controller gives
+        // up the catalog callback when its window closes, so reusing it would show a
+        // window that never updates.
+        if controller?.window?.isVisible != true {
+            controller = EffectsWindowController(state: state)
+        }
+        controller?.window?.center()
+        controller?.showWindow(nil)
+        controller?.window?.makeKeyAndOrderFront(nil)
+    }
+}
+
 enum PlayerSettingsFiles {
     static func importSettings(state: AppState) {
         let panel = NSOpenPanel()
