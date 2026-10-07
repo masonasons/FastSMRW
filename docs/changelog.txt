@@ -5,6 +5,7 @@ FastSMRW changelog
 -----
 
 - New: audio attachments now play through FastPlay's audio engine on Windows, Mac and iPhone, so far more formats and streams play in the app instead of sending you to another player.
+- New: video attachments (MP4s and Bluesky videos) now play their sound in the app's media player on Windows, Mac and iPhone, like audio does; silent GIF-style videos still open in the viewer.
 - New: on Windows and Mac, View Media plays YouTube videos linked in a post right in the app; the first one takes a little longer while the YouTube tools download, and they keep themselves up to date.
 - New: the media player can tell you how far through you are and how long it is (P on Windows and Mac, Where Am I on iPhone), and on iPhone it has its own volume buttons.
 - Changed: the Mac app is no longer sandboxed, which it needed to be for YouTube; your accounts and settings carry over by themselves.

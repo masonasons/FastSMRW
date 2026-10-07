@@ -3486,9 +3486,12 @@ void CoreSession::play_one_media(const std::string& url, const std::string& kind
         emit_announce("No media to play");
         return;
     }
-    // Audio, and YouTube links, play in the app itself where the core has the
-    // engine; the rest (images, video) is the front end's to show
-    if (media::MediaPlayer::available() && (kind == "audio" || kind == "youtube")) {
+    // Audio, video (MP4s, Bluesky's streams: the engine plays their sound) and
+    // YouTube links play in the app itself where the core has the engine, as
+    // does an attachment of unknown kind (if it can't, it goes to the browser).
+    // Images, and GIF-style video (silent loops), are the front end's to show.
+    const bool playable = kind == "audio" || kind == "video" || kind == "media" || kind == "youtube";
+    if (media::MediaPlayer::available() && playable) {
         play_in_app(url, title, kind == "youtube");
         return;
     }

@@ -205,6 +205,18 @@ void test_core_media_flow() {
     CHECK(find("media_player", "state", "ended", at));
     CHECK(find("announce", "message", "Finished", at));
 
+    // A video plays in the core too (its sound)
+    nlohmann::json video = {{"cmd", "play_media"}, {"url", wav.string()}, {"kind", "video"}, {"title", "Video"}};
+    session->dispatch(video.dump());
+    CHECK(find("media_player", "state", "opening", at));
+    CHECK(find("media_player", "state", "playing", at));
+    session->dispatch(R"({"cmd":"media_stop"})");
+    CHECK(find("media_player", "state", "closed", at));
+
+    // A GIF-style video is silent: still the app's to show
+    session->dispatch(R"({"cmd":"play_media","url":"https://example.com/a.mp4","kind":"gifv","title":"GIF"})");
+    CHECK(find("media_open", "kind", "gifv", at));
+
     // An image is still the app's to show
     session->dispatch(R"({"cmd":"play_media","url":"https://example.com/a.png","kind":"image","title":"Image"})");
     CHECK(find("media_open", "kind", "image", at));
