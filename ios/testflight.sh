@@ -26,24 +26,22 @@ ARCHIVE="build/FastSMRW.xcarchive"
 EXPORT_DIR="build/export"
 
 echo "==> Archiving"
-# aps-environment is set from the provisioning profile under automatic signing
-# (not the entitlements file), so the App Store export below re-signs with a
-# distribution profile -> production APNs. No entitlement juggling needed here.
+# Release signs with a pinned distribution certificate + App Store profiles
+# (set per target in project.yml, imported into the keychain by CI). No
+# automatic signing and no -allowProvisioningUpdates, so this never creates a
+# new certificate. The App Store export re-signs for production APNs via the
+# distribution profiles. Running this locally needs the same cert + profiles
+# installed (otherwise use the CI workflow).
 xcodebuild archive -project FastSMRW.xcodeproj -scheme FastSMRW \
     -configuration Release -destination 'generic/platform=iOS' \
     -archivePath "$ARCHIVE" -derivedDataPath build/dd-archive \
-    -allowProvisioningUpdates \
-    -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$KEY_ID" \
-    -authenticationKeyIssuerID "$ISSUER" \
-    DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
+    DEVELOPMENT_TEAM="$TEAM" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD"
 
 echo "==> Exporting (App Store)"
 rm -rf "$EXPORT_DIR"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist exportOptions.plist -allowProvisioningUpdates \
-    -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$KEY_ID" \
-    -authenticationKeyIssuerID "$ISSUER"
+    -exportOptionsPlist exportOptions.plist
 
 echo "==> Uploading to TestFlight"
 xcrun altool --upload-app -f "$EXPORT_DIR"/*.ipa -t ios \

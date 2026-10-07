@@ -9,7 +9,14 @@
     <key>destination</key>
     <string>export</string>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>me.masonasons.FastSMRW</key>
+        <string>FastSMRW App Store CI</string>
+        <key>me.masonasons.FastSMRW.NotificationService</key>
+        <string>FastSMRW NSE App Store CI</string>
+    </dict>
     <key>uploadSymbols</key>
     <true/>
 </dict>
