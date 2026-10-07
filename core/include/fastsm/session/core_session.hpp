@@ -110,6 +110,16 @@ private:
     void cmd_media_settings_import(const nlohmann::json& cmd);
     void cmd_media_settings_export(const nlohmann::json& cmd);
     void cmd_media_settings_reset();
+    // The player's effects: which are on, and every parameter with its range and
+    // current value. One event carries the lot, so a settings page can be built from
+    // it without knowing anything about the engine.
+    void cmd_get_media_effects();
+    void cmd_set_media_effect(const nlohmann::json& cmd);
+    void cmd_set_media_effect_param(const nlohmann::json& cmd);
+    void emit_media_effects();
+    // Fold whatever the engine now holds back into the stored settings, so an effect
+    // set here is still set next launch.
+    void save_media_settings();
     void ensure_media(); // the player, made with the saved settings
     void play_one_media(const std::string& url, const std::string& kind, const std::string& title);
     void cmd_move(const nlohmann::json& cmd);

@@ -151,6 +151,123 @@ double MediaPlayer::position() const { return impl_->player ? fpe_position(impl_
 double MediaPlayer::length() const { return impl_->player ? fpe_length(impl_->player) : 0.0; }
 bool MediaPlayer::live() const { return impl_->player && fpe_is_live(impl_->player) != 0; }
 
+
+// The engine names its effects by key only, so the display names live here -- the
+// core composes every string the apps show.
+static std::string effect_display_name(const std::string& key) {
+    if (key == "reverb")
+        return "Reverb";
+    if (key == "echo")
+        return "Echo";
+    if (key == "eq")
+        return "EQ";
+    if (key == "compressor")
+        return "Compressor";
+    if (key == "stereo_width")
+        return "Stereo Width";
+    if (key == "center_cancel")
+        return "Center Cancel";
+    if (key == "convolution")
+        return "Convolution Reverb";
+    if (key == "3d_audio")
+        return "3D Audio";
+    if (key == "normalizer")
+        return "Normalizer";
+    return key; // a new effect the engine grew: better its key than nothing
+}
+
+std::vector<MediaPlayer::Effect> MediaPlayer::effects() const {
+#ifdef FASTSM_FASTPLAY_ENGINE
+    std::vector<Effect> out;
+    fpe_player* p = impl_->ensure_player();
+    const int n = fpe_effect_count();
+    out.reserve(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        const char* key = fpe_effect_key(i);
+        if (!key || !*key)
+            continue;
+        Effect e;
+        e.key = key;
+        e.name = effect_display_name(e.key);
+        e.enabled = p && fpe_effect_enabled(p, key) != 0;
+        out.push_back(std::move(e));
+    }
+    return out;
+#else
+    return {};
+#endif
+}
+
+std::vector<MediaPlayer::Param> MediaPlayer::params() const {
+#ifdef FASTSM_FASTPLAY_ENGINE
+    std::vector<Param> out;
+    fpe_player* p = impl_->ensure_player();
+    const int n = fpe_param_count();
+    out.reserve(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        fpe_param_info info{};
+        if (!fpe_param_at(i, &info) || !info.key || !*info.key)
+            continue;
+        // Volume is deliberately left out: FastSMRW has its own media volume
+        // setting, and two controls for one value would fight each other.
+        if (std::string(info.key) == "volume")
+            continue;
+        Param q;
+        q.key = info.key;
+        q.name = info.name ? info.name : info.key;
+        q.unit = info.unit ? info.unit : "";
+        q.effect = info.effect ? info.effect : "";
+        q.min_value = info.min_value;
+        q.max_value = info.max_value;
+        q.step = info.step;
+        q.default_value = info.default_value;
+        q.value = p ? fpe_get_param(p, info.key) : info.default_value;
+        for (int c = 0; c < info.choices; ++c) {
+            char name[128] = {};
+            if (fpe_param_choice(info.key, c, name, static_cast<int>(sizeof(name))))
+                q.choices.emplace_back(name);
+            else
+                q.choices.emplace_back(std::to_string(c));
+        }
+        out.push_back(std::move(q));
+    }
+    return out;
+#else
+    return {};
+#endif
+}
+
+bool MediaPlayer::set_effect(const std::string& key, bool on) {
+#ifdef FASTSM_FASTPLAY_ENGINE
+    fpe_player* p = impl_->ensure_player();
+    return p && fpe_set_effect(p, key.c_str(), on ? 1 : 0) != 0;
+#else
+    (void)key;
+    (void)on;
+    return false;
+#endif
+}
+
+bool MediaPlayer::set_param(const std::string& key, float value) {
+#ifdef FASTSM_FASTPLAY_ENGINE
+    fpe_player* p = impl_->ensure_player();
+    return p && fpe_set_param(p, key.c_str(), value) != 0;
+#else
+    (void)key;
+    (void)value;
+    return false;
+#endif
+}
+
+void MediaPlayer::set_reverb_type(int type) {
+#ifdef FASTSM_FASTPLAY_ENGINE
+    if (fpe_player* p = impl_->ensure_player())
+        fpe_set_reverb_type(p, type);
+#else
+    (void)type;
+#endif
+}
+
 int MediaPlayer::import_settings(const std::string& ini) {
     fpe_player* p = impl_->ensure_player();
     return p ? fpe_settings_import(p, ini.c_str()) : 0;

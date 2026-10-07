@@ -251,6 +251,25 @@ std::string account_label(const SocialAccount& a) {
     return label.empty() ? server : label + " on " + server;
 }
 
+// A parameter's value as it should be read out: the name of a choice, or the number
+// with its unit. Composed here so five settings pages don't each invent a format.
+std::string media_param_display(const media::MediaPlayer::Param& p) {
+    if (!p.choices.empty()) {
+        const int index = static_cast<int>(p.value + 0.5f);
+        if (index >= 0 && index < static_cast<int>(p.choices.size()))
+            return p.choices[static_cast<size_t>(index)];
+        return std::to_string(index);
+    }
+    // One decimal unless the step is coarser, so 0.5 steps don't read as "3".
+    char buf[64];
+    const bool whole = p.step >= 1.0f;
+    std::snprintf(buf, sizeof(buf), whole ? "%.0f" : "%.1f", static_cast<double>(p.value));
+    std::string out = buf;
+    if (!p.unit.empty())
+        out += " " + p.unit;
+    return out;
+}
+
 json features_json(const PlatformFeatures& f) {
     return {{"visibility", f.visibility},     {"content_warning", f.content_warning},
             {"quote_posts", f.quote_posts},   {"polls", f.polls},
@@ -518,6 +537,12 @@ void CoreSession::handle(const json& cmd) {
         cmd_media_settings_import(cmd);
     else if (c == "media_settings_export")
         cmd_media_settings_export(cmd);
+    else if (c == "get_media_effects")
+        cmd_get_media_effects();
+    else if (c == "set_media_effect")
+        cmd_set_media_effect(cmd);
+    else if (c == "set_media_effect_param")
+        cmd_set_media_effect_param(cmd);
     else if (c == "media_settings_reset")
         cmd_media_settings_reset();
     else if (c == "move")
@@ -4010,6 +4035,105 @@ void CoreSession::cmd_media_settings_export(const json& cmd) {
     out.close();
     emit({{"event", "media_settings_exported"}, {"path", path}});
     emit_announce("Exported the player settings.");
+}
+
+void CoreSession::save_media_settings() {
+    if (!media_)
+        return;
+    settings_.media_player_settings = media_->export_settings();
+    save_config();
+}
+
+void CoreSession::emit_media_effects() {
+    if (!media::MediaPlayer::available()) {
+        emit({{"event", "media_effects"}, {"available", false}});
+        return;
+    }
+    ensure_media();
+    json effects = json::array();
+    for (const auto& e : media_->effects())
+        effects.push_back({{"key", e.key}, {"name", e.name}, {"enabled", e.enabled}});
+    json params = json::array();
+    for (const auto& p : media_->params()) {
+        json choices = json::array();
+        for (const auto& c : p.choices)
+            choices.push_back(c);
+        params.push_back({{"key", p.key},
+                          {"name", p.name},
+                          {"unit", p.unit},
+                          {"effect", p.effect},
+                          {"min", p.min_value},
+                          {"max", p.max_value},
+                          {"step", p.step},
+                          {"default", p.default_value},
+                          {"value", p.value},
+                          // A choice parameter reads out its value's name instead of a
+                          // number; empty means it is a plain number.
+                          {"choices", std::move(choices)},
+                          // Already composed, because every front end would otherwise
+                          // write its own version of "+3.0 dB" / "Cathedral".
+                          {"display", media_param_display(p)}});
+    }
+    emit({{"event", "media_effects"},
+          {"available", true},
+          {"effects", std::move(effects)},
+          {"params", std::move(params)}});
+}
+
+void CoreSession::cmd_get_media_effects() { emit_media_effects(); }
+
+void CoreSession::cmd_set_media_effect(const json& cmd) {
+    if (!media::MediaPlayer::available()) {
+        emit_announce("This version of FastSMRW has no FastPlay player.");
+        return;
+    }
+    ensure_media();
+    const std::string key = cmd.value("effect", std::string{});
+    if (key.empty())
+        return;
+    const bool on = cmd.value("on", false);
+    // The reverb is three-way rather than on/off, so a UI may send a type instead.
+    if (key == "reverb" && cmd.contains("type")) {
+        const int type = cmd.value("type", 0);
+        media_->set_reverb_type(type);
+        save_media_settings();
+        emit_announce(type == 0   ? "Reverb off"
+                      : type == 1 ? "Reverb: simple"
+                                  : "Reverb: advanced");
+        emit_media_effects();
+        return;
+    }
+    media_->set_effect(key, on);
+    save_media_settings();
+    // Name the effect, not its key: the apps don't compose this.
+    std::string name = key;
+    for (const auto& e : media_->effects())
+        if (e.key == key) {
+            name = e.name;
+            break;
+        }
+    emit_announce(name + (on ? " on" : " off"));
+    emit_media_effects();
+}
+
+void CoreSession::cmd_set_media_effect_param(const json& cmd) {
+    if (!media::MediaPlayer::available())
+        return;
+    ensure_media();
+    const std::string key = cmd.value("key", std::string{});
+    if (key.empty() || !cmd.contains("value"))
+        return;
+    media_->set_param(key, cmd.value("value", 0.0f));
+    save_media_settings();
+    // Say where it landed, which is not necessarily what was asked for: the engine
+    // clamps to the parameter's range.
+    for (const auto& p : media_->params())
+        if (p.key == key) {
+            emit_announce(p.name + ": " + media_param_display(p));
+            break;
+        }
+    // No re-emit: a slider drag would fight a stream of catalog events. The UI knows
+    // the value it set, and the announcement above carries what the engine took.
 }
 
 void CoreSession::cmd_media_settings_reset() {

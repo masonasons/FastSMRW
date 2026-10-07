@@ -53,6 +53,38 @@ public:
     bool live() const;
     std::string title() const;
 
+    // One of the engine's audio effects: reverb, echo, EQ and the rest. `name` is
+    // for display; the effect is off until turned on, and its parameters only do
+    // anything while it is.
+    struct Effect {
+        std::string key;
+        std::string name;
+        bool enabled = false;
+    };
+    // One adjustable value. `effect` is the effect it belongs to, empty for the
+    // stream-wide ones (pitch, tempo, rate). `choices` names the values of a
+    // choice parameter (a reverb room, a 3D mode) and is empty for a plain number,
+    // in which case min/max/step/unit describe the range instead.
+    struct Param {
+        std::string key;
+        std::string name;
+        std::string unit;
+        std::string effect;
+        float min_value = 0.0f;
+        float max_value = 1.0f;
+        float step = 0.01f;
+        float default_value = 0.0f;
+        float value = 0.0f;
+        std::vector<std::string> choices;
+    };
+    std::vector<Effect> effects() const;
+    std::vector<Param> params() const;
+    bool set_effect(const std::string& key, bool on);
+    bool set_param(const std::string& key, float value);
+    // The reverb is three-way rather than a plain toggle: 0 off, 1 simple (a room
+    // you size), 2 advanced (the EFX environments).
+    void set_reverb_type(int type);
+
     // Its settings as FastPlay.ini text (see fpe_settings_export): taken from
     // such text (how many settings were found), given as it, and reset.
     int import_settings(const std::string& ini);
