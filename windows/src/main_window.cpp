@@ -1762,7 +1762,14 @@ void MainWindow::do_settings() {
             c["path"] = path;
         dispatch_cmd(c);
     };
-    if (auto result = show_settings_dialog(hwnd_, inst_, s, audio, open_mgr, media_command)) {
+    auto set_effect = [this](const std::string& effect, bool on) {
+        dispatch_cmd({{"cmd", "set_media_effect"}, {"effect", effect}, {"on", on}});
+    };
+    auto set_param = [this](const std::string& key, float value) {
+        dispatch_cmd({{"cmd", "set_media_effect_param"}, {"key", key}, {"value", value}});
+    };
+    if (auto result = show_settings_dialog(hwnd_, inst_, s, audio, open_mgr, media_command,
+                                           media_effects_, set_effect, set_param)) {
         // The Keyboard Manager (reachable from a button inside this dialog) switches
         // the active keymap directly in the core while the dialog is open. The dialog
         // has no control for it, so its snapshot still holds the old name — carry the
@@ -2423,6 +2430,30 @@ void MainWindow::on_event(const std::string& js) {
     // reads which account you are about to post from as the window takes focus. The core
     // composed the string, including whether the account appears at all (the General
     // setting), so there is nothing to assemble here.
+    else if (ev == "media_effects") {
+        media_effects_.available = e.value("available", false);
+        media_effects_.effects.clear();
+        media_effects_.params.clear();
+        for (const auto& x : e.value("effects", json::array()))
+            media_effects_.effects.push_back({x.value("key", std::string{}),
+                                              x.value("name", std::string{}),
+                                              x.value("enabled", false)});
+        for (const auto& x : e.value("params", json::array())) {
+            MediaEffectChoices::Param p;
+            p.key = x.value("key", std::string{});
+            p.name = x.value("name", std::string{});
+            p.unit = x.value("unit", std::string{});
+            p.effect = x.value("effect", std::string{});
+            p.display = x.value("display", std::string{});
+            p.min_value = x.value("min", 0.0f);
+            p.max_value = x.value("max", 1.0f);
+            p.step = x.value("step", 0.01f);
+            p.value = x.value("value", 0.0f);
+            for (const auto& c : x.value("choices", json::array()))
+                p.choices.push_back(c.get<std::string>());
+            media_effects_.params.push_back(std::move(p));
+        }
+    }
     else if (ev == "accounts_changed") {
         if (auto it = e.find("window_title"); it != e.end() && it->is_string())
             SetWindowTextW(hwnd_, to_wide(it->get<std::string>()).c_str());
@@ -2529,6 +2560,7 @@ void MainWindow::ev_settings(const json& e) {
         media_devices_.push_back(d.get<std::string>());
     if (action_catalog_.empty()) // load once so the Keyboard Manager has its actions
         dispatch_cmd({{"cmd", "get_action_catalog"}});
+        dispatch_cmd({{"cmd", "get_media_effects"}}); // fills the FastPlay settings page
     apply_invisible();
     // Quietly check for updates once on startup, if enabled.
     if (!startup_update_checked_) {

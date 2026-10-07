@@ -16,6 +16,7 @@
 #include "compose_dialog.hpp"
 #include "invisible_hotkeys.hpp"
 #include "invisible_keyhook.hpp"
+#include "settings_dialog.hpp" // MediaEffectChoices, for the FastPlay page
 #include "keymap_manager_dialog.hpp"
 
 namespace fastsmui {
@@ -227,6 +228,9 @@ private:
     KeyhookDriver keyhook_driver_; // mode "keyhook" (WH_KEYBOARD_LL)
     std::vector<std::string> sound_devices_;  // mixer output devices, from the settings event
     std::vector<std::string> media_devices_;  // the media player's, likewise
+    // The player's effects and their parameters, from the media_effects event, for
+    // the FastPlay settings page. Asked for at startup so the page opens filled.
+    MediaEffectChoices media_effects_;
     std::string invisible_mode_ = "off";
     bool installed_mode() const;            // installed.txt marker present (vs portable)
     std::string pending_update_url_;        // FastSMRW.zip URL from the last check

@@ -30,6 +30,12 @@ struct Ctx {
     AudioChoices audio;
     std::function<void(HWND)> open_manager;
     std::function<void(const std::string&, const std::string&)> media_command;
+    MediaEffectChoices effects;
+    std::function<void(const std::string&, bool)> set_effect;
+    std::function<void(const std::string&, float)> set_param;
+    // Which parameters the Setting list is currently showing (indices into
+    // effects.params), so a selection maps back without re-deriving the filter.
+    std::vector<int> shown_params;
     bool applied = false;
 };
 
@@ -868,11 +874,119 @@ std::wstring pick_ini_file(HWND owner, bool save) {
     return ok ? std::wstring(path) : std::wstring();
 }
 
+// --- the FastPlay page's effects, parameters and value slider ---------------
+
+// A parameter applies when it belongs to no effect (pitch, tempo, rate always do) or
+// when its effect is switched on. Showing the rest would offer settings that quietly
+// do nothing.
+bool param_applies(const Ctx& ctx, const MediaEffectChoices::Param& p) {
+    if (p.effect.empty())
+        return true;
+    for (const auto& e : ctx.effects.effects)
+        if (e.key == p.effect)
+            return e.enabled;
+    return false;
+}
+
+// The slider works in whole steps, because a trackbar is integral: step 0 is the
+// parameter's minimum. Keeps a 0.1-dB step usable rather than rounding it away.
+int param_steps(const MediaEffectChoices::Param& p) {
+    const float span = p.max_value - p.min_value;
+    const float step = p.step > 0.0f ? p.step : 1.0f;
+    const int n = static_cast<int>(span / step + 0.5f);
+    return n > 0 ? n : 1;
+}
+
+void show_param_value(HWND dlg, const Ctx& ctx, int param_index) {
+    HWND bar = GetDlgItem(dlg, IDC_SET_FP_VALUE);
+    if (param_index < 0 || param_index >= static_cast<int>(ctx.effects.params.size())) {
+        EnableWindow(bar, FALSE);
+        SetDlgItemTextW(dlg, IDC_SET_FP_VALUE_LABEL, L"&Value:");
+        return;
+    }
+    const auto& p = ctx.effects.params[static_cast<size_t>(param_index)];
+    EnableWindow(bar, TRUE);
+    const int steps = param_steps(p);
+    SendMessageW(bar, TBM_SETRANGE, TRUE, MAKELPARAM(0, steps));
+    const float step = p.step > 0.0f ? p.step : 1.0f;
+    const int pos = static_cast<int>((p.value - p.min_value) / step + 0.5f);
+    SendMessageW(bar, TBM_SETPOS, TRUE, pos < 0 ? 0 : (pos > steps ? steps : pos));
+    // The label carries the value, because a trackbar announces only a number -- and
+    // "Cathedral" or "+3.0 dB" is what the user actually wants read.
+    SetDlgItemTextW(dlg, IDC_SET_FP_VALUE_LABEL,
+                    (L"&Value: " + to_wide(p.name) + L", " + to_wide(p.display)).c_str());
+}
+
+// Refill the Setting list from the effects that are on, keeping the selection where
+// it can be kept.
+void fill_param_list(HWND dlg, Ctx* ctx) {
+    HWND list = GetDlgItem(dlg, IDC_SET_FP_PARAMS);
+    std::string keep;
+    const int old_sel = static_cast<int>(SendMessageW(list, LB_GETCURSEL, 0, 0));
+    if (old_sel >= 0 && old_sel < static_cast<int>(ctx->shown_params.size()))
+        keep = ctx->effects.params[static_cast<size_t>(ctx->shown_params[static_cast<size_t>(old_sel)])].key;
+
+    SendMessageW(list, LB_RESETCONTENT, 0, 0);
+    ctx->shown_params.clear();
+    for (size_t i = 0; i < ctx->effects.params.size(); ++i) {
+        const auto& p = ctx->effects.params[i];
+        if (!param_applies(*ctx, p))
+            continue;
+        std::wstring label = to_wide(p.name);
+        if (!p.display.empty())
+            label += L": " + to_wide(p.display);
+        SendMessageW(list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+        ctx->shown_params.push_back(static_cast<int>(i));
+    }
+    int sel = 0;
+    if (!keep.empty())
+        for (size_t i = 0; i < ctx->shown_params.size(); ++i)
+            if (ctx->effects.params[static_cast<size_t>(ctx->shown_params[i])].key == keep) {
+                sel = static_cast<int>(i);
+                break;
+            }
+    if (!ctx->shown_params.empty())
+        SendMessageW(list, LB_SETCURSEL, static_cast<WPARAM>(sel), 0);
+    show_param_value(dlg, *ctx,
+                     ctx->shown_params.empty() ? -1 : ctx->shown_params[static_cast<size_t>(sel)]);
+}
+
 INT_PTR CALLBACK FastPlayProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
-    case WM_INITDIALOG:
-        on_init(dlg, lp);
+    case WM_INITDIALOG: {
+        Ctx* ctx = on_init(dlg, lp);
+        HWND list = GetDlgItem(dlg, IDC_SET_FP_EFFECTS);
+        ListView_SetExtendedListViewStyle(list, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
+        LVCOLUMNW col{};
+        col.mask = LVCF_WIDTH;
+        col.cx = 200;
+        ListView_InsertColumn(list, 0, &col);
+        if (!ctx->effects.available) {
+            // No engine in this build: say so rather than showing empty lists.
+            EnableWindow(list, FALSE);
+            EnableWindow(GetDlgItem(dlg, IDC_SET_FP_PARAMS), FALSE);
+            EnableWindow(GetDlgItem(dlg, IDC_SET_FP_VALUE), FALSE);
+            SetDlgItemTextW(dlg, IDC_SET_FP_VALUE_LABEL,
+                            L"This build of FastSMRW has no FastPlay player.");
+            return TRUE;
+        }
+        int row = 0;
+        for (const auto& e : ctx->effects.effects) {
+            LVITEMW item{};
+            item.mask = LVIF_TEXT;
+            item.iItem = row;
+            std::wstring name = to_wide(e.name);
+            item.pszText = name.data();
+            ListView_InsertItem(list, &item);
+            ListView_SetCheckState(list, row, e.enabled);
+            ++row;
+        }
+        if (row > 0)
+            ListView_SetItemState(list, 0, LVIS_SELECTED | LVIS_FOCUSED,
+                                  LVIS_SELECTED | LVIS_FOCUSED);
+        fill_param_list(dlg, ctx);
         return TRUE;
+    }
     case WM_COMMAND: {
         Ctx* ctx = ctx_of(dlg);
         if (!ctx || !ctx->media_command)
@@ -892,14 +1006,59 @@ INT_PTR CALLBACK FastPlayProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                 ctx->media_command("media_settings_reset", std::string());
             return TRUE;
         }
+        // The Setting list: show the newly selected parameter's value on the slider.
+        if (id == IDC_SET_FP_PARAMS && HIWORD(wp) == LBN_SELCHANGE) {
+            const int sel = static_cast<int>(SendMessageW(
+                GetDlgItem(dlg, IDC_SET_FP_PARAMS), LB_GETCURSEL, 0, 0));
+            show_param_value(dlg, *ctx,
+                             sel >= 0 && sel < static_cast<int>(ctx->shown_params.size())
+                                 ? ctx->shown_params[static_cast<size_t>(sel)]
+                                 : -1);
+            return TRUE;
+        }
         break;
     }
-    case WM_NOTIFY:
+    case WM_HSCROLL: {
+        Ctx* ctx = ctx_of(dlg);
+        if (!ctx || !ctx->set_param || reinterpret_cast<HWND>(lp) != GetDlgItem(dlg, IDC_SET_FP_VALUE))
+            break;
+        const int sel = static_cast<int>(
+            SendMessageW(GetDlgItem(dlg, IDC_SET_FP_PARAMS), LB_GETCURSEL, 0, 0));
+        if (sel < 0 || sel >= static_cast<int>(ctx->shown_params.size()))
+            break;
+        auto& p = ctx->effects.params[static_cast<size_t>(ctx->shown_params[static_cast<size_t>(sel)])];
+        const int pos = static_cast<int>(SendMessageW(reinterpret_cast<HWND>(lp), TBM_GETPOS, 0, 0));
+        const float step = p.step > 0.0f ? p.step : 1.0f;
+        p.value = p.min_value + static_cast<float>(pos) * step;
+        // The core speaks the value it actually took (it clamps), so nothing is said
+        // here -- two voices for one drag is worse than one.
+        ctx->set_param(p.key, p.value);
+        return TRUE;
+    }
+    case WM_NOTIFY: {
+        auto* nm = reinterpret_cast<LPNMHDR>(lp);
+        Ctx* ctx = ctx_of(dlg);
+        // An effect's checkbox: switch it, then refill the Setting list, since its
+        // parameters only apply while it is on.
+        if (ctx && nm && nm->idFrom == IDC_SET_FP_EFFECTS && nm->code == LVN_ITEMCHANGED) {
+            auto* nv = reinterpret_cast<LPNMLISTVIEW>(lp);
+            const UINT before = nv->uOldState & LVIS_STATEIMAGEMASK;
+            const UINT after = nv->uNewState & LVIS_STATEIMAGEMASK;
+            if (before && after && before != after && nv->iItem >= 0 &&
+                nv->iItem < static_cast<int>(ctx->effects.effects.size())) {
+                auto& e = ctx->effects.effects[static_cast<size_t>(nv->iItem)];
+                e.enabled = after == INDEXTOSTATEIMAGEMASK(2);
+                if (ctx->set_effect)
+                    ctx->set_effect(e.key, e.enabled);
+                fill_param_list(dlg, ctx);
+            }
+        }
         if (is_apply(lp)) {
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
         }
         break;
+    }
     }
     return FALSE;
 }
@@ -995,12 +1154,18 @@ std::optional<AppSettings> show_settings_dialog(HWND parent, HINSTANCE inst,
                                                 const AudioChoices& audio,
                                                 std::function<void(HWND)> open_manager,
                                                 std::function<void(const std::string&, const std::string&)>
-                                                    media_command) {
+                                                    media_command,
+                                                const MediaEffectChoices& effects,
+                                                std::function<void(const std::string&, bool)> set_effect,
+                                                std::function<void(const std::string&, float)> set_param) {
     Ctx ctx;
     ctx.settings = current;
     ctx.audio = audio;
     ctx.open_manager = std::move(open_manager);
     ctx.media_command = std::move(media_command);
+    ctx.effects = effects;
+    ctx.set_effect = std::move(set_effect);
+    ctx.set_param = std::move(set_param);
 
     PROPSHEETPAGEW pages[] = {
         make_page(inst, IDD_SET_GENERAL, GeneralProc, &ctx),
