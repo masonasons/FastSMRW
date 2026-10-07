@@ -533,10 +533,14 @@ struct UpdateStatus: Decodable {
     var version = ""
     var notes = ""
     var dmgUrl = ""
+    var macZipUrl = ""      // the app itself, to update in place
+    var autoInstall = false // an automatic check, set to install without asking
     var error = ""
     enum CodingKeys: String, CodingKey {
 		case silent, available, branch, version, notes, error
         case dmgUrl = "dmg_url"
+        case macZipUrl = "mac_zip_url"
+        case autoInstall = "auto_install"
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -546,6 +550,8 @@ struct UpdateStatus: Decodable {
         version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         dmgUrl = try c.decodeIfPresent(String.self, forKey: .dmgUrl) ?? ""
+        macZipUrl = try c.decodeIfPresent(String.self, forKey: .macZipUrl) ?? ""
+        autoInstall = try c.decodeIfPresent(Bool.self, forKey: .autoInstall) ?? false
         error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
     }
 }

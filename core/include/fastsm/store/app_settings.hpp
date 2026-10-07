@@ -96,7 +96,9 @@ struct AppSettings {
     bool invisible_repeat_at_edge = true; // re-speak the item when you bump a timeline edge
     bool window_shown = true;                  // remembered across restarts (ToggleWindow)
     std::string update_branch = "stable";      // "stable" (versioned) | "latest" (rolling)
-    bool check_updates_on_startup = true;      // quietly check on launch
+    bool check_updates_on_startup = true;      // check automatically: on launch, and...
+    int update_check_hours = 0;                // ...every this many hours while running (0: launch only)
+    bool update_auto_install = false;          // an automatic check installs what it finds without asking
     // Desktop only: put the focused account and its server in the window title. A
     // screen reader reads the title when the window takes focus, which is the cheapest
     // way to know which account you are about to post from. Mobile has no window title,

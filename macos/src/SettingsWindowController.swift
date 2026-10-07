@@ -160,8 +160,13 @@ final class SettingsWindowController: NSWindowController {
 				("Latest (every build)", "latest")]
 			p.popup("Update channel:", options: channels,
 				key: "update_branch", default: "stable")
-			p.checkbox("Check for updates automatically at startup",
+			p.checkbox("Check for updates automatically",
 				key: "check_updates_on_startup", default: true)
+			let intervals = [("Only when FastSMRW starts", 0), ("Every hour", 1),
+				("Every 6 hours", 6), ("Every 12 hours", 12), ("Every day", 24), ("Every week", 168)]
+			p.popup("Check every:", options: intervals, key: "update_check_hours", default: 0)
+			p.checkbox("Install updates without asking",
+				key: "update_auto_install", default: false)
 			p.label("Stable offers versioned releases. Latest follows new builds from main.")
 			p.label("Use Application > Check for Updates to check now.")
 		}

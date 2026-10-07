@@ -552,8 +552,11 @@ std::optional<AppSettings> show_settings_dialog(GtkWindow* parent, AppSettings s
         b.combo(p, "Update _channel:",
                 {{"stable", "Stable releases"}, {"latest", "Latest (rolling)"}},
                 &settings.update_branch);
-        b.check(p, "_Check for updates automatically at startup",
-                &settings.check_updates_on_startup);
+        b.check(p, "_Check for updates automatically", &settings.check_updates_on_startup);
+        b.combo_int(p, "Check _every:",
+                    {"Only when FastSMRW starts", "Every hour", "Every 6 hours", "Every 12 hours",
+                     "Every day", "Every week"},
+                    {0, 1, 6, 12, 24, 168}, &settings.update_check_hours);
     }
 
     gtk_widget_show_all(dialog);

@@ -7,6 +7,12 @@
 
 import AppKit
 
+// A downloaded update, started by the copy it replaces: it waits for that copy
+// to quit, puts itself in its place, starts it, and goes (SelfUpdater.swift).
+if SelfUpdater.runApplyModeIfAsked() {
+    exit(0)
+}
+
 // Top-level code runs on the main thread at process start, so it is safe to
 // assume main-actor isolation to construct the (main-actor) delegate. The
 // delegate is held by this global because NSApplication.delegate is weak.

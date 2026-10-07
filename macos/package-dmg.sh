@@ -35,6 +35,12 @@ else
     echo "=== No MACOS_SIGN_IDENTITY set — ad-hoc build (Gatekeeper will warn) ==="
 fi
 
+# The app on its own, zipped: what the app downloads to update itself in place
+# (SelfUpdater.swift). Made by ditto, which keeps the bundle's signature intact.
+echo "=== Zipping the app for updates ==="
+rm -f "$OUT/FastSMRW-macOS.zip"
+ditto -c -k --keepParent "$APP" "$OUT/FastSMRW-macOS.zip"
+
 echo "=== Building DMG ==="
 STAGING=$(mktemp -d)
 cp -R "$APP" "$STAGING/"

@@ -4082,9 +4082,31 @@ void CoreSession::cmd_check_for_update(const json& cmd) {
                   {"installer_url", info.installer_url},
                   {"apk_url", info.apk_url},
                   {"dmg_url", info.dmg_url},
+                  {"mac_zip_url", info.mac_zip_url},
+                  // An automatic check, with Install updates without asking on:
+                  // the app goes ahead without a prompt (where it can)
+                  {"auto_install", silent && settings_.update_auto_install},
                   {"error", info.error}});
         });
     });
+}
+
+void CoreSession::schedule_update_checks() {
+    const int hours = settings_.check_updates_on_startup ? settings_.update_check_hours : 0;
+    if (hours == update_timer_hours_)
+        return; // already waiting on this
+    update_timer_hours_ = hours;
+    const int gen = ++update_timer_gen_;
+    if (hours <= 0)
+        return; // at launch only (the apps ask for that one)
+    loop_.post_delayed(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours(hours)),
+                       [this, gen] {
+                           if (gen != update_timer_gen_)
+                               return; // the setting changed since
+                           cmd_check_for_update({{"silent", true}});
+                           update_timer_hours_ = -1; // re-arm for the next one
+                           schedule_update_checks();
+                       });
 }
 
 void CoreSession::cmd_download_update(const json& cmd) {
@@ -4921,6 +4943,7 @@ void CoreSession::apply_settings() {
             apply_timeline_settings(*tc);
     auto_refresh_seconds_.store(settings_.auto_refresh_seconds);
     update_streaming();
+    schedule_update_checks();
 }
 
 void CoreSession::save_config() {

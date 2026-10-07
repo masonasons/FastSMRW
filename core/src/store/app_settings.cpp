@@ -5,6 +5,7 @@
 #include "fastsm/store/settings_json.hpp"
 #include "fastsm/timeline/movement.hpp"
 
+#include <algorithm>
 #include <unordered_set>
 
 using nlohmann::json;
@@ -185,6 +186,8 @@ AppSettings settings_from_json(const json& root) {
     settings.window_shown = root.value("window_shown", true);
     settings.update_branch = root.value("update_branch", std::string("stable"));
     settings.check_updates_on_startup = root.value("check_updates_on_startup", true);
+    settings.update_check_hours = std::clamp(root.value("update_check_hours", 0), 0, 24 * 7);
+    settings.update_auto_install = root.value("update_auto_install", false);
     settings.show_account_in_title = root.value("show_account_in_title", true);
 
     if (CwMode cw; cw_mode_from_key(root.value("cw_mode", std::string("hide")), cw))
@@ -292,6 +295,8 @@ json settings_to_json(const AppSettings& settings) {
     root["window_shown"] = settings.window_shown;
     root["update_branch"] = settings.update_branch;
     root["check_updates_on_startup"] = settings.check_updates_on_startup;
+    root["update_check_hours"] = settings.update_check_hours;
+    root["update_auto_install"] = settings.update_auto_install;
     root["show_account_in_title"] = settings.show_account_in_title;
     root["cw_mode"] = cw_mode_key(settings.text.cw);
     root["post_emoji_removal"] = emoji_removal_key(settings.text.post_emoji);

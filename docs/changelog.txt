@@ -4,6 +4,9 @@ FastSMRW changelog
 0.6.1
 -----
 
+- Fixed: on the Mac, updating no longer leaves you with an app macOS calls damaged; FastSMRW now downloads the update, replaces itself and restarts, and tells you next time if it couldn't.
+- New: check for updates automatically every hour, 6 or 12 hours, day or week while FastSMRW runs, not only when it starts (Settings, Updates).
+- New: on Windows and Mac, Install updates without asking lets automatic checks update FastSMRW and restart it on their own.
 - New: audio attachments now play through FastPlay's audio engine on Windows, Mac and iPhone, so far more formats and streams play in the app instead of sending you to another player.
 - New: video attachments (MP4s and Bluesky videos) now play their sound in the app's media player on Windows, Mac and iPhone, like audio does; silent GIF-style videos still open in the viewer.
 - New: on Windows and Mac, View Media plays YouTube videos linked in a post right in the app; the first one takes a little longer while the YouTube tools download, and they keep themselves up to date.

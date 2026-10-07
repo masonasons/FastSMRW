@@ -2571,6 +2571,14 @@ void MainWindow::ev_update_status(const json& e) {
     if (url.empty())
         return; // nothing to download
 
+    // Install updates without asking (an automatic check): straight to it
+    if (e.value("auto_install", false)) {
+        announce(branch == "latest" ? "Installing a new build of FastSMRW; it will restart."
+                                    : "Installing FastSMRW " + version + "; it will restart.");
+        dispatch_cmd({{"cmd", "download_update"}, {"url", url}, {"installer", use_installer}});
+        return;
+    }
+
     std::wstring msg;
     if (branch == "latest")
         msg = L"A newer build is available.";

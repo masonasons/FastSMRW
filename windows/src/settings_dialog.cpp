@@ -790,6 +790,12 @@ INT_PTR CALLBACK InvisibleProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 
 // Updates page: which release branch to follow + whether to check on startup.
 const char* const kUpdateBranches[] = {"stable", "latest"};
+// How often an automatic check comes round while FastSMRW runs (hours; 0: only
+// when it starts)
+const int kUpdateIntervals[] = {0, 1, 6, 12, 24, 168};
+const wchar_t* const kUpdateIntervalLabels[] = {L"Only when FastSMRW starts", L"Every hour",
+                                                L"Every 6 hours", L"Every 12 hours", L"Every day",
+                                                L"Every week"};
 const wchar_t* const kUpdateBranchLabels[] = {L"Stable (version updates)",
                                               L"Latest (every new build)"};
 
@@ -807,6 +813,15 @@ INT_PTR CALLBACK UpdatesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         }
         SendMessageW(combo, CB_SETCURSEL, sel, 0);
         checked(dlg, IDC_SET_UPDATE_STARTUP, ctx->settings.check_updates_on_startup);
+        HWND every = GetDlgItem(dlg, IDC_SET_UPDATE_EVERY);
+        int every_sel = 0;
+        for (int i = 0; i < static_cast<int>(std::size(kUpdateIntervals)); ++i) {
+            SendMessageW(every, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(kUpdateIntervalLabels[i]));
+            if (ctx->settings.update_check_hours == kUpdateIntervals[i])
+                every_sel = i;
+        }
+        SendMessageW(every, CB_SETCURSEL, every_sel, 0);
+        checked(dlg, IDC_SET_UPDATE_AUTO, ctx->settings.update_auto_install);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -817,6 +832,11 @@ INT_PTR CALLBACK UpdatesProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             if (sel >= 0 && sel < static_cast<int>(std::size(kUpdateBranches)))
                 ctx->settings.update_branch = kUpdateBranches[sel];
             ctx->settings.check_updates_on_startup = is_checked(dlg, IDC_SET_UPDATE_STARTUP);
+            const int every = static_cast<int>(
+                SendDlgItemMessageW(dlg, IDC_SET_UPDATE_EVERY, CB_GETCURSEL, 0, 0));
+            if (every >= 0 && every < static_cast<int>(std::size(kUpdateIntervals)))
+                ctx->settings.update_check_hours = kUpdateIntervals[every];
+            ctx->settings.update_auto_install = is_checked(dlg, IDC_SET_UPDATE_AUTO);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

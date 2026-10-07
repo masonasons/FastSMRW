@@ -155,6 +155,7 @@ UpdateInfo check_latest(net::IHttpClient& http, const std::string& current_commi
     info.installer_url = installer_asset_url(rel);
     info.apk_url = apk_asset_url(rel);
     info.dmg_url = dmg_asset_url(rel);
+    info.mac_zip_url = named_asset_url(rel, "FastSMRW-macOS.zip");
     info.version = remote.substr(0, 7);
     // A usable build needs at least one downloadable asset for some platform
     // (zip/exe on Windows, apk on Android, dmg on macOS) — not the zip specifically.
@@ -211,6 +212,7 @@ UpdateInfo check_stable(net::IHttpClient& http, const std::string& current_versi
     info.installer_url = installer_asset_url(*best);
     info.apk_url = apk_asset_url(*best);
     info.dmg_url = dmg_asset_url(*best);
+    info.mac_zip_url = named_asset_url(*best, "FastSMRW-macOS.zip");
     // Available if newer AND some platform has a downloadable asset (a macOS-only
     // or Android-only release still counts, even without the Windows zip).
     const bool has_asset =

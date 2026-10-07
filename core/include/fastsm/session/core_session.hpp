@@ -411,6 +411,12 @@ private:
     std::string media_title_;
     bool media_youtube_ = false;
     std::vector<std::string> media_devices_; // cached like sound_devices_
+    // Automatic update checks while running: every update_check_hours. Re-armed
+    // only when that or check_updates_on_startup changes; a new generation
+    // retires the timer already waiting.
+    void schedule_update_checks();
+    int update_timer_gen_ = 0;
+    int update_timer_hours_ = -1;
     // The mixer's output devices as of the last enumeration, sent with every
     // settings event. Empty means "not enumerated yet" (see emit_settings).
     std::vector<std::string> sound_devices_;

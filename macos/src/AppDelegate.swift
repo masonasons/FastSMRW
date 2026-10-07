@@ -29,6 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onAnnounce = { Speech.announce($0) }
         state.onOpenURL = { NSWorkspace.shared.open($0) }
         state.onUpdateStatus = { [weak self] in self?.handleUpdate($0) }
+        // The last update could not finish (the replacing happened after this
+        // copy quit, with nobody to tell): say why now
+        if let failure = SelfUpdater.takeFailure() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                Speech.announce("The last update could not be installed: \(failure)")
+            }
+        }
 
         let controller = MainWindowController(state: state)
         controller.showWindow(nil)
@@ -116,6 +123,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
+		// The app itself, to replace this copy and restart: what an update is now
+		if !status.macZipUrl.isEmpty, let url = URL(string: status.macZipUrl) {
+			if status.autoInstall {
+				Speech.announce("Installing an update to FastSMRW; it will restart.")
+				SelfUpdater.install(from: url)
+				return
+			}
+			let alert = NSAlert()
+			alert.messageText = status.branch == "latest"
+				? "New build available: \(status.version)"
+				: "Update available: \(status.version)"
+			alert.informativeText = (status.notes.isEmpty ? "" : status.notes + "\n\n")
+				+ "FastSMRW will download it, replace itself and restart."
+			alert.addButton(withTitle: "Install and Restart")
+			alert.addButton(withTitle: "Later")
+			present(alert, on: window) { response in
+				guard response == .alertFirstButtonReturn else { return }
+				Speech.announce("Downloading the update…")
+				SelfUpdater.install(from: url)
+			}
+			return
+		}
 		guard !status.dmgUrl.isEmpty else {
 			if !status.silent {
 				ErrorAlert.present("Mac update isn't available yet.",

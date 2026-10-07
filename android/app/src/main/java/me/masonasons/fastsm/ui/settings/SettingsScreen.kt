@@ -411,10 +411,23 @@ private fun BehaviorPanel(s: JSONObject, vm: CoreViewModel) {
     HelpText("In a reply, mention the person you're replying to up front and move the other mentioned users to the end of the post.")
 }
 
+// How often an automatic check comes round while FastSMRW runs (hours; 0: only at start)
+private val updateIntervalOptions = listOf(
+    0 to "Only when FastSMRW starts",
+    1 to "Every hour",
+    6 to "Every 6 hours",
+    12 to "Every 12 hours",
+    24 to "Every day",
+    168 to "Every week",
+)
+
 @Composable
 private fun UpdatesPanel(s: JSONObject, vm: CoreViewModel) {
-    SwitchRow("Check for updates when FastSMRW starts", s.optBoolean("check_updates_on_startup", true)) {
+    SwitchRow("Check for updates automatically", s.optBoolean("check_updates_on_startup", true)) {
         vm.updateSetting { put("check_updates_on_startup", it) }
+    }
+    ComboRow("Check every", updateIntervalOptions, s.optInt("update_check_hours", 0)) {
+        vm.updateSetting { put("update_check_hours", it) }
     }
     HorizontalDivider()
     ActionRow("Check for updates now") { vm.checkForUpdate() }
