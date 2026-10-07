@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.1
 -----
 
+- New: on the Mac, Command-Period stops the media that is playing, from anywhere in the app; it is under Status, Stop Media.
 - Fixed: on the Mac, updating no longer leaves you with an app macOS calls damaged; FastSMRW now downloads the update, replaces itself and restarts, and tells you next time if it couldn't.
 - New: check for updates automatically every hour, 6 or 12 hours, day or week while FastSMRW runs, not only when it starts (Settings, Updates).
 - New: on Windows and Mac, Install updates without asking lets automatic checks update FastSMRW and restart it on their own.

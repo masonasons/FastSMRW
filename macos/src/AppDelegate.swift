@@ -195,6 +195,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }.resume()
     }
 
+    /// Stops whatever the media player is playing (⌘.).
+    @objc func stopMedia(_ sender: Any?) {
+        state?.mediaStop()
+    }
+
     @objc func showSettings(_ sender: Any?) {
         guard let state else { return }
         if settingsWindowController == nil {

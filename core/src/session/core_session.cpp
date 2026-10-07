@@ -4047,9 +4047,9 @@ void CoreSession::cmd_media_volume(const json& cmd) {
 }
 
 void CoreSession::cmd_media_stop() {
-    if (!media_ || !media_->active()) {
-        if (media_request_ == 0)
-            return;
+    if ((!media_ || !media_->active()) && media_request_ == 0) {
+        emit_announce("Nothing is playing"); // a key that did nothing says so
+        return;
     }
     const bool was = media_ && media_->active();
     if (media_)

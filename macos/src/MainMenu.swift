@@ -94,6 +94,9 @@ enum MainMenu {
         // interact" (Behavior settings), handled on the posts table. This item
         // stays as an explicit, always-media action reachable from the menu.
         add("View Media…", #selector(MainWindowController.playMediaForSelection(_:)), "")
+        // The app delegate's, so it works from the player window too, and with
+        // the media playing in the background (no window at all)
+        add("Stop Media", #selector(AppDelegate.stopMedia(_:)), ".", [.command])
         add("Open Link…", #selector(MainWindowController.openLinksForSelection(_:)), "o", [.command])
         add("View Thread", #selector(MainWindowController.viewThread(_:)), " ")
         add("Open User Timeline", #selector(MainWindowController.openUserTimeline(_:)), "u")
