@@ -396,12 +396,10 @@ final class SettingsPane: NSViewController {
     }
 }
 
-/// The FastPlay page's files: a FastPlay.ini to take the player's settings from,
-/// one to write them to, and the reset. The core does the work.
-@MainActor
 /// Opens the Effects window, keeping it alive while it is on screen. A window of its
 /// own rather than a sheet because the tabs are built before the settings controller
 /// exists, so there is nothing to parent a sheet to from here.
+@MainActor
 enum PlayerEffectsWindow {
     private static var controller: EffectsWindowController?
 
@@ -418,6 +416,9 @@ enum PlayerEffectsWindow {
     }
 }
 
+/// The FastPlay page's files: a FastPlay.ini to take the player's settings from,
+/// one to write them to, and the reset. The core does the work.
+@MainActor
 enum PlayerSettingsFiles {
     static func importSettings(state: AppState) {
         let panel = NSOpenPanel()

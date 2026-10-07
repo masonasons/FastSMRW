@@ -327,6 +327,11 @@ std::string MediaPlayer::title() const { return {}; }
 int MediaPlayer::import_settings(const std::string&) { return 0; }
 std::string MediaPlayer::export_settings() { return {}; }
 void MediaPlayer::reset_settings() {}
+std::vector<MediaPlayer::Effect> MediaPlayer::effects() const { return {}; }
+std::vector<MediaPlayer::Param> MediaPlayer::params() const { return {}; }
+bool MediaPlayer::set_effect(const std::string&, bool) { return false; }
+bool MediaPlayer::set_param(const std::string&, float) { return false; }
+void MediaPlayer::set_reverb_type(int) {}
 
 #endif
 
