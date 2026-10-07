@@ -44,7 +44,14 @@ final class EffectsViewController: UIViewController {
         reload()
     }
 
-    deinit { state.onMediaEffects = nil }
+    // Hand the single catalog callback back once this screen is gone (not in deinit:
+    // AppState is main-actor isolated, and deinit is not)
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isMovingFromParent || isBeingDismissed || navigationController?.isBeingDismissed == true {
+            state.onMediaEffects = nil
+        }
+    }
 
     private func reload() {
         let was = shown.indices.contains(selected) ? shown[selected].key : nil
