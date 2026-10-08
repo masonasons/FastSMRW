@@ -182,8 +182,13 @@ fun ComposeScreen(
         val caret = field.selection.end.coerceIn(0, t.length)
         var start = caret
         while (start > 0 && isHandleChar(t[start - 1])) start--
-        mentionAnchor = start to caret
-        mentionSeed = t.substring(start, caret).removePrefix("@")
+        // Forward to the end of the handle as well. Anchoring at the caret left the
+        // tail behind when it sat inside a half-typed handle: "@ali|ce" became
+        // "@alice ce". FastSM takes the whole word around the cursor.
+        var end = caret
+        while (end < t.length && isHandleChar(t[end])) end++
+        mentionAnchor = start to end
+        mentionSeed = t.substring(start, end).removePrefix("@")
         viewModel.clearMentionSuggestions()
         mentionOpen = true
     }
@@ -194,7 +199,10 @@ fun ComposeScreen(
         val t = field.text
         val s = start.coerceIn(0, t.length)
         val c = caret.coerceIn(s, t.length)
-        val prefix = t.substring(0, s) + "@" + acct + " "
+        // A space only where there isn't one already, so completing mid-sentence
+        // doesn't leave a double space behind.
+        val spaceFollows = c < t.length && t[c].isWhitespace()
+        val prefix = t.substring(0, s) + "@" + acct + if (spaceFollows) "" else " "
         field = TextFieldValue(prefix + t.substring(c), TextRange(prefix.length))
         mentionOpen = false
         viewModel.clearMentionSuggestions()

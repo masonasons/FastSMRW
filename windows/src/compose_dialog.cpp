@@ -306,6 +306,11 @@ std::int64_t systemtime_to_unix(const SYSTEMTIME& local) {
     return static_cast<std::int64_t>(u.QuadPart / 10000000ULL) - 11644473600LL;
 }
 
+// The whitespace that ends a handle, matching FastSM's ' \t\n\r'.
+bool is_space(wchar_t c) {
+    return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n';
+}
+
 // @-mention autocomplete: search from the handle word under the caret and replace
 // it with the chosen @handle. Shared by Alt+A (in the edit) and the Autocomplete
 // button. `edit` is the post-body edit control.
@@ -325,13 +330,24 @@ void run_mention_autocomplete(HWND edit, Ctx* ctx) {
     int start = caret;
     while (start > 0 && is_handle_char(text[static_cast<size_t>(start - 1)]))
         --start;
-    std::wstring word = text.substr(static_cast<size_t>(start), static_cast<size_t>(caret - start));
+    // Forward to the end of the handle as well, the way FastSM does. Completing with
+    // the caret in the middle of a half-typed handle used to replace only the part
+    // before it and leave the rest sitting there ("@ali|ce" -> "@alice ce").
+    int end = caret;
+    while (end < len && is_handle_char(text[static_cast<size_t>(end)]))
+        ++end;
+    std::wstring word = text.substr(static_cast<size_t>(start), static_cast<size_t>(end - start));
     if (!word.empty() && word.front() == L'@')
         word.erase(word.begin()); // the query is the handle without '@'
     auto chosen = ctx->pick_mention(GetParent(edit), to_utf8(word));
     if (chosen && !chosen->empty()) {
-        std::wstring ins = L"@" + to_wide(*chosen) + L" ";
-        SendMessageW(edit, EM_SETSEL, start, caret); // replace the partial handle
+        std::wstring ins = L"@" + to_wide(*chosen);
+        // A space only where there isn't one already, so completing mid-sentence
+        // doesn't leave a double space behind.
+        const bool space_follows = end < len && is_space(text[static_cast<size_t>(end)]);
+        if (!space_follows)
+            ins += L' ';
+        SendMessageW(edit, EM_SETSEL, start, end); // replace the whole partial handle
         SendMessageW(edit, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(ins.c_str()));
     }
     SetFocus(edit);

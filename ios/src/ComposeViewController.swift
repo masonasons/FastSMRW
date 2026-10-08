@@ -426,25 +426,38 @@ final class ComposeViewController: StaticFormViewController {
         present(UINavigationController(rootViewController: picker), animated: true)
     }
 
-    /// The handle-like word ending at the caret, so completing replaces it.
+    /// The whole handle-like word AROUND the caret, so completing replaces all of it.
+    /// Scanning only backwards (as this used to) left the tail behind when the caret
+    /// sat inside a half-typed handle: "@ali|ce" became "@alice ce". FastSM scans both
+    /// ways, bounded by whitespace.
     private func mentionWordAtCaret() -> (NSRange, String) {
         let ns = textView.text as NSString
         let caret = textView.selectedRange.location
-        var start = caret
-        while start > 0 {
-            guard let scalar = UnicodeScalar(ns.character(at: start - 1)) else { break }
+        func isHandleChar(_ index: Int) -> Bool {
+            guard let scalar = UnicodeScalar(ns.character(at: index)) else { return false }
             let ch = Character(scalar)
-            if ch.isLetter || ch.isNumber || "_.-@".contains(ch) { start -= 1 } else { break }
+            return ch.isLetter || ch.isNumber || "_.-@".contains(ch)
         }
-        let range = NSRange(location: start, length: caret - start)
+        var start = caret
+        while start > 0, isHandleChar(start - 1) { start -= 1 }
+        var end = caret
+        while end < ns.length, isHandleChar(end) { end += 1 }
+        let range = NSRange(location: start, length: end - start)
         var word = ns.substring(with: range)
         if word.hasPrefix("@") { word.removeFirst() }
         return (range, word)
     }
 
     private func insertMention(_ acct: String, replacing range: NSRange) {
-        let insertion = "@\(acct) "
         let ns = textView.text as NSString
+        // A space only where there isn't one already, so completing mid-sentence
+        // doesn't leave a double space behind.
+        let after = range.location + range.length
+        var spaceFollows = false
+        if after < ns.length, let scalar = UnicodeScalar(ns.character(at: after)) {
+            spaceFollows = Character(scalar).isWhitespace
+        }
+        let insertion = "@\(acct)" + (spaceFollows ? "" : " ")
         textView.text = ns.replacingCharacters(in: range, with: insertion)
         textView.selectedRange = NSRange(location: range.location + insertion.count, length: 0)
         updateCounter()

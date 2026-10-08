@@ -450,16 +450,31 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
                     if (ch == '@')
                         break;
                 }
-                gchar* raw =
-                    gtk_text_buffer_get_text(mention_ctx.buffer, &start, &caret, FALSE);
+                // Forward to the end of the handle too, the way FastSM does.
+                // Completing with the caret inside a half-typed handle used to
+                // replace only the part before it and leave the rest behind
+                // ("@ali|ce" became "@alice ce").
+                GtkTextIter end = caret;
+                while (!gtk_text_iter_is_end(&end)) {
+                    if (g_unichar_isspace(gtk_text_iter_get_char(&end)))
+                        break;
+                    gtk_text_iter_forward_char(&end);
+                }
+                gchar* raw = gtk_text_buffer_get_text(mention_ctx.buffer, &start, &end, FALSE);
                 std::string partial = raw ? raw : "";
                 g_free(raw);
                 if (!partial.empty() && partial[0] == '@')
                     partial.erase(0, 1);
                 auto handle = (*mention_ctx.picker)(partial);
                 if (handle && !handle->empty()) {
-                    gtk_text_buffer_delete(mention_ctx.buffer, &start, &caret);
-                    const std::string insert = "@" + *handle + " ";
+                    // A space only where there isn't one already, so completing
+                    // mid-sentence doesn't leave a double space.
+                    const bool space_follows =
+                        !gtk_text_iter_is_end(&end) &&
+                        g_unichar_isspace(gtk_text_iter_get_char(&end));
+                    gtk_text_buffer_delete(mention_ctx.buffer, &start, &end);
+                    const std::string insert =
+                        "@" + *handle + (space_follows ? "" : " ");
                     gtk_text_buffer_insert(mention_ctx.buffer, &start, insert.c_str(), -1);
                 }
                 gtk_widget_grab_focus(mention_ctx.text_view);
