@@ -178,6 +178,12 @@ void TimelineController::merge_fresh(std::vector<TimelineItem> fresh,
         else if (const Status* ss = raw_[i].status(); ss && !ss->conversation_id.empty())
             convo_row[ss->conversation_id] = i;
     }
+    // Remember everyone this batch mentions, for @-mention autocomplete. Done here
+    // because it is the one place every row arrives -- fetched, paged or streamed --
+    // and the suggestions are only as good as what has actually gone past.
+    if (account_)
+        for (const auto& it : fresh)
+            account_->seen_users().add_from(it);
     std::vector<TimelineItem> added;
     added.reserve(fresh.size());
     int convo_updated = 0; // existing conversations that gained a newer message (chime once)

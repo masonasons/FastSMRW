@@ -270,6 +270,11 @@ std::string media_param_display(const media::MediaPlayer::Param& p) {
     return out;
 }
 
+// How many @-mention suggestions to offer, and how many from the cache alone will do
+// without asking the server. FastSM's numbers: 15 shown, and it stops at 10 cached.
+constexpr size_t kMentionSuggestions = 15;
+constexpr size_t kMentionCacheEnough = 10;
+
 json features_json(const PlatformFeatures& f) {
     return {{"visibility", f.visibility},     {"content_warning", f.content_warning},
             {"quote_posts", f.quote_posts},   {"polls", f.polls},
@@ -2728,23 +2733,48 @@ void CoreSession::cmd_autocomplete_users(const json& cmd) {
         emit({{"event", "user_suggestions"}, {"query", query}, {"users", json::array()}});
         return;
     }
-    worker_.post([this, acct, query] {
-        std::vector<User> users = acct->search_accounts(query, 8);
+    // The people already seen, matched here on the loop thread: no network, so the
+    // list is ready the instant it is asked for. This is the difference between
+    // autocomplete that is worth using and one that waits on a server which may not
+    // even know the person whose post you are replying to.
+    std::vector<User> users = acct->seen_users().starting_with(query, kMentionSuggestions);
+    // Enough already, so don't ask the server at all.
+    if (users.size() >= kMentionCacheEnough) {
+        emit_user_suggestions(query, users);
+        return;
+    }
+    worker_.post([this, acct, query, users = std::move(users)]() mutable {
+        // Top up from the server, skipping anyone the cache already offered.
+        std::unordered_set<std::string> seen;
+        for (const User& u : users)
+            seen.insert(u.acct.empty() ? u.username : u.acct);
+        for (User& u : acct->search_accounts(query, static_cast<int>(kMentionSuggestions))) {
+            const std::string handle = u.acct.empty() ? u.username : u.acct;
+            if (handle.empty() || !seen.insert(handle).second)
+                continue;
+            users.push_back(std::move(u));
+            if (users.size() >= kMentionSuggestions)
+                break;
+        }
         loop_.post([this, query, users = std::move(users)]() mutable {
-            json arr = json::array();
-            for (const auto& u : users) {
-                const std::string handle = u.acct.empty() ? u.username : u.acct;
-                std::string label = handle.empty() ? u.display_name : ("@" + handle);
-                if (!u.display_name.empty() && u.display_name != handle)
-                    label = u.display_name + " (@" + handle + ")";
-                arr.push_back({{"id", u.id},
-                               {"acct", handle},
-                               {"display", u.display_name},
-                               {"label", label}});
-            }
-            emit({{"event", "user_suggestions"}, {"query", query}, {"users", std::move(arr)}});
+            emit_user_suggestions(query, users);
         });
     });
+}
+
+void CoreSession::emit_user_suggestions(const std::string& query, const std::vector<User>& users) {
+    json arr = json::array();
+    for (const auto& u : users) {
+        const std::string handle = u.acct.empty() ? u.username : u.acct;
+        std::string label = handle.empty() ? u.display_name : ("@" + handle);
+        if (!u.display_name.empty() && u.display_name != handle)
+            label = u.display_name + " (@" + handle + ")";
+        arr.push_back({{"id", u.id},
+                       {"acct", handle},
+                       {"display", u.display_name},
+                       {"label", label}});
+    }
+    emit({{"event", "user_suggestions"}, {"query", query}, {"users", std::move(arr)}});
 }
 
 void CoreSession::spawn_post_users(const std::vector<User>& users, const std::string& status_id,

@@ -21,6 +21,7 @@ set(CORE_SRC
     ${CORE}/net/http_client.cpp
     ${CORE}/net/sse_parser.cpp
     ${CORE}/models/serialization.cpp
+    ${CORE}/models/user_cache.cpp
     ${CORE}/util/html_stripper.cpp
     ${CORE}/util/quote_text.cpp
     ${CORE}/util/date_parsing.cpp

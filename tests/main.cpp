@@ -33,6 +33,10 @@ void test_mark_remote();
 void test_remote_timeline_source();
 void test_form_encode();
 void test_url_host();
+void test_user_cache_recency();
+void test_user_cache_is_capped();
+void test_user_cache_matching();
+void test_user_cache_harvests_rows();
 
 // From test_bluesky_map.cpp
 void test_bluesky_feed_mapping();
@@ -200,6 +204,10 @@ int main() {
     test_remote_timeline_source();
     test_form_encode();
     test_url_host();
+    test_user_cache_recency();
+    test_user_cache_is_capped();
+    test_user_cache_matching();
+    test_user_cache_harvests_rows();
     test_bluesky_feed_mapping();
     test_mastodon_notification_request_mapping();
     test_notification_requests_source();

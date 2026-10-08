@@ -191,6 +191,7 @@ private:
     // Typeahead for @-mention autocomplete: search accounts by partial handle and
     // emit a "user_suggestions" event (echoing the query so stale replies drop).
     void cmd_autocomplete_users(const nlohmann::json& cmd);
+    void emit_user_suggestions(const std::string& query, const std::vector<User>& users);
     void speak_user_info(const User& u);          // fetch full profile, speak via template
     void spawn_post_users(const std::vector<User>& users, const std::string& status_id,
                           const std::string& title);

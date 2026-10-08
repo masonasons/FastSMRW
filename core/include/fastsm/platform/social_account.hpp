@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "fastsm/models/models.hpp"
+#include "fastsm/models/user_cache.hpp"
 #include "fastsm/net/http_client.hpp"
 #include "fastsm/timeline/timeline_source.hpp"
 
@@ -197,6 +198,11 @@ public:
 
     virtual Platform platform() const = 0;
     virtual const User& me() const = 0;
+    // Everyone this account has seen, for instant @-mention autocomplete. Per
+    // account because handles and ids mean nothing across servers. Populated as rows
+    // arrive (TimelineController::merge_fresh) and read on the core loop.
+    UserCache& seen_users() { return seen_users_; }
+    const UserCache& seen_users() const { return seen_users_; }
     // The server this account lives on, as a user would say it ("mastodon.social",
     // "bsky.social") -- not the API base URL. Shown in the window title and spoken when
     // switching accounts, because a handle alone is ambiguous across instances (and a
@@ -428,6 +434,9 @@ public:
         (void)route;
         return std::nullopt;
     }
+private:
+    UserCache seen_users_;
+
 };
 
 } // namespace fastsm

@@ -50,7 +50,7 @@ CXXFLAGS=(-std=c++20 -fexceptions -frtti -O2 -g "${SAN[@]}"
 CORE_SRC=(
     version.cpp
     net/http_client.cpp net/sse_parser.cpp net/curl_http_client.cpp
-    models/serialization.cpp
+    models/serialization.cpp models/user_cache.cpp
     util/html_stripper.cpp util/quote_text.cpp util/date_parsing.cpp
     util/relative_date.cpp util/url.cpp util/log.cpp util/languages.cpp
     util/demojify.cpp util/base64.cpp

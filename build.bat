@@ -100,7 +100,7 @@ echo.
 echo === Building FastSMRW [%CONFIG%] ===
 
 REM ---- 1) core -> fastsm_core.lib ----
-set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\winhttp_client.cpp core\src\net\sse_parser.cpp core\src\models\serialization.cpp"
+set "CORE_SRC=core\src\version.cpp core\src\net\http_client.cpp core\src\net\winhttp_client.cpp core\src\net\sse_parser.cpp core\src\models\serialization.cpp core\src\models\user_cache.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\util\html_stripper.cpp core\src\util\quote_text.cpp core\src\util\date_parsing.cpp core\src\util\relative_date.cpp core\src\util\url.cpp core\src\util\log.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\mastodon\mastodon_map.cpp core\src\platform\mastodon\mastodon_account.cpp"
 set "CORE_SRC=%CORE_SRC% core\src\platform\bluesky\bluesky_map.cpp core\src\platform\bluesky\bluesky_account.cpp core\src\platform\bluesky\bluesky_richtext.cpp"
@@ -221,7 +221,7 @@ if defined ISCC (
 REM ---- 3) optional: tests ----
 if "%RUN_TESTS%"=="1" (
     echo Compiling tests...
-    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_bluesky_richtext.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_push.cpp tests\test_confirm.cpp tests\test_sound.cpp tests\test_media.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" %FPE_LIB% /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
+    cl %CFLAGS% %COREINC% /I tests tests\main.cpp tests\test_models.cpp tests\test_util.cpp tests\test_user_cache.cpp tests\test_mastodon_map.cpp tests\test_bluesky_map.cpp tests\test_bluesky_richtext.cpp tests\test_auth.cpp tests\test_store.cpp tests\test_presentation.cpp tests\test_speech.cpp tests\test_sse.cpp tests\test_capi.cpp tests\test_push.cpp tests\test_confirm.cpp tests\test_sound.cpp tests\test_media.cpp tests\test_thread.cpp tests\test_keymap.cpp tests\test_update.cpp tests\test_filters.cpp tests\test_timeline_refresh.cpp "%BUILD%\fastsm_core.lib" %FPE_LIB% /Fo"%OBJ%\test\\" /Fe"%BUILD%\fastsm_tests.exe" /link %LINKFLAGS% crypt32.lib
     if errorlevel 1 goto error
     copy /y deps\fastplay_engine\lib\fastplay_engine.dll "%BUILD%\" >nul
     echo Running tests...
