@@ -32,14 +32,22 @@ android {
         applicationId = "me.masonasons.fastsmrw"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.5.6"
+        versionCode = 22
+        // Keep in step with fastsm::version() (core/src/version.cpp): this is the
+        // version a user reads back to you from the app's info screen.
+        versionName = "0.6.1"
 
-        // Build the shared core (fastsm_core + JNI bridge) for these ABIs:
-        // arm64 for real devices, x86_64 for the emulator. armeabi-v7a can be
-        // added later. Keeping the set small keeps native build times down.
+        // Build the shared core (fastsm_core + JNI bridge) for these ABIs. The app has
+        // native code, so a device whose architecture is missing here cannot install
+        // the APK at all -- Android reports that as "App not compatible", with nothing
+        // the user can do about it. Leaving armeabi-v7a out is what stopped it
+        // installing on 32-bit phones, which are still around at the budget end.
+        //
+        // arm64-v8a: every 64-bit phone. armeabi-v7a: 32-bit ARM. x86_64: the emulator.
+        // Costs native build time and about 4 MB of APK per ABI, which is worth less
+        // than a user who simply cannot install it.
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
 
         externalNativeBuild {
