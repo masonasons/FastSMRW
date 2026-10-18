@@ -585,14 +585,32 @@ final class MainViewController: UIViewController {
 
     private func scrollTo(_ index: Int) {
         guard rows.indices.contains(index) else { return }
-        tableView.scrollToRow(at: IndexPath(row: index, section: 0), at: .middle,
-                              animated: false)
+        let path = IndexPath(row: index, section: 0)
+        // A post taller than the viewport can't be centred — .middle would pin it
+        // to an edge and leave VoiceOver's reading cursor and the visible scroll
+        // disagreeing. Show the start of a tall post (.top), where reading begins;
+        // keep .middle for posts that fit.
+        let rowHeight = heightForRow(rows[index], width: tableView.bounds.width)
+        let viewport = tableView.bounds.height
+            - tableView.adjustedContentInset.top - tableView.adjustedContentInset.bottom
+        let position: UITableView.ScrollPosition = rowHeight > viewport ? .top : .middle
+        tableView.scrollToRow(at: path, at: position, animated: false)
     }
 
-    /// Exact height for a post row, matching the self-sizing cell: one wrapping
-    /// body label inset 16pt either side and 8pt top/bottom. Giving the table
-    /// real heights for every row (not UIKit's estimate) keeps scrollToRow and
-    /// in-flight scrolling from throwing the reading position around.
+    // One reusable label, configured exactly like PostCell's bodyLabel, used to
+    // measure row heights so the measurement can't diverge from the real cell.
+    private lazy var sizingLabel: UILabel = {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        return label
+    }()
+
+    /// Exact height for a post row, measured with a label identical to the cell's
+    /// (one wrapping body label inset 16pt either side, 8pt top/bottom). This is
+    /// returned as the table's real heightForRowAt, not merely an estimate, so a
+    /// long post's height can't drift from the self-sized cell — divergence there
+    /// (which grows with post length) is what threw the reading position around.
     private func heightForRow(_ row: Row, width: CGFloat) -> CGFloat {
         let category = traitCollection.preferredContentSizeCategory
         if width != heightCacheWidth || category != heightCacheCategory {
@@ -602,15 +620,13 @@ final class MainViewController: UIViewController {
         }
         if let cached = heightByID[row.id] { return cached }
         let textWidth = max(1, width - 32) // 16pt leading + 16pt trailing inset
-        let text = (row.textWithBreaks ?? row.text)
+        sizingLabel.font = .preferredFont(forTextStyle: .body)
+        sizingLabel.text = (row.textWithBreaks ?? row.text)
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        let font = UIFont.preferredFont(forTextStyle: .body)
-        let bounds = (text as NSString).boundingRect(
-            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font], context: nil)
-        let height = ceil(bounds.height) + 16 // 8pt top + 8pt bottom inset
+        let size = sizingLabel.sizeThatFits(
+            CGSize(width: textWidth, height: .greatestFiniteMagnitude))
+        let height = ceil(size.height) + 16 // 8pt top + 8pt bottom inset
         heightByID[row.id] = height
         return height
     }
@@ -1568,10 +1584,18 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
         }
     }
 
-    /// Exact up-front heights so the table's geometry is right before a row is
-    /// ever shown — this is what keeps scrollToRow accurate and stops the list
-    /// jumping as you swipe. Returning automaticDimension here (the default)
-    /// would hand the work back to UIKit's wrong estimate, which is the bug.
+    /// Real, exact row heights (not self-sizing) so the table's geometry — and
+    /// therefore scrollToRow and the scroll-anchor math — is correct for every
+    /// row, on-screen or not, however long the post. estimatedHeightForRowAt
+    /// returns the same value so the first layout pass is right too.
+    func tableView(_ tableView: UITableView,
+                   heightForRowAt indexPath: IndexPath) -> CGFloat {
+        guard rows.indices.contains(indexPath.row) else {
+            return UITableView.automaticDimension
+        }
+        return heightForRow(rows[indexPath.row], width: tableView.bounds.width)
+    }
+
     func tableView(_ tableView: UITableView,
                    estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
         guard rows.indices.contains(indexPath.row) else {
@@ -1580,14 +1604,9 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
         return heightForRow(rows[indexPath.row], width: tableView.bounds.width)
     }
 
-    /// Sighted scrolling reaches the bottom: page in older posts too. Also
-    /// refine the height cache with the cell's true self-sized height, so any
-    /// difference between the computed estimate and the real layout can't drift.
+    /// Sighted scrolling reaches the bottom: page in older posts too.
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell,
                    forRowAt indexPath: IndexPath) {
-        if rows.indices.contains(indexPath.row) {
-            heightByID[rows[indexPath.row].id] = cell.frame.height
-        }
         maybeLoadOlder(row: indexPath.row)
     }
 }
@@ -1629,15 +1648,25 @@ final class PostCell: UITableViewCell, UIAccessibilityReadingContent {
         // label would make VoiceOver announce the entire post a second time.
         bodyLabel.text = text.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+        lineCache = nil // text changed; recompute line frames lazily
     }
 
-    private func lines() -> [(text: String, frame: CGRect)] {
-        guard let text = bodyLabel.text, !text.isEmpty, bodyLabel.bounds.width > 0 else {
-            return []
-        }
+    // Per-line frames in the label's own coordinate space, cached. VoiceOver
+    // queries line content/frame once per line as it reads; recomputing the full
+    // text layout on each of those calls is O(lines) per call — O(lines²) across
+    // a long post, enough to make VoiceOver drop or re-seek its cursor. Compute
+    // once per (text, width) and convert to screen coordinates per query (cheap).
+    private var lineCache: [(text: String, frame: CGRect)]?
+    private var lineCacheWidth: CGFloat = 0
+
+    private func lineFrames() -> [(text: String, frame: CGRect)] {
+        let width = bodyLabel.bounds.width
+        guard let text = bodyLabel.text, !text.isEmpty, width > 0 else { return [] }
+        if let cache = lineCache, lineCacheWidth == width { return cache }
+
         let storage = NSTextStorage(string: text, attributes: [.font: bodyLabel.font!])
         let layout = NSLayoutManager()
-        let container = NSTextContainer(size: CGSize(width: bodyLabel.bounds.width,
+        let container = NSTextContainer(size: CGSize(width: width,
                                                      height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         container.lineBreakMode = .byWordWrapping
@@ -1664,43 +1693,47 @@ final class PostCell: UITableViewCell, UIAccessibilityReadingContent {
             }
             if rect.isEmpty {
                 let bottom = result.last?.frame.maxY ?? 0
-                rect = CGRect(x: 0, y: bottom, width: bodyLabel.bounds.width,
+                rect = CGRect(x: 0, y: bottom, width: width,
                               height: bodyLabel.font.lineHeight)
             }
             rect.origin.x = 0
-            rect.size.width = bodyLabel.bounds.width
+            rect.size.width = width
             result.append((line, rect))
             characterOffset += length + 1
         }
-        return result.map { line in
-            (line.text, UIAccessibility.convertToScreenCoordinates(line.frame,
-                                                                   in: bodyLabel))
-        }
+        lineCache = result
+        lineCacheWidth = width
+        return result
+    }
+
+    private func screenFrame(_ local: CGRect) -> CGRect {
+        UIAccessibility.convertToScreenCoordinates(local, in: bodyLabel)
     }
 
     func accessibilityPageContent() -> String? { bodyLabel.text }
 
     func accessibilityContent(forLineNumber lineNumber: Int) -> String? {
-        let visibleLines = lines()
-        return visibleLines.indices.contains(lineNumber) ? visibleLines[lineNumber].text : nil
+        let lines = lineFrames()
+        return lines.indices.contains(lineNumber) ? lines[lineNumber].text : nil
     }
 
     func accessibilityFrame(forLineNumber lineNumber: Int) -> CGRect {
-        let visibleLines = lines()
-        return visibleLines.indices.contains(lineNumber) ? visibleLines[lineNumber].frame : .zero
+        let lines = lineFrames()
+        return lines.indices.contains(lineNumber) ? screenFrame(lines[lineNumber].frame) : .zero
     }
 
     func accessibilityLineNumber(for point: CGPoint) -> Int {
-        let visibleLines = lines()
-        guard !visibleLines.isEmpty else { return NSNotFound }
-        if let line = visibleLines.indices.first(where: {
-            visibleLines[$0].frame.minY <= point.y && point.y < visibleLines[$0].frame.maxY
+        let lines = lineFrames()
+        guard !lines.isEmpty else { return NSNotFound }
+        let frames = lines.map { screenFrame($0.frame) }
+        if let line = frames.indices.first(where: {
+            frames[$0].minY <= point.y && point.y < frames[$0].maxY
         }) {
             return line
         }
-        return visibleLines.indices.min { first, second in
-            let a = visibleLines[first].frame
-            let b = visibleLines[second].frame
+        return frames.indices.min { first, second in
+            let a = frames[first]
+            let b = frames[second]
             let distanceA = max(a.minY - point.y, point.y - a.maxY, 0)
             let distanceB = max(b.minY - point.y, point.y - b.maxY, 0)
             return distanceA < distanceB
