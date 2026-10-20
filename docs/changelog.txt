@@ -3,7 +3,7 @@ FastSMRW changelog
 
 0.6.1
 -----
-
+ Fixed: on Android, the Open links action now appears in a post's actions when it is turned on in Settings; it opens the post's link, or asks which one when there are several.
 - New: on Android, notifications for mentions now have Reply, Favourite and Boost buttons, so you can answer or react without opening the app.
 - Fixed: on Android, FastSMRW now installs on 32-bit phones, which previously refused it with "app not compatible" and no way around it.
 - Changed: @-mention autocomplete now suggests people you've seen go past in your timelines, instantly and without waiting on the server, and matches on display names as well as handles.

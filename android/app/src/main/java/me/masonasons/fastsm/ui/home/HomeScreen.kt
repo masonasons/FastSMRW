@@ -337,6 +337,7 @@ fun HomeScreen(
                 scrollRequest = scrollRequest?.takeIf { it.tab == pageIndex },
                 actionOrder = postActionOrder,
                 onOpenLink = viewModel::openLink,
+                onOpenLinks = viewModel::openPostLinks,
                 onLoadOlder = { viewModel.loadOlder(automatic = true) },
                 onNoteSelection = viewModel::noteSelection,
                 onOpenThread = viewModel::openThread,
@@ -605,6 +606,27 @@ fun HomeScreen(
         )
     }
 
+    val linkPicker by viewModel.linkPicker.collectAsStateWithLifecycle()
+    linkPicker?.let { links ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissLinkPicker,
+            title = { Text("Which link?") },
+            text = {
+                Column {
+                    links.forEach { link ->
+                        TextButton(onClick = { viewModel.openPickedLink(link) }) {
+                            Text(link.title.ifBlank { link.url })
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissLinkPicker) { Text("Cancel") }
+            },
+        )
+    }
+
     val hashtagPicker by viewModel.hashtagTimelinePicker.collectAsStateWithLifecycle()
     hashtagPicker?.let { tags ->
         AlertDialog(
@@ -765,6 +787,7 @@ private fun StatusList(
     scrollRequest: CoreViewModel.ScrollRequest?,
     actionOrder: List<String>,
     onOpenLink: (String) -> Unit,
+    onOpenLinks: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onNoteSelection: (String) -> Unit,
     onOpenThread: (String) -> Unit,
@@ -875,6 +898,7 @@ private fun StatusList(
                 actionOrder = actionOrder,
                 onSelect = onNoteSelection,
                 onOpenLink = onOpenLink,
+                onOpenLinks = onOpenLinks,
                 onOpenThread = onOpenThread,
                 onOpenAuthor = onOpenAuthor,
                 onOpenProfile = onOpenProfile,

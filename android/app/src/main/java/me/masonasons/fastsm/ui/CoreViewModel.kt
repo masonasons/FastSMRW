@@ -331,6 +331,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     private val _mediaPicker = MutableStateFlow<List<MediaItemUi>?>(null)
     val mediaPicker: StateFlow<List<MediaItemUi>?> = _mediaPicker.asStateFlow()
 
+    // A post's links to choose from (url_picker), when "Open links" finds several.
+    private val _linkPicker = MutableStateFlow<List<LinkUi>?>(null)
+    val linkPicker: StateFlow<List<LinkUi>?> = _linkPicker.asStateFlow()
+
     // Push notifications: whether the user has them on. PushManager owns the
     // persisted value and the device-side plumbing; this mirrors it for the UI.
     private val _pushEnabled = MutableStateFlow(false)
@@ -661,6 +665,16 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
             "media_open" -> _media.value =
                 MediaItemUi(e.optString("url"), e.optString("kind"), e.optString("title"))
+
+            "url_picker" -> {
+                val arr = e.optJSONArray("links")
+                _linkPicker.value = buildList {
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val l = arr.getJSONObject(i)
+                        add(LinkUi(l.optString("title"), l.optString("url")))
+                    }
+                }
+            }
 
             "media_picker" -> {
                 val arr = e.optJSONArray("items")
@@ -1337,6 +1351,19 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Manually check GitHub for a newer release (announces the outcome). */
     fun checkForUpdate() =
         core.dispatch("check_for_update") { put("silent", false); put("branch", "stable") }
+
+    /** Open a post's links: one opens directly, several raise a chooser. */
+    fun openPostLinks(id: String) = core.dispatch("open_post_links") { put("id", id) }
+
+    /** Open the link chosen from a post's several. */
+    fun openPickedLink(link: LinkUi) {
+        _linkPicker.value = null
+        openLink(link.url)
+    }
+
+    fun dismissLinkPicker() {
+        _linkPicker.value = null
+    }
 
     /** Open a specific URL (a per-post "expand links" action) in a Custom Tab. */
     fun openLink(url: String) {
