@@ -41,6 +41,8 @@ class FastSmMessagingService : FirebaseMessagingService() {
         var text = "New notification"
         var id = 0
         var type = ""
+        var notificationId = ""
+        var token = ""
 
         if (blob != null) {
             val payload = runCatching {
@@ -69,10 +71,14 @@ class FastSmMessagingService : FirebaseMessagingService() {
                     // picks the channel, so mentions and boosts can sound
                     // different (or not at all) in Android's own settings.
                     type = o.optString("notification_type")
+                    // Mastodon sends the notification's id and the account's
+                    // token, which the Reply/Favourite/Boost buttons act with.
+                    notificationId = o.optString("notification_id")
+                    token = o.optString("access_token")
                 }
             }
         }
-        show(applicationContext, id, title, text, type)
+        show(applicationContext, id, title, text, type, notificationId, token)
     }
 
     companion object {
@@ -121,7 +127,15 @@ class FastSmMessagingService : FirebaseMessagingService() {
             if (types.isNotEmpty()) manager.deleteNotificationChannel(LEGACY_CHANNEL)
         }
 
-        private fun show(context: Context, id: Int, title: String, text: String, type: String) {
+        private fun show(
+            context: Context,
+            id: Int,
+            title: String,
+            text: String,
+            type: String,
+            notificationId: String,
+            token: String,
+        ) {
             ensureChannels(context)
             // An unknown type, or one whose channel somehow isn't there yet,
             // falls back rather than vanishing.
@@ -144,6 +158,7 @@ class FastSmMessagingService : FirebaseMessagingService() {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setContentIntent(tap)
+                .also { PushActionReceiver.addActions(context, it, id, type, token, notificationId) }
                 .build()
             if (!PushManager.hasNotificationPermission(context)) return
             runCatching { NotificationManagerCompat.from(context).notify(id, notification) }

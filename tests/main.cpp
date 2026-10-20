@@ -159,6 +159,7 @@ void test_push_settings();
 void test_push_requests();
 void test_push_session();
 void test_push_without_accounts();
+void test_push_action();
 
 static void test_version() {
     CHECK(fastsm::version() != nullptr);
@@ -296,6 +297,7 @@ int main() {
 	test_push_requests();
 	test_push_session();
 	test_push_without_accounts();
+	test_push_action();
 
     std::printf("%d checks, %d failures\n", fastsmtest::checks(), fastsmtest::failures());
     return fastsmtest::failures() == 0 ? 0 : 1;

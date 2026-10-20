@@ -58,6 +58,10 @@ public:
     std::optional<User> lookup_user(const std::string& handle) override;
     std::optional<Visibility> default_visibility() const override { return default_visibility_; }
     std::optional<Status> fetch_status(const std::string& id) override;
+    bool owns_access_token(const std::string& token) const override {
+        return !token.empty() && token == credentials_.access_token;
+    }
+    std::optional<Status> notification_status(const std::string& id) override;
     std::vector<User> search_accounts(const std::string& query, int limit) override;
     FullRelationResult fetch_all_relations(const std::string& id, bool following) override;
     std::optional<Relationship> relationship(const std::string& id) override;
