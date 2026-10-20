@@ -155,6 +155,9 @@ private:
     // the setting, so a quiet renewal at startup says nothing.
     void cmd_push_subscribe(const nlohmann::json& cmd);
     void cmd_push_unsubscribe(const nlohmann::json& cmd); // {announce?}
+    // A push notification's button: {access_token, notification_id, action:
+    // "favourite"|"boost"|"reply", text?} -> push_action_result.
+    void cmd_push_action(const nlohmann::json& cmd);
 	// {alerts:{type:bool,...}, apply_to_subscriptions?:false, announce?:true}
 	// Saves a patch; updates existing subscriptions only when the device enables push.
 	void cmd_push_update_alerts(const nlohmann::json& cmd);

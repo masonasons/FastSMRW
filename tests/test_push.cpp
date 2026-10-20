@@ -268,3 +268,133 @@ void test_push_without_accounts() {
 	fixture.session.reset(); // drain the queued config save before reading it
 	CHECK(!store::AppConfigStore(fixture.dir / "config.json").load().settings.push_alerts.poll);
 }
+
+namespace {
+// Answers a mention notification (id 77, about post 500) and records every
+// request, so a push_action test can see what the core sent where.
+struct ActionHttp : net::IHttpClient {
+	std::mutex mutex;
+	std::vector<net::HttpRequest> requests;
+
+	net::HttpResponse send(const net::HttpRequest& request) override {
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			requests.push_back(request);
+		}
+		const json status = {{"id", "500"}, {"created_at", "2026-10-20T00:00:00.000Z"},
+			{"content", "<p>hi</p>"}, {"visibility", "direct"}, {"mentions", json::array()},
+			{"account", {{"id", "9"}, {"username", "carol"}, {"acct", "carol@three.example"},
+				{"display_name", "Carol"}}}};
+		net::HttpResponse response;
+		response.status = 200;
+		if (request.url.find("/api/v1/notifications/77") != std::string::npos)
+			response.body = json{{"id", "77"}, {"type", "mention"}, {"status", status}}.dump();
+		else if (request.url.find("/api/v1/notifications/") != std::string::npos)
+			response.status = 404;
+		else
+			response.body = status.dump();
+		return response;
+	}
+
+	std::vector<net::HttpRequest> take() {
+		std::lock_guard<std::mutex> lock(mutex);
+		auto result = std::move(requests);
+		requests.clear();
+		return result;
+	}
+};
+} // namespace
+
+void test_push_action() {
+	// A core that was never started, as when a notification button is pressed
+	// with the app closed: push_action loads the accounts itself.
+	const auto dir = std::filesystem::temp_directory_path() /
+		("fastsmrw_push_action_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(dir);
+	store::AppConfig config;
+	config.settings.sounds_enabled = false;
+	for (int i = 0; i < 2; ++i) {
+		store::AccountRecord account;
+		account.me.id = std::to_string(i + 1);
+		account.me.acct = i == 0 ? "alice" : "bob";
+		account.account_key = "mastodon:" + account.me.id;
+		account.credential.mastodon = MastodonCredentials{
+			i == 0 ? "https://one.example" : "https://two.example", "", "", "token-" + std::to_string(i + 1)};
+		config.accounts.push_back(account);
+	}
+	CHECK(store::AppConfigStore(dir / "config.json").save(config));
+	auto transport = std::make_unique<ActionHttp>();
+	ActionHttp* http = transport.get();
+	std::mutex mutex;
+	std::condition_variable cv;
+	std::vector<json> results;
+	CoreSession::Paths paths;
+	paths.config_dir = dir;
+	auto session = std::make_unique<CoreSession>(paths, std::move(transport), [&](const std::string& event) {
+		json e = json::parse(event);
+		if (e.value("event", "") != "push_action_result")
+			return;
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			results.push_back(e);
+		}
+		cv.notify_all();
+	});
+	auto act = [&](const json& cmd) {
+		session->dispatch(cmd.dump());
+		std::unique_lock<std::mutex> lock(mutex);
+		CHECK(cv.wait_for(lock, std::chrono::seconds(5), [&] { return !results.empty(); }));
+		json result = results.empty() ? json::object() : results.front();
+		results.clear();
+		return result;
+	};
+
+	// The button acts as the account the push was sent to: bob, by his token.
+	json r = act({{"cmd", "push_action"}, {"access_token", "token-2"}, {"notification_id", "77"},
+		{"action", "favourite"}});
+	CHECK(r.value("ok", false));
+	CHECK_EQ(r.value("action", ""), std::string("favourite"));
+	auto requests = http->take();
+	CHECK_EQ(requests.size(), size_t(2));
+	if (requests.size() == 2) {
+		CHECK_EQ(requests[0].url, std::string("https://two.example/api/v1/notifications/77"));
+		CHECK_EQ(requests[1].url, std::string("https://two.example/api/v1/statuses/500/favourite"));
+		CHECK_EQ(requests[1].method, std::string("POST"));
+	}
+
+	r = act({{"cmd", "push_action"}, {"access_token", "token-1"}, {"notification_id", "77"}, {"action", "boost"}});
+	CHECK(r.value("ok", false));
+	requests = http->take();
+	CHECK(!requests.empty() && requests.back().url == "https://one.example/api/v1/statuses/500/reblog");
+
+	// A reply mentions the author and keeps a direct message direct.
+	r = act({{"cmd", "push_action"}, {"access_token", "token-1"}, {"notification_id", "77"},
+		{"action", "reply"}, {"text", "On my way"}});
+	CHECK(r.value("ok", false));
+	requests = http->take();
+	CHECK(!requests.empty());
+	if (!requests.empty()) {
+		const auto& post = requests.back();
+		CHECK_EQ(post.url, std::string("https://one.example/api/v1/statuses"));
+		CHECK(post.body.find("in_reply_to_id=500") != std::string::npos);
+		CHECK(post.body.find("visibility=direct") != std::string::npos);
+		CHECK(post.body.find("carol%40three.example") != std::string::npos);
+		CHECK(post.body.find("On") != std::string::npos);
+	}
+
+	// An unknown token, an empty reply, or a notification without a post fail
+	// without acting.
+	CHECK(!act({{"cmd", "push_action"}, {"access_token", "stale"}, {"notification_id", "77"},
+		{"action", "favourite"}}).value("ok", true));
+	CHECK(!act({{"cmd", "push_action"}, {"access_token", "token-1"}, {"notification_id", "77"},
+		{"action", "reply"}, {"text", ""}}).value("ok", true));
+	CHECK(http->take().empty());
+	CHECK(!act({{"cmd", "push_action"}, {"access_token", "token-1"}, {"notification_id", "78"},
+		{"action", "favourite"}}).value("ok", true));
+	requests = http->take();
+	CHECK_EQ(requests.size(), size_t(1)); // the lookup, and no favourite
+
+	session.reset();
+	std::error_code ec;
+	std::filesystem::remove_all(dir, ec);
+}
