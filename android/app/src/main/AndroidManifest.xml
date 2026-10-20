@@ -38,5 +38,10 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Runs a push notification's Reply, Favourite or Boost button. -->
+        <receiver
+            android:name=".push.PushActionReceiver"
+            android:exported="false" />
     </application>
 </manifest>

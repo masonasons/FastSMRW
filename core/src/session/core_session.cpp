@@ -695,6 +695,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_push_subscribe(cmd);
     else if (c == "push_unsubscribe")
         cmd_push_unsubscribe(cmd);
+    else if (c == "push_action")
+        cmd_push_action(cmd);
 	else if (c == "push_update_alerts")
 		cmd_push_update_alerts(cmd);
     else if (c == "list_followed_hashtags")
@@ -1821,6 +1823,58 @@ void CoreSession::cmd_push_subscribe(const json& cmd) {
         loop_.post([this, any_ok, reason, announce] {
             emit_push_result("push_subscribe_result", any_ok, reason, announce);
         });
+    });
+}
+
+void CoreSession::cmd_push_action(const json& cmd) {
+    const std::string token = cmd.value("access_token", std::string{});
+    const std::string id = cmd.value("notification_id", std::string{});
+    const std::string action = cmd.value("action", std::string{});
+    const std::string text = cmd.value("text", std::string{});
+    auto finish = [this, id, action](bool ok) {
+        emit({{"event", "push_action_result"}, {"ok", ok}, {"action", action}, {"notification_id", id}});
+    };
+    auto run = [this, token, id, action, text, finish] {
+        SocialAccount* account = nullptr;
+        for (SocialAccount* a : accounts_.accounts())
+            if (a && a->owns_access_token(token)) {
+                account = a;
+                break;
+            }
+        if (!account || id.empty() || (action == "reply" && text.empty())) {
+            finish(false);
+            return;
+        }
+        worker_.post([this, account, id, action, text, finish] {
+            bool ok = false;
+            if (std::optional<Status> s = account->notification_status(id)) {
+                if (action == "favourite") {
+                    ok = account->favorite(*s);
+                } else if (action == "boost") {
+                    ok = account->boost(*s);
+                } else if (action == "reply") {
+                    // As a reply from the timeline: everyone in the thread is
+                    // mentioned and the post's visibility is kept.
+                    PostDraft draft;
+                    draft.text = present::mention_prefix(*s, account->me()) + text;
+                    draft.reply_to_id = s->id;
+                    draft.visibility = s->visibility;
+                    ok = account->post(draft).has_value();
+                }
+            }
+            loop_.post([finish, ok] { finish(ok); });
+        });
+    };
+    if (!accounts_.accounts().empty()) {
+        run();
+        return;
+    }
+    // A notification button can be pressed with the app closed, in a core that
+    // was never started: load the accounts as start does, but build nothing else.
+    worker_.post([this, run] {
+        if (accounts_.accounts().empty())
+            accounts_.load(store::AppConfigStore(config_path_).load());
+        loop_.post(run);
     });
 }
 

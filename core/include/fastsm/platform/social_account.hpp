@@ -367,6 +367,12 @@ public:
     }
     // Remove this account's push subscription. Return success.
     virtual bool unsubscribe_push() { return false; }
+    // Whether a Web Push payload's access_token is this account's, so a button on
+    // a push notification acts as the account it was sent to.
+    virtual bool owns_access_token(const std::string& /*token*/) const { return false; }
+    // The post a notification is about (Mastodon /api/v1/notifications/:id), or
+    // nullopt when it has none or can't be fetched. Runs on the worker thread.
+    virtual std::optional<Status> notification_status(const std::string& /*id*/) { return std::nullopt; }
 	// Update only alert types, preserving the subscription endpoint and keys.
 	virtual PushSubscribe update_push_alerts(const PushAlerts& /*alerts*/) {
 		return PushSubscribe::Failed;
