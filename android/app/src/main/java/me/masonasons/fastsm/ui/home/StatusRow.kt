@@ -34,7 +34,7 @@ import me.masonasons.fastsm.ui.RowUi
  */
 // The Android-supported post actions, in default order (View Media first).
 // A subset of the shared post_action_catalog(): the actions StatusRow has a
-// handler for. Keys not here (post_info, links, browser, followers, following,
+// handler for. Keys not here (post_info, browser, followers, following,
 // follow_hashtag, pin_post) aren't wired on Android yet.
 private val DEFAULT_POST_ACTION_ORDER = listOf(
     "play_media", "reply", "boost", "favorite", "bookmark", "quote", "thread",
@@ -51,6 +51,7 @@ fun StatusRow(
     /** Acting on a row makes it the reading position (the core persists it). */
     onSelect: (String) -> Unit,
     onOpenLink: (String) -> Unit,
+    onOpenLinks: (String) -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -101,6 +102,9 @@ fun StatusRow(
                 "bookmark" ->
                     MenuAction(if (row.bookmarked) "Remove bookmark" else "Bookmark") { onToggleBookmark(row.id) }
                 "quote" -> MenuAction("Quote") { onQuote(row.id) }
+                // Offered on every post, as on iPhone: the core says when a post
+                // has no links, opens a single one, and asks which of several.
+                "links" -> MenuAction("Open links") { onOpenLinks(row.id) }
                 "play_media" -> if (row.hasMedia) MenuAction("View media") { onViewMedia(row.id) } else null
                 "thread" -> MenuAction("View conversation") { onOpenThread(row.id) }
                 "mute_conversation" ->
