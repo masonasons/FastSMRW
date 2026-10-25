@@ -3326,6 +3326,16 @@ void CoreSession::cmd_compose_context(const json& cmd) {
     ctx["mode"] = mode;
     ctx["max_chars"] = account->max_chars();
     ctx["enter_to_send"] = settings_.enter_to_send;
+    // Closing a half-written post throws the text away, so the dialog asks first --
+    // but only when something has actually been typed, which only the dialog knows.
+    // The wording is composed here so five dialogs render it rather than writing five
+    // versions of the same question.
+    ctx["confirm_discard"] = settings_.confirm_discard_post;
+    ctx["discard_title"] = mode == "edit" ? "Discard changes?" : "Discard post?";
+    ctx["discard_text"] = mode == "edit"
+                              ? "Your changes to this post will be lost."
+                              : "What you have written will be lost.";
+    ctx["discard_ok"] = "Discard";
     ctx["features"] = features_json(account->features());
     ctx["platform"] = account->platform() == Platform::Mastodon ? "mastodon" : "bluesky";
     // The language list (code + display name) so the UI can offer a picker; it's

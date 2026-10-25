@@ -46,6 +46,9 @@ struct AppSettings {
     bool confirm_block = true;
     bool confirm_unblock = false;
     bool confirm_delete_post = true;
+    // Ask before throwing away a post you have started writing. On by default: the
+    // text is gone for good, and Escape is easy to hit by accident.
+    bool confirm_discard_post = true;
     bool show_mentions_in_notifications = true;
     bool reverse_timelines = false; // newest at the bottom (oldest-first) for time-ordered feeds
     bool auto_load_older = true;    // auto-fetch older posts when you reach the timeline's end

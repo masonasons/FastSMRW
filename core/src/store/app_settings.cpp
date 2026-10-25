@@ -120,6 +120,7 @@ AppSettings settings_from_json(const json& root) {
     settings.confirm_block = root.value("confirm_block", true);
     settings.confirm_unblock = root.value("confirm_unblock", false);
     settings.confirm_delete_post = root.value("confirm_delete_post", true);
+    settings.confirm_discard_post = root.value("confirm_discard_post", true);
     settings.auto_refresh_seconds = root.value("auto_refresh_seconds", 60);
     settings.streaming_enabled = root.value("streaming_enabled", true);
     // Default comes from the struct (platform-dependent: bottom on iOS).
@@ -258,6 +259,7 @@ json settings_to_json(const AppSettings& settings) {
     root["confirm_block"] = settings.confirm_block;
     root["confirm_unblock"] = settings.confirm_unblock;
     root["confirm_delete_post"] = settings.confirm_delete_post;
+    root["confirm_discard_post"] = settings.confirm_discard_post;
     root["auto_refresh_seconds"] = settings.auto_refresh_seconds;
     root["streaming_enabled"] = settings.streaming_enabled;
     root["tab_bar_position"] = settings.tab_bar_position;
