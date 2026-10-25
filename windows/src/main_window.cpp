@@ -3263,6 +3263,10 @@ void MainWindow::ev_compose_context(const json& e) {
                                   p.value("checked", true)});
     req.max_chars = e.value("max_chars", 500);
     req.enter_to_send = e.value("enter_to_send", false);
+    req.confirm_discard = e.value("confirm_discard", true);
+    req.discard_title = e.value("discard_title", std::string("Discard post?"));
+    req.discard_text = e.value("discard_text", std::string{});
+    req.discard_ok = e.value("discard_ok", std::string("Discard"));
     if (e.contains("default_visibility"))
         req.default_visibility = static_cast<Visibility>(e["default_visibility"].get<int>());
     if (auto f = e.find("features"); f != e.end() && f->is_object()) {

@@ -191,6 +191,12 @@ data class ComposeContext(
     val defaultVisibility: Int, // -1 = none supplied
     val prefillText: String,
     val prefillCw: String,
+    // Closing with something written throws it away, so the screen asks first. The
+    // strings are the core's; [confirmDiscard] is the user's setting.
+    val confirmDiscard: Boolean,
+    val discardTitle: String,
+    val discardText: String,
+    val discardOk: String,
     val replyToId: String?,
     val replyToUrl: String?,
     val quotedStatusId: String?,
@@ -1561,6 +1567,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             defaultVisibility = e.optInt("default_visibility", -1),
             prefillText = e.optString("prefill_text"),
             prefillCw = e.optString("prefill_cw"),
+            confirmDiscard = e.optBoolean("confirm_discard", true),
+            discardTitle = e.optString("discard_title", "Discard post?"),
+            discardText = e.optString("discard_text"),
+            discardOk = e.optString("discard_ok", "Discard"),
             replyToId = nullable("reply_to_id"),
             replyToUrl = nullable("reply_to_url"),
             quotedStatusId = nullable("quoted_status_id"),

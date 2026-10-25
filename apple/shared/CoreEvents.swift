@@ -358,6 +358,13 @@ struct ComposeContext: Decodable {
     var quotedStatusCid: String?
     var quotedStatusUrl: String?
     var editId: String?
+    /// Closing with something written throws it away, so the dialog asks first. The
+    /// strings are the core's; `confirmDiscard` is the user's setting. Optional
+    /// because an older core does not send them.
+    var confirmDiscard: Bool?
+    var discardTitle: String?
+    var discardText: String?
+    var discardOk: String?
 
     enum CodingKeys: String, CodingKey {
         case mode, title, platform, features, languages
@@ -368,6 +375,10 @@ struct ComposeContext: Decodable {
         case contextLabel = "context_label"
         case prefillText = "prefill_text"
         case prefillCw = "prefill_cw"
+        case confirmDiscard = "confirm_discard"
+        case discardTitle = "discard_title"
+        case discardText = "discard_text"
+        case discardOk = "discard_ok"
         case replyToId = "reply_to_id"
         case replyToUrl = "reply_to_url"
         case quotedStatusId = "quoted_status_id"

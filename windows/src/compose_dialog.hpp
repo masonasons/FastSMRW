@@ -40,6 +40,12 @@ struct ComposeRequest {
     std::string prefill_cw;                         // edit content warning
     std::optional<fastsm::Visibility> default_visibility;
     std::vector<ComposeRecipient> recipients;       // reply targets (checklist); empty otherwise
+    // Closing with something written throws it away, so ask first. The strings are
+    // the core's; `confirm_discard` is the user's setting.
+    bool confirm_discard = true;
+    std::string discard_title;
+    std::string discard_text;
+    std::string discard_ok;
 };
 
 struct ComposeResult {

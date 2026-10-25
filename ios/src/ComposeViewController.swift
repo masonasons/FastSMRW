@@ -466,7 +466,31 @@ final class ComposeViewController: StaticFormViewController {
 
     // MARK: Send
 
-    @objc private func cancelTapped() { dismiss(animated: true) }
+    @objc private func cancelTapped() { cancelIfAllowed() }
+
+    /// Closing throws away whatever has been written, so ask first -- but only when
+    /// something has actually been typed. Visibility and language changes are not
+    /// counted: changing a picker and closing is not lost work, and prompting for it
+    /// would train people to dismiss the prompt without reading it.
+    private func cancelIfAllowed() {
+        let bodyChanged = textView.text != (context.prefillText ?? "")
+        let cwChanged = (cwField?.text ?? "") != (context.prefillCw ?? "")
+        let dirty = bodyChanged || cwChanged || !attachments.isEmpty
+        guard dirty, context.confirmDiscard ?? true else {
+            dismiss(animated: true)
+            return
+        }
+        let alert = UIAlertController(title: context.discardTitle ?? "Discard post?",
+                                      message: context.discardText ?? "",
+                                      preferredStyle: .alert)
+        // Keep Writing is the cancel action, so a stray tap or Escape keeps the post.
+        alert.addAction(UIAlertAction(title: "Keep Writing", style: .cancel))
+        alert.addAction(UIAlertAction(title: context.discardOk ?? "Discard",
+                                      style: .destructive) { [weak self] _ in
+            self?.dismiss(animated: true)
+        })
+        present(alert, animated: true)
+    }
 
     @objc private func postTapped() {
         let text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)

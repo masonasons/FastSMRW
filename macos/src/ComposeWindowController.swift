@@ -360,7 +360,31 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
     // MARK: Send
 
     @objc private func sendAction() { send() }
-    @objc private func cancel() { dismiss() }
+    @objc private func cancel() { cancelIfAllowed() }
+
+    /// Closing throws away whatever has been written, so ask first -- but only when
+    /// something has actually been typed. Visibility and language changes are not
+    /// counted: changing a popup and closing is not lost work, and prompting for it
+    /// would train people to dismiss the prompt without reading it.
+    private func cancelIfAllowed() {
+        let bodyChanged = textView.string != (context.prefillText ?? "")
+        let cwChanged = cwField.stringValue != (context.prefillCw ?? "")
+        let dirty = bodyChanged || cwChanged || !attachments.isEmpty
+        guard dirty, context.confirmDiscard ?? true, let window else {
+            dismiss()
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = context.discardTitle ?? "Discard post?"
+        alert.informativeText = context.discardText ?? ""
+        // Keep Writing first, so it is the default button and a stray Return does not
+        // throw the post away.
+        alert.addButton(withTitle: "Keep Writing")
+        alert.addButton(withTitle: context.discardOk ?? "Discard")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertSecondButtonReturn { self?.dismiss() }
+        }
+    }
 
     // MARK: @-mention autocomplete
 

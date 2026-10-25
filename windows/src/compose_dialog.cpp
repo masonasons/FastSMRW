@@ -353,6 +353,40 @@ void run_mention_autocomplete(HWND edit, Ctx* ctx) {
     SetFocus(edit);
 }
 
+// Whether anything has been written that closing would throw away: the body or the
+// content warning differing from what the dialog opened with, or media attached.
+// Visibility and language are deliberately not counted -- changing a dropdown and
+// closing is not lost work, and prompting for it would train people to dismiss the
+// prompt without reading it.
+bool compose_is_dirty(HWND dlg, const Ctx* ctx) {
+    if (!ctx || !ctx->req)
+        return false;
+    if (!ctx->attachments.empty())
+        return true;
+    auto field = [&](int id) {
+        HWND h = GetDlgItem(dlg, id);
+        if (!h)
+            return std::string();
+        const int len = GetWindowTextLengthW(h);
+        std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
+        GetWindowTextW(h, buf.data(), len + 1);
+        buf.resize(static_cast<size_t>(len));
+        return to_utf8(buf);
+    };
+    return field(IDC_COMPOSE_EDIT) != ctx->req->prefill_text ||
+           field(IDC_COMPOSE_CW) != ctx->req->prefill_cw;
+}
+
+// True if the dialog may close. Asks only when there is something to lose.
+bool compose_may_close(HWND dlg, const Ctx* ctx) {
+    if (!ctx || !ctx->req || !ctx->req->confirm_discard || !compose_is_dirty(dlg, ctx))
+        return true;
+    const std::wstring title = to_wide(ctx->req->discard_title);
+    const std::wstring text = to_wide(ctx->req->discard_text);
+    return MessageBoxW(dlg, text.c_str(), title.c_str(),
+                       MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES;
+}
+
 // Subclass the multiline edit to honor the enter-to-send preference.
 LRESULT CALLBACK EditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR ref) {
     Ctx* ctx = reinterpret_cast<Ctx*>(ref);
@@ -630,11 +664,21 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             return TRUE;
         }
         if (id == IDCANCEL) {
-            EndDialog(dlg, IDCANCEL);
+            // Escape and the Cancel button both land here, which is why the prompt
+            // lives in one place.
+            if (compose_may_close(dlg, ctx))
+                EndDialog(dlg, IDCANCEL);
             return TRUE;
         }
         break;
     }
+
+    case WM_CLOSE:
+        // The title bar's X, too: it discards just as thoroughly.
+        if (auto* ctx = reinterpret_cast<Ctx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+            compose_may_close(dlg, ctx))
+            EndDialog(dlg, IDCANCEL);
+        return TRUE;
 
     case WM_NCDESTROY:
         RemoveWindowSubclass(GetDlgItem(dlg, IDC_COMPOSE_EDIT), EditProc, 1);

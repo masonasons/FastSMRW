@@ -506,6 +506,7 @@ std::optional<AppSettings> show_settings_dialog(GtkWindow* parent, AppSettings s
         b.check(p, "Bloc_king a user", &settings.confirm_block);
         b.check(p, "_Unblocking a user", &settings.confirm_unblock);
         b.check(p, "_Deleting a post", &settings.confirm_delete_post);
+        b.check(p, "D_iscarding a post you are writing", &settings.confirm_discard_post);
     }
     // --- Behavior ---
     {

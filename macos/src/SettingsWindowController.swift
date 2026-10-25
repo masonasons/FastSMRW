@@ -193,6 +193,8 @@ final class SettingsWindowController: NSWindowController {
             p.checkbox("Confirm block", key: "confirm_block", default: true)
             p.checkbox("Confirm un-block", key: "confirm_unblock", default: false)
             p.checkbox("Confirm deleting a post", key: "confirm_delete_post", default: true)
+            p.checkbox("Confirm discarding a post you are writing",
+                       key: "confirm_discard_post", default: true)
         }
 
         let window = NSWindow(contentViewController: tabs)

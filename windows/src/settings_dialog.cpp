@@ -702,6 +702,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
         checked(dlg, IDC_SET_CONFIRM_BLOCK, ctx->settings.confirm_block);
         checked(dlg, IDC_SET_CONFIRM_UNBLOCK, ctx->settings.confirm_unblock);
         checked(dlg, IDC_SET_CONFIRM_DELETE, ctx->settings.confirm_delete_post);
+        checked(dlg, IDC_SET_CONFIRM_DISCARD, ctx->settings.confirm_discard_post);
         return TRUE;
     }
     case WM_NOTIFY:
@@ -717,6 +718,7 @@ INT_PTR CALLBACK ConfirmProc(HWND dlg, UINT msg, WPARAM, LPARAM lp) {
             ctx->settings.confirm_block = is_checked(dlg, IDC_SET_CONFIRM_BLOCK);
             ctx->settings.confirm_unblock = is_checked(dlg, IDC_SET_CONFIRM_UNBLOCK);
             ctx->settings.confirm_delete_post = is_checked(dlg, IDC_SET_CONFIRM_DELETE);
+            ctx->settings.confirm_discard_post = is_checked(dlg, IDC_SET_CONFIRM_DISCARD);
             ctx->applied = true;
             SetWindowLongPtrW(dlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;

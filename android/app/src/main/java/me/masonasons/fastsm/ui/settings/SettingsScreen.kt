@@ -448,6 +448,7 @@ private fun ConfirmationPanel(s: JSONObject, vm: CoreViewModel) {
         "confirm_block" to "Blocking a user",
         "confirm_unblock" to "Unblocking a user",
         "confirm_delete_post" to "Deleting a post",
+        "confirm_discard_post" to "Discarding a post you are writing",
     ).forEach { (key, label) ->
         SwitchRow(label, s.optBoolean(key)) { vm.updateSetting { put(key, it) } }
     }

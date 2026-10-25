@@ -151,7 +151,37 @@ fun ComposeScreen(
         }
     }
 
-    BackHandler(enabled = true) { onDone() }
+    // Closing throws away whatever has been written, so ask first -- but only when
+    // something has actually been typed. Visibility and language changes are not
+    // counted: changing a dropdown and closing is not lost work, and prompting for it
+    // would train people to dismiss the prompt without reading it.
+    var confirmDiscard by remember { mutableStateOf(false) }
+    fun closeOrAsk() {
+        val dirty = field.text != ctx.prefillText || cw != ctx.prefillCw ||
+            attachments.isNotEmpty()
+        if (ctx.confirmDiscard && dirty) confirmDiscard = true else onDone()
+    }
+
+    // The system back gesture discards just as thoroughly as the Cancel button.
+    BackHandler(enabled = true) { closeOrAsk() }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text(ctx.discardTitle) },
+            text = { Text(ctx.discardText) },
+            confirmButton = {
+                TextButton(onClick = { confirmDiscard = false; onDone() }) {
+                    Text(ctx.discardOk)
+                }
+            },
+            // Keeping the post is the dismissive action, so a stray tap outside keeps
+            // what was written.
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) { Text("Keep writing") }
+            },
+        )
+    }
 
     val remaining = ctx.maxChars - field.text.length
     val canSend = (field.text.isNotBlank() || attachments.isNotEmpty()) && remaining >= 0 && !sending
@@ -213,7 +243,7 @@ fun ComposeScreen(
             TopAppBar(
                 title = { Text(ctx.title) },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = { closeOrAsk() }) {
                         Icon(Icons.Filled.Close, contentDescription = "Cancel")
                     }
                 },

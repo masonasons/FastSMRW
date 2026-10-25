@@ -530,9 +530,48 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
     update_counter();
     gtk_widget_grab_focus(text_view);
 
+    // What the dialog opened with, to tell "typed something" from "changed nothing".
+    const std::string initial_body = ctx.value("prefill_text", std::string{});
+    const std::string initial_cw = ctx.value("prefill_cw", std::string{});
+    const bool confirm_discard = ctx.value("confirm_discard", true);
+
     std::optional<json> result;
     int response;
-    while ((response = gtk_dialog_run(GTK_DIALOG(dialog))) == GTK_RESPONSE_OK) {
+    while (true) {
+        response = gtk_dialog_run(GTK_DIALOG(dialog));
+        if (response != GTK_RESPONSE_OK) {
+            // Cancel, Escape and the window's close button all arrive here. Closing
+            // throws the text away, so ask first -- but only when there is something
+            // to lose, or the prompt becomes noise people dismiss without reading.
+            GtkTextIter b0, b1;
+            gtk_text_buffer_get_bounds(buffer, &b0, &b1);
+            gchar* body_raw = gtk_text_buffer_get_text(buffer, &b0, &b1, FALSE);
+            const std::string body_now = body_raw ? body_raw : "";
+            g_free(body_raw);
+            const std::string cw_now = cw_entry ? gtk_entry_get_text(GTK_ENTRY(cw_entry)) : "";
+            const bool dirty = !attachments.empty() || body_now != initial_body ||
+                               cw_now != initial_cw;
+            if (confirm_discard && dirty) {
+                GtkWidget* ask = gtk_message_dialog_new(
+                    GTK_WINDOW(dialog), GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
+                    GTK_BUTTONS_NONE, "%s",
+                    ctx.value("discard_title", std::string("Discard post?")).c_str());
+                gtk_message_dialog_format_secondary_text(
+                    GTK_MESSAGE_DIALOG(ask), "%s",
+                    ctx.value("discard_text", std::string{}).c_str());
+                gtk_dialog_add_buttons(GTK_DIALOG(ask), "_Keep Writing", GTK_RESPONSE_CANCEL,
+                                       ctx.value("discard_ok", std::string("_Discard")).c_str(),
+                                       GTK_RESPONSE_ACCEPT, nullptr);
+                // Keep Writing is the default, so a stray Return doesn't throw the
+                // post away.
+                gtk_dialog_set_default_response(GTK_DIALOG(ask), GTK_RESPONSE_CANCEL);
+                const int answer = gtk_dialog_run(GTK_DIALOG(ask));
+                gtk_widget_destroy(ask);
+                if (answer != GTK_RESPONSE_ACCEPT)
+                    continue; // back to composing
+            }
+            break;
+        }
         GtkTextIter start, end;
         gtk_text_buffer_get_bounds(buffer, &start, &end);
         gchar* raw = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);

@@ -199,6 +199,8 @@ final class SettingsViewController: UITableViewController {
                 .toggle("Block", key: "confirm_block", def: true),
                 .toggle("Un-block", key: "confirm_unblock", def: false),
                 .toggle("Deleting a post", key: "confirm_delete_post", def: true),
+                .toggle("Discarding a post you are writing", key: "confirm_discard_post",
+                        def: true),
             ]),
         ]
     }
