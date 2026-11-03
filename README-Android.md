@@ -6,10 +6,16 @@ This is the guide for the Android version of FastSMRW. There are also guides for
 [Windows](README-Windows.md), [Mac](README-macOS.md), [iPhone](README-iOS.md), and [Linux](README-Linux.md).
 
 FastSMRW is a fast, accessible Mastodon and Bluesky client for blind and
-low-vision users. On Android you drive it entirely by touch and TalkBack:
-tapping, long-pressing, swiping, and the back gesture. Everything you hear —
+low-vision users. On Android you can use touch and TalkBack, or a hardware keyboard:
+tapping, long-pressing, swiping, the back gesture, and Control shortcuts. Everything you hear —
 post text, profiles, notifications — is composed by the shared FastSM core and
 read out by TalkBack, so it stays consistent with the other versions.
+
+## Hardware keyboards and BrailleSense 7
+
+Tested by the contributor on a BrailleSense 7: no layered command tried so far has failed, and Reply continues to work reliably across repeated uses. Only a couple of Control+Shift combinations have worked in this testing, and those have been less reliable. Control+Shift behavior on other Android devices has not been tested. These are user-reported device results, separate from automated tests; they are not a claim that every function or Android device has been tested.
+
+See [the complete keyboard reference](docs/android-keyboard.md) for all Control+Shift commands, layered alternatives without Shift, writing keys, and the keyboard delivery test. The reference is separate from the numbered getting-started steps. A native Word copy is included as `docs/FastSMRW Android Keyboard Guide.docx`.
 
 ## Getting started
 
