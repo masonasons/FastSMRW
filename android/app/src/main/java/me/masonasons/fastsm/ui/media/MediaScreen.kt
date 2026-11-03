@@ -37,17 +37,28 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import me.masonasons.fastsm.ui.MediaItemUi
+import me.masonasons.fastsm.keyboard.KeyboardBinding
+import me.masonasons.fastsm.keyboard.Shortcut
 
 /**
  * In-app media viewer. Images render with Coil; video/gifv/audio play through an
  * ExoPlayer with standard (accessible) transport controls. Driven by the core's
  * media_open event, which carries the kind.
  */
-@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun MediaScreen(item: MediaItemUi, onClose: () -> Unit) {
     BackHandler(enabled = true) { onClose() }
     val context = LocalContext.current
+    var activePlayer by remember { mutableStateOf<ExoPlayer?>(null) }
+    KeyboardBinding { command ->
+        when (command) {
+            Shortcut.STOP, Shortcut.CLOSE_TIMELINE -> { activePlayer?.stop(); onClose(); true }
+            Shortcut.MEDIA -> { activePlayer?.let { if (it.isPlaying) it.pause() else it.play() }; true }
+            else -> false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -99,8 +110,9 @@ fun MediaScreen(item: MediaItemUi, onClose: () -> Unit) {
                         playWhenReady = true
                     }
                 }
-                DisposableEffect(item.url) {
-                    onDispose { player.release() }
+                DisposableEffect(player) {
+                    activePlayer = player
+                    onDispose { activePlayer = null; player.release() }
                 }
                 AndroidView(
                     factory = { ctx -> PlayerView(ctx).apply { this.player = player } },

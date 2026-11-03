@@ -12,6 +12,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import me.masonasons.fastsm.MainActivity
+import me.masonasons.fastsm.ui.CoreViewModel
+import me.masonasons.fastsm.keyboard.KeyboardShortcuts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,13 +54,15 @@ private val DEFAULT_POST_ACTION_ORDER = listOf(
     "speak_reply", "jump_reply", "edit", "report", "delete",
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun StatusRow(
     row: RowUi,
     actionOrder: List<String>,
+    keyboardRequest: CoreViewModel.KeyboardRowRequest?,
     /** Acting on a row makes it the reading position (the core persists it). */
     onSelect: (String) -> Unit,
+    onKeyboardSelect: (String) -> Unit,
     onOpenLink: (String) -> Unit,
     onOpenLinks: (String) -> Unit,
     onOpenThread: (String) -> Unit,
@@ -78,6 +91,7 @@ fun StatusRow(
     onMessageRequest: (rowId: String, accept: Boolean) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val keyboardFocusRequester = remember(row.id) { FocusRequester() }
     var confirmDelete by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showFollowRequest by remember { mutableStateOf(false) }
@@ -88,7 +102,17 @@ fun StatusRow(
     // and the long-press menu). Falls back to the default order until settings
     // arrive.
     val order = actionOrder.ifEmpty { DEFAULT_POST_ACTION_ORDER }
+    LaunchedEffect(keyboardRequest?.serial) {
+        val request = keyboardRequest ?: return@LaunchedEffect
+        if (request.delivery.claim()) when (request.action) {
+            "menu" -> menuOpen = true
+            "focus" -> keyboardFocusRequester.requestFocus()
+        }
+    }
     val menuActions = buildList {
+        add(MenuAction("Use keyboard commands on this post") {
+            onSelect(row.id); onKeyboardSelect(row.id)
+        })
         order.forEach { key ->
             if (key == "expand_links") {
                 row.links.forEach { link -> add(MenuAction(link.title) { onOpenLink(link.url) }) }
@@ -151,12 +175,16 @@ fun StatusRow(
     }
 
     val base = Modifier
+        .focusRequester(keyboardFocusRequester)
+        .onFocusChanged { if (it.isFocused) onKeyboardSelect(row.id) }
         .combinedClickable(
             onClick = { onSelect(row.id); primaryOpen() },
             onLongClick = { onSelect(row.id); menuOpen = true },
         )
         .clearAndSetSemantics {
             contentDescription = row.text
+            testTag = KeyboardShortcuts.ROW_PREFIX + row.id
+            testTagsAsResourceId = true
             customActions = actions
             onClick { onSelect(row.id); primaryOpen(); true }
         }

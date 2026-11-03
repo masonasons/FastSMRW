@@ -76,7 +76,7 @@ fun AddTimelineScreen(viewModel: CoreViewModel, onClose: () -> Unit) {
         ) {
             entries.forEach { sp ->
                 Text(
-                    text = if (sp.input != null) "${sp.title}…" else sp.title,
+                    text = if (sp.kind == "conversations") "Messages (Conversations)" else if (sp.input != null) "${sp.title}…" else sp.title,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier
                         .fillMaxWidth()

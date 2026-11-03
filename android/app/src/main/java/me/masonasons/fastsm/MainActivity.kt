@@ -6,6 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.accessibility.AccessibilityEvent
+import me.masonasons.fastsm.keyboard.KeyboardShortcuts
+import me.masonasons.fastsm.keyboard.KeyboardHelp
+import me.masonasons.fastsm.keyboard.KeyboardTest
+import me.masonasons.fastsm.keyboard.Shortcut
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -46,6 +54,85 @@ class MainActivity : ComponentActivity() {
 
     private val vm: CoreViewModel by viewModels()
     private var hasResumed = false
+    var keyboardHandler: ((Shortcut) -> Boolean)? = null
+        private set
+    var showKeyboardHelp by mutableStateOf(false)
+    var showKeyboardTest by mutableStateOf(false)
+    fun openKeyboardTest() {
+        inputRouter.cancelPrefix()
+        showKeyboardHelp = false
+        showKeyboardTest = true
+    }
+    private val inputRouter = me.masonasons.fastsm.keyboard.KeyboardInputRouter(
+        prefixMessage = { vm.announceKeyboard(it) })
+    private var composerSendHandler: (() -> Boolean)? = null
+
+    fun bindComposerSendHandler(handler: () -> Boolean) { composerSendHandler = handler }
+    fun unbindComposerSendHandler(handler: () -> Boolean) {
+        if (composerSendHandler === handler) composerSendHandler = null
+    }
+
+    // Public android.app.Activity override. The inherited AndroidX Core class
+    // carries a library-group annotation that lint also applies to this SDK API.
+    @android.annotation.SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val state = event.metaState
+        val control = me.masonasons.fastsm.keyboard.KeyboardMeta.control(state)
+        val shift = me.masonasons.fastsm.keyboard.KeyboardMeta.shift(state)
+        val alt = me.masonasons.fastsm.keyboard.KeyboardMeta.alt(state)
+        val meta = me.masonasons.fastsm.keyboard.KeyboardMeta.meta(state)
+        if (inputRouter.event(event.action, event.keyCode, event.repeatCount, event.downTime,
+            event.eventTime, control, shift, alt, meta, event.isCanceled,
+            keyboardHandler, composerSendHandler)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    private val focusBridge by lazy {
+        me.masonasons.fastsm.keyboard.KeyboardFocusBridge(vm::keyboardFocus)
+    }
+    private var focusRoot: ViewGroup? = null
+    private var postFocusEnabled = false
+    private val installPostFocus = Runnable {
+        if (postFocusEnabled) focusRoot?.let { focusBridge.install(it) }
+    }
+
+    fun bindKeyboardHandler(handler: (Shortcut) -> Boolean, trackPosts: Boolean) {
+        keyboardHandler = handler
+        setPostFocusTracking(trackPosts)
+    }
+
+    fun unbindKeyboardHandler(handler: (Shortcut) -> Boolean) {
+        if (keyboardHandler !== handler) return
+        keyboardHandler = null
+        inputRouter.cancelPrefix()
+        setPostFocusTracking(false)
+    }
+
+    private fun setPostFocusTracking(enabled: Boolean) {
+        if (postFocusEnabled == enabled) return
+        postFocusEnabled = enabled
+        focusRoot?.removeCallbacks(installPostFocus)
+        if (enabled) focusRoot?.post(installPostFocus)
+        else {
+            focusBridge.uninstall()
+            vm.clearKeyboardFocus()
+        }
+    }
+
+    private fun observePostFocus() {
+        val root = findViewById<ViewGroup>(android.R.id.content)
+        focusRoot = root
+        // One discovery when entering the reading screen. No layout listener
+        // and no post-focus interception while writing or in settings.
+        if (postFocusEnabled) root.post(installPostFocus)
+    }
+
+    override fun onDestroy() {
+        focusRoot?.removeCallbacks(installPostFocus)
+        focusBridge.uninstall()
+        focusRoot = null
+        super.onDestroy()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +149,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        observePostFocus()
     }
 
     override fun onResume() {
@@ -76,6 +164,7 @@ class MainActivity : ComponentActivity() {
         // Android can kill a backgrounded process at any time, so send the reading
         // position now instead of waiting out the idle timer.
         vm.pause()
+        inputRouter.clear()
     }
 
     // singleTop: the fastsm://oauth redirect re-enters the live activity here.
@@ -91,6 +180,7 @@ class MainActivity : ComponentActivity() {
         val code = data.getQueryParameter("code")
         if (!code.isNullOrBlank()) vm.finishMastodonLogin(code)
     }
+
 }
 
 @Composable
@@ -125,6 +215,13 @@ private fun App(vm: CoreViewModel) {
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             cm?.setPrimaryClip(ClipData.newPlainText("FastSM", text))
         }
+    }
+
+    (context as? MainActivity)?.let { activity ->
+        if (activity.showKeyboardHelp) KeyboardHelp(
+            onTest = { activity.openKeyboardTest() },
+            onClose = { activity.showKeyboardHelp = false })
+        if (activity.showKeyboardTest) KeyboardTest { activity.showKeyboardTest = false }
     }
 
     val ctx = composeContext

@@ -37,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,6 +50,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
+import me.masonasons.fastsm.MainActivity
+import me.masonasons.fastsm.keyboard.KeyboardBinding
+import me.masonasons.fastsm.keyboard.Shortcut
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -56,6 +61,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.AlertDialog
@@ -64,6 +70,8 @@ import me.masonasons.fastsm.ui.AliasEntry
 import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.RowUi
 import me.masonasons.fastsm.ui.TabUi
+import me.masonasons.fastsm.keyboard.TimelineReadingPlace
+import me.masonasons.fastsm.keyboard.TimelineReadingPositions
 import me.masonasons.fastsm.ui.TrendingTagUi
 import me.masonasons.fastsm.ui.timeline.ClientFilterScreen
 import me.masonasons.fastsm.ui.timeline.FollowedHashtagsScreen
@@ -94,6 +102,7 @@ fun HomeScreen(
     val selectedIdByTab by viewModel.selectedIdByTab.collectAsStateWithLifecycle()
     val scrollRequest by viewModel.scrollRequest.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val preparingEdit by viewModel.preparingEdit.collectAsStateWithLifecycle()
     val tabsAtBottom = settings?.optString("tab_bar_position") == "bottom"
     // Enabled post-action keys, in the user's configured order (drives each
     // post's TalkBack actions + long-press menu). Empty until settings arrive;
@@ -122,6 +131,70 @@ fun HomeScreen(
     var showFollowedTags by remember { mutableStateOf(false) }
     var showServerFilters by remember { mutableStateOf(false) }
     var findText by remember { mutableStateOf("") }
+    val activity = LocalContext.current as? MainActivity
+    val keyboardRequest by viewModel.keyboardRowRequest.collectAsStateWithLifecycle()
+    KeyboardBinding(enabled = !showFilter && !showLists && !showFollowedTags && !showServerFilters,
+        trackPostFocus = true) { command ->
+        when (command) {
+            Shortcut.NEW -> viewModel.composeNew()
+            Shortcut.NEXT_TIMELINE -> viewModel.keyboardTimeline(1)
+            Shortcut.PREVIOUS_TIMELINE -> viewModel.keyboardTimeline(-1)
+            Shortcut.HOME -> viewModel.keyboardNamedTimeline("home")
+            Shortcut.NOTIFICATIONS -> viewModel.keyboardNamedTimeline("notifications")
+            Shortcut.MENTIONS -> viewModel.keyboardNamedTimeline("mentions")
+            Shortcut.MESSAGES -> viewModel.keyboardMessages()
+            Shortcut.TOP -> viewModel.keyboardTop()
+            Shortcut.SENT -> viewModel.keyboardNamedTimeline("sent")
+            Shortcut.ADD_TIMELINE -> onOpenAddTimeline()
+            Shortcut.CLOSE_TIMELINE -> {
+                if (tabs.getOrNull(currentTab)?.dismissable == true) viewModel.closeTimeline(currentTab)
+                else viewModel.announceKeyboard("This timeline cannot be closed.")
+            }
+            Shortcut.REFRESH -> viewModel.refresh()
+            Shortcut.AUTO_READ -> viewModel.toggleAutoRead()
+            Shortcut.FIND -> { showFindDialog = true }
+            Shortcut.FIND_NEXT -> viewModel.findNext()
+            Shortcut.FIND_PREVIOUS -> viewModel.findPrevious()
+            Shortcut.FILTER -> { viewModel.getClientFilter(); showFilter = true }
+            Shortcut.PIN_TIMELINE -> viewModel.pinTimeline(currentTab)
+            Shortcut.MUTE_TIMELINE -> viewModel.muteTimeline(currentTab)
+            Shortcut.ADD_ACCOUNT -> onAddAccount()
+            Shortcut.NEXT_ACCOUNT -> viewModel.keyboardAccount(1)
+            Shortcut.PREVIOUS_ACCOUNT -> viewModel.keyboardAccount(-1)
+            Shortcut.ACCOUNT_SETTINGS -> onOpenAccountSettings()
+            Shortcut.EDIT_PROFILE -> onEditProfile()
+            Shortcut.SETTINGS -> onOpenSettings()
+            Shortcut.HELP -> { activity?.showKeyboardHelp = true }
+            Shortcut.STOP -> viewModel.announceKeyboard("No media viewer is open.")
+            else -> {
+                val row = viewModel.keyboardPost()
+                if (row != null) when (command) {
+                    Shortcut.REPLY -> viewModel.composeReply(row.id)
+                    Shortcut.QUOTE -> viewModel.composeQuote(row.id)
+                    Shortcut.BOOST -> viewModel.toggleBoost(row.id)
+                    Shortcut.FAVORITE -> viewModel.toggleFavorite(row.id)
+                    Shortcut.BOOKMARK -> viewModel.toggleBookmark(row.id)
+                    Shortcut.MEDIA -> viewModel.playMedia(row.id)
+                    Shortcut.LINKS -> viewModel.openPostLinks(row.id)
+                    Shortcut.BROWSER -> viewModel.keyboardOpenBrowser(row.id)
+                    Shortcut.COPY -> viewModel.copyRow(row.id)
+                    Shortcut.AUTHOR -> viewModel.openUserTimeline(row.id)
+                    Shortcut.PROFILE -> viewModel.openUserProfile(row.id)
+                    Shortcut.MESSAGE -> viewModel.messageUser(row.id)
+                    Shortcut.EDIT -> if (row.isMine) viewModel.composeEdit(row.id)
+                        else viewModel.announceKeyboard("You can only edit your own post.")
+                    Shortcut.FOLLOW -> viewModel.keyboardCoreAction("FollowToggle", row.id)
+                    Shortcut.USER_INFO -> viewModel.speakUser(row.id)
+                    Shortcut.PARENT -> viewModel.speakReply(row.id)
+                    Shortcut.ALIAS -> viewModel.beginAlias(row.id)
+                    Shortcut.THREAD -> viewModel.openThread(row.id)
+                    Shortcut.ACTIONS -> viewModel.keyboardMenu(row.id)
+                    else -> Unit
+                }
+            }
+        }
+        true
+    }
 
     // Keep the pager and the core's selected timeline in sync both ways.
     LaunchedEffect(currentTab) {
@@ -178,6 +251,23 @@ fun HomeScreen(
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(text = { Text("Go to top") }, onClick = {
+                                menuOpen = false; viewModel.keyboardTop()
+                            })
+                            DropdownMenuItem(text = { Text("Mentions") }, onClick = {
+                                menuOpen = false; viewModel.keyboardNamedTimeline("mentions")
+                            })
+                            if (accounts.firstOrNull { it.key == selected }?.platform == "mastodon") {
+                                DropdownMenuItem(text = { Text("Messages") }, onClick = {
+                                    menuOpen = false; viewModel.keyboardMessages()
+                                })
+                            }
+                            DropdownMenuItem(text = { Text("Keyboard help") }, onClick = {
+                                menuOpen = false; activity?.showKeyboardHelp = true
+                            })
+                            DropdownMenuItem(text = { Text("Keyboard test") }, onClick = {
+                                menuOpen = false; activity?.openKeyboardTest()
+                            })
                             DropdownMenuItem(
                                 text = { Text("Add timeline or search") },
                                 onClick = { menuOpen = false; onOpenAddTimeline() },
@@ -293,6 +383,12 @@ fun HomeScreen(
                         }
                     },
                 )
+                if (preparingEdit) {
+                    Row {
+                        Text("Opening editor…",Modifier.padding(12.dp))
+                        TextButton(onClick = viewModel::cancelEditPreparation) { Text("Cancel editor") }
+                    }
+                }
                 AccountPicker(
                     accounts = accounts,
                     selectedKey = selected,
@@ -325,6 +421,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) { pageIndex ->
+            val positionKey = viewModel.readingKey(pageIndex)
             StatusList(
                 rows = rowsByTab[pageIndex] ?: emptyList(),
                 isCurrent = pageIndex == pagerState.currentPage,
@@ -332,14 +429,18 @@ fun HomeScreen(
                 // Which timeline this page is showing. Switching accounts (or closing
                 // a tab) reuses the page for a different timeline, and that page has
                 // to forget its scroll state and restore the new timeline's position.
-                timelineKey = tabs.getOrNull(pageIndex)
-                    ?.let { "$selected/${it.kind}/${it.title}" } ?: "$pageIndex",
+                timelineKey = positionKey,
+                readingPlace = viewModel.readingPlace(positionKey),
+                focusEpoch = { viewModel.readingFocusEpoch(positionKey) },
+                rememberViewport = { id, offset, index -> viewModel.rememberViewport(positionKey,id,offset,index) },
                 scrollRequest = scrollRequest?.takeIf { it.tab == pageIndex },
                 actionOrder = postActionOrder,
+                keyboardRequest = keyboardRequest?.takeIf { pageIndex == currentTab },
                 onOpenLink = viewModel::openLink,
                 onOpenLinks = viewModel::openPostLinks,
                 onLoadOlder = { viewModel.loadOlder(automatic = true) },
                 onNoteSelection = viewModel::noteSelection,
+                onKeyboardSelect = viewModel::keyboardSelectPost,
                 onOpenThread = viewModel::openThread,
                 onOpenAuthor = viewModel::openUserTimeline,
                 onOpenProfile = viewModel::openUserProfile,
@@ -784,12 +885,17 @@ private fun StatusList(
     isCurrent: Boolean,
     selectedId: String,
     timelineKey: String,
+    readingPlace: TimelineReadingPlace?,
+    focusEpoch: () -> Long,
+    rememberViewport: (String, Int, Int) -> Unit,
     scrollRequest: CoreViewModel.ScrollRequest?,
     actionOrder: List<String>,
+    keyboardRequest: CoreViewModel.KeyboardRowRequest?,
     onOpenLink: (String) -> Unit,
     onOpenLinks: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onNoteSelection: (String) -> Unit,
+    onKeyboardSelect: (String) -> Unit,
     onOpenThread: (String) -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -815,20 +921,41 @@ private fun StatusList(
     onSetRelationship: (accountId: String, action: String, acct: String) -> Unit,
     onMessageRequest: (rowId: String, accept: Boolean) -> Unit,
 ) {
-    if (rows.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No posts yet.")
-        }
-        return
-    }
-
     // Keyed on the timeline: a page reused for a different timeline (account switch,
     // closed tab) must start from that timeline's own position, not keep this one's
     // scroll offset.
-    val listState = remember(timelineKey) { LazyListState() }
+    val entryPlace = remember(timelineKey) { readingPlace }
+    var entrySelected by remember(timelineKey) { mutableStateOf(entryPlace?.visibleId ?: selectedId) }
+    val entryFocusEpoch = remember(timelineKey) { focusEpoch() }
+    val initialRestore = remember(timelineKey) { TimelineReadingPositions.resolve(entryPlace,rows.map { it.id },entrySelected) }
+    val listState = remember(timelineKey) {
+        LazyListState(initialRestore.index,initialRestore.offset)
+    }
+    var restored by remember(timelineKey) { mutableStateOf(rows.isNotEmpty() && initialRestore.exact) }
+
+    fun saveViewport() {
+        if (!restored) return
+        val first = listState.layoutInfo.visibleItemsInfo.firstOrNull() ?: return
+        val id = first.key as? String ?: return
+        rememberViewport(id,listState.firstVisibleItemScrollOffset,first.index)
+    }
+    DisposableEffect(listState,timelineKey) { onDispose { saveViewport() } }
+    LaunchedEffect(listState,timelineKey) {
+        snapshotFlow {
+            val first = listState.layoutInfo.visibleItemsInfo.firstOrNull()
+            listOf(first?.key,listState.firstVisibleItemScrollOffset,first?.index,listState.isScrollInProgress)
+        }.distinctUntilChanged().debounce(200).collect {
+            if (!listState.isScrollInProgress) saveViewport()
+        }
+    }
+
+    if (rows.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No posts yet.") }
+        return
+    }
 
     // Load older posts as the end of the list approaches (visible page only).
-    val shouldLoadOlder by remember(rows.size, isCurrent) {
+    val shouldLoadOlder by remember(listState, rows.size, isCurrent) {
         derivedStateOf {
             if (!isCurrent) return@derivedStateOf false
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
@@ -848,28 +975,33 @@ private fun StatusList(
     // Restore the position the core remembers, once, when this tab first fills.
     // Afterwards the core's position follows what we report, so re-applying it on
     // every timeline update would snap the list under the reader on each refresh.
-    var restored by remember(timelineKey) { mutableStateOf(false) }
     LaunchedEffect(timelineKey, rows, selectedId) {
         if (restored || rows.isEmpty()) return@LaunchedEffect
-        if (selectedId.isBlank()) {
+        if (focusEpoch() != entryFocusEpoch) { restored = true; saveViewport(); return@LaunchedEffect }
+        if (entrySelected.isBlank() && entryPlace == null) entrySelected = selectedId
+        if (entrySelected.isBlank()) {
             restored = true // nowhere to go back to: the top is the position
             return@LaunchedEffect
         }
         // The remembered row may not be in the first batch — a cache load can land
         // before the posts around it do. Keep waiting rather than giving up and
         // stranding the reader at the top of the timeline.
-        val idx = rows.indexOfFirst { it.id == selectedId }
+        val idx = rows.indexOfFirst { it.id == entrySelected }
         if (idx < 0) return@LaunchedEffect
         restored = true
-        if (idx > 0) listState.scrollToItem(idx)
+        listState.scrollToItem(idx,entryPlace?.offset ?: 0)
     }
 
-    // Move only when the core asks (a synced-position restore, Go Back, jump to a
-    // reply's parent, a find hit) — one scroll per request.
-    LaunchedEffect(scrollRequest?.serial) {
+    // Explicit UI requests and an initial core position may move the viewport.
+    // Retry if the target arrives in a later batch; the delivery gate prevents replay.
+    LaunchedEffect(scrollRequest?.serial, rows) {
         val target = scrollRequest ?: return@LaunchedEffect
         val idx = currentRows.value.indexOfFirst { it.id == target.id }
-        if (idx >= 0) listState.scrollToItem(idx)
+        if (idx >= 0 && target.delivery.claim()) {
+            restored = true
+            listState.scrollToItem(idx)
+            saveViewport()
+        }
     }
 
     // Report the reading position once a scroll settles. Reporting on every
@@ -884,8 +1016,7 @@ private fun StatusList(
                 // Once the reader has moved, a late-arriving remembered row must not
                 // pull them back to it.
                 restored = true
-                currentRows.value.getOrNull(listState.firstVisibleItemIndex)
-                    ?.let { onNoteSelection(it.id) }
+                saveViewport()
             }
             wasScrolling = now
         }
@@ -896,7 +1027,9 @@ private fun StatusList(
             StatusRow(
                 row = row,
                 actionOrder = actionOrder,
+                keyboardRequest = keyboardRequest?.takeIf { it.id == row.id },
                 onSelect = onNoteSelection,
+                onKeyboardSelect = onKeyboardSelect,
                 onOpenLink = onOpenLink,
                 onOpenLinks = onOpenLinks,
                 onOpenThread = onOpenThread,

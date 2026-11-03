@@ -161,7 +161,13 @@ class FastSmMessagingService : FirebaseMessagingService() {
                 .also { PushActionReceiver.addActions(context, it, id, type, token, notificationId) }
                 .build()
             if (!PushManager.hasNotificationPermission(context)) return
-            runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+            try {
+                NotificationManagerCompat.from(context).notify(id, notification)
+            } catch (_: SecurityException) {
+                // Permission can be revoked between the check and delivery.
+            } catch (_: Exception) {
+                // Match the upstream failure handling without crashing delivery.
+            }
         }
     }
 }

@@ -49,9 +49,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import me.masonasons.fastsm.keyboard.ComposerKeys
+import me.masonasons.fastsm.keyboard.ComposerSendBinding
+import me.masonasons.fastsm.keyboard.KeyboardMeta
+import me.masonasons.fastsm.keyboard.EnterAction
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -131,6 +138,7 @@ fun ComposeScreen(
     }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var mainFieldFocused by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -187,6 +195,7 @@ fun ComposeScreen(
     val canSend = (field.text.isNotBlank() || attachments.isNotEmpty()) && remaining >= 0 && !sending
 
     fun send() {
+        if (sending || !canSend) return
         error = null
         sending = true
         val mentions = ctx.participants.filter { checked[it.acct] == true }.map { it.acct }
@@ -204,6 +213,11 @@ fun ComposeScreen(
             }
             viewModel.sendPost(text = body, cw = cw, visibility = visibility, mentions = mentions, media = media)
         }
+    }
+
+    ComposerSendBinding(enabled = mainFieldFocused && !mentionOpen && !confirmDiscard) {
+        if (!sending && canSend) send()
+        true
     }
 
     // Open the @-mention picker, seeded from the handle word under the caret.
@@ -298,22 +312,37 @@ fun ComposeScreen(
                 enabled = !sending,
                 minLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                // Hardware keyboards, matching the desktop apps: when Return sends,
-                // Shift+Return and Ctrl+Return insert a newline; when it doesn't,
-                // Ctrl+Return sends.
+                // Explicit send chords also have an Activity route, before Compose's
+                // text input handling. This preview preserves Enter/newline behavior.
                 modifier = Modifier
                     .fillMaxWidth()
+                    .onFocusChanged { mainFieldFocused = it.isFocused }
                     .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown ||
-                            (event.key != Key.Enter && event.key != Key.NumPadEnter)) {
-                            return@onPreviewKeyEvent false
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        val native = event.nativeKeyEvent
+                        val control = KeyboardMeta.control(native.metaState)
+                        val shift = KeyboardMeta.shift(native.metaState)
+                        val alt = KeyboardMeta.alt(native.metaState)
+                        val meta = KeyboardMeta.meta(native.metaState)
+                        if (ComposerKeys.sendChord(native.keyCode, control, shift, alt, meta)) {
+                            if (native.repeatCount == 0 && !sending && canSend) send()
+                            return@onPreviewKeyEvent true
                         }
-                        val newlineCombo = event.isCtrlPressed || event.isShiftPressed
-                        val shouldSend =
-                            if (ctx.enterToSend) !newlineCombo else event.isCtrlPressed
-                        if (!shouldSend) return@onPreviewKeyEvent false
-                        if (!sending && canSend) send()
-                        true
+                        if (KeyboardMeta.enterCode(native.keyCode, control) != android.view.KeyEvent.KEYCODE_ENTER)
+                            return@onPreviewKeyEvent false
+                        when (ComposerKeys.enter(control, shift,
+                            ctx.enterToSend, alt, meta,
+                            event.nativeKeyEvent.repeatCount > 0)) {
+                            EnterAction.DEFAULT -> false
+                            EnterAction.CONSUME -> true
+                            EnterAction.SEND -> { if (!sending && canSend) send(); true }
+                            EnterAction.NEWLINE -> {
+                                val start = field.selection.min
+                                field = TextFieldValue(field.text.replaceRange(start, field.selection.max, "\n"),
+                                    TextRange(start + 1))
+                                true
+                            }
+                        }
                     },
             )
 

@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import me.masonasons.fastsm.core.FastSmCore
+import me.masonasons.fastsm.keyboard.KeyboardShortcuts
+import me.masonasons.fastsm.keyboard.TimelineReadingPlace
+import me.masonasons.fastsm.keyboard.TimelineReadingPositions
 import me.masonasons.fastsm.push.FastSmMessagingService
 import me.masonasons.fastsm.push.PushManager
 import org.json.JSONArray
@@ -242,12 +245,43 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     private val _selectedIdByTab = MutableStateFlow<Map<Int, String>>(emptyMap())
     val selectedIdByTab: StateFlow<Map<Int, String>> = _selectedIdByTab.asStateFlow()
 
+    private val readingPositions by lazy {
+        val prefs = getApplication<Application>().getSharedPreferences("keyboard-reading-positions", 0)
+        TimelineReadingPositions(
+            load = { key -> runCatching {
+                prefs.getString(key, null)?.let { raw ->
+                    val j = JSONObject(raw)
+                    TimelineReadingPlace(j.getString("visible"),j.optInt("offset"),j.optInt("index"),j.optString("focused",j.getString("visible")))
+                }
+            }.getOrNull() },
+            save = { key, place -> prefs.edit().putString(key, JSONObject().apply {
+                put("visible",place.visibleId); put("offset",place.offset); put("index",place.index); put("focused",place.focusedId)
+            }.toString()).apply() }
+        )
+    }
+    private var explicitCoreMoveKey: String? = null
+    private var explicitCoreMoveUntil = 0L
+    fun readingKey(index: Int): String =
+        "${timelineAccount.ifBlank { _selectedAccount.value }}|${_tabs.value.getOrNull(index)?.kind ?: index}"
+    fun readingPlace(key: String) = readingPositions.get(key)
+    fun readingFocusEpoch(key: String) = readingPositions.focusEpoch(key)
+    fun rememberViewport(key: String, id: String, offset: Int, index: Int) {
+        val changed = readingPositions.viewport(key,id,offset,index)
+        if (changed && key == readingKey(_currentTab.value) && _composeContext.value == null) {
+            val rows = _rowsByTab.value[_currentTab.value].orEmpty()
+            val focused = readingPositions.get(key)?.focusedId
+            val selected = focused?.takeIf { candidate -> rows.any { it.id == candidate } } ?: id
+            if (rows.any { it.id == selected }) noteSelection(selected)
+        }
+    }
+
     /**
      * A one-shot "move to this row" from the core (a marker restore, Go Back, jump
      * to a reply's parent, a find hit). The serial makes repeats distinct so the
      * list scrolls once per request and never on its own data changes.
      */
-    data class ScrollRequest(val tab: Int, val id: String, val serial: Long)
+    data class ScrollRequest(val tab: Int, val id: String, val serial: Long,
+                             val delivery: me.masonasons.fastsm.keyboard.UiRequestDelivery = me.masonasons.fastsm.keyboard.UiRequestDelivery())
 
     private var scrollSerial = 0L
     private val _scrollRequest = MutableStateFlow<ScrollRequest?>(null)
@@ -288,6 +322,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while the composer is open (from a compose_context event). */
     private val _composeContext = MutableStateFlow<ComposeContext?>(null)
     val composeContext: StateFlow<ComposeContext?> = _composeContext.asStateFlow()
+    private val editPreparation = me.masonasons.fastsm.keyboard.EditPreparation()
+    private val _preparingEdit = MutableStateFlow(false)
+    val preparingEdit = _preparingEdit.asStateFlow()
+    fun cancelEditPreparation() { editPreparation.cancel(); _preparingEdit.value = false }
 
     /** Non-null while a user-disambiguation picker should be shown. */
     private val _userPicker = MutableStateFlow<UserPickerRequest?>(null)
@@ -420,6 +458,105 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     // arrive, so we can honour the check_updates_on_startup preference).
     private var startupUpdateChecked = false
 
+    private var keyboardFocusId: String? = null
+    private var timelineAccount = ""
+    private var keyboardFocusAccount = ""
+    private var keyboardFocusTab = -1
+    data class KeyboardRowRequest(val id: String, val action: String, val serial: Long,
+                                  val delivery: me.masonasons.fastsm.keyboard.UiRequestDelivery = me.masonasons.fastsm.keyboard.UiRequestDelivery())
+    private var keyboardSerial = 0L
+    private val _keyboardRowRequest = MutableStateFlow<KeyboardRowRequest?>(null)
+    val keyboardRowRequest = _keyboardRowRequest.asStateFlow()
+
+    fun clearKeyboardFocus() { keyboardFocusId = null }
+
+    fun keyboardFocus(tag: String?, description: String?) {
+        val rows = _rowsByTab.value[_currentTab.value].orEmpty()
+        val id = KeyboardShortcuts.focusedRow(tag, description, rows, { it.id }, { it.text })
+        if (id != null && id == keyboardFocusId && keyboardFocusAccount == _selectedAccount.value &&
+            keyboardFocusTab == _currentTab.value) return
+        keyboardFocusId = id
+        keyboardFocusAccount = _selectedAccount.value
+        keyboardFocusTab = _currentTab.value
+        if (id != null) {
+            readingPositions.focus(readingKey(_currentTab.value),id)
+            _selectedIdByTab.update { it + (_currentTab.value to id) }
+            noteSelection(id)
+        }
+    }
+
+    fun keyboardSelectPost(id: String) {
+        keyboardFocus(KeyboardShortcuts.ROW_PREFIX + id, null)
+    }
+
+    fun keyboardPost(): RowUi? {
+        val id = keyboardFocusId
+        val row = if (keyboardFocusAccount == _selectedAccount.value &&
+            keyboardFocusTab == _currentTab.value) {
+            _rowsByTab.value[_currentTab.value]?.firstOrNull { it.id == id }
+        } else null
+        if (row == null) announceKeyboard("Focus a post with your usual reading commands first. You can also choose Use keyboard commands on this post from its actions.")
+        return row
+    }
+
+    fun announceKeyboard(text: String) { _announcements.tryEmit(text) }
+
+    fun keyboardMenu(id: String) {
+        requestScroll(_currentTab.value, id)
+        _keyboardRowRequest.value = KeyboardRowRequest(id, "menu", ++keyboardSerial)
+    }
+
+    fun keyboardTimeline(direction: Int) {
+        val count = _tabs.value.size
+        if (count == 0) return
+        val next = ((_currentTab.value + direction) % count + count) % count
+        clearKeyboardFocus()
+        selectTimeline(next)
+        announceKeyboard(_tabs.value[next].title)
+    }
+
+    fun keyboardNamedTimeline(kind: String) {
+        clearKeyboardFocus()
+        val existing = _tabs.value.indexOfFirst { it.kind == kind }
+        if (existing >= 0) { selectTimeline(existing); announceKeyboard(_tabs.value[existing].title) }
+        else spawnTimeline(kind)
+    }
+
+    fun keyboardMessages() {
+        if (_accounts.value.firstOrNull { it.key == _selectedAccount.value }?.platform != "mastodon") {
+            announceKeyboard("Messages is available for Mastodon accounts.")
+            return
+        }
+        keyboardNamedTimeline("conversations")
+    }
+
+    fun keyboardTop() {
+        val tab = _currentTab.value
+        val first = _rowsByTab.value[tab]?.firstOrNull()
+        if (first == null) { announceKeyboard("This timeline has no loaded posts."); return }
+        clearKeyboardFocus()
+        readingPositions.top(readingKey(tab),first.id)
+        _selectedIdByTab.update { it + (tab to first.id) }
+        noteSelection(first.id)
+        requestScroll(tab,first.id)
+        _keyboardRowRequest.value = KeyboardRowRequest(first.id,"focus",++keyboardSerial)
+        announceKeyboard("Top of timeline.")
+    }
+
+    fun keyboardAccount(direction: Int) {
+        val accounts = _accounts.value
+        if (accounts.isEmpty()) return
+        val current = accounts.indexOfFirst { it.key == _selectedAccount.value }.coerceAtLeast(0)
+        clearKeyboardFocus()
+        switchAccount(accounts[((current + direction) % accounts.size + accounts.size) % accounts.size].key)
+    }
+
+    fun keyboardCoreAction(action: String, id: String) =
+        core.dispatch("perform_action") { put("action", action); put("id", id) }
+
+    fun keyboardOpenBrowser(id: String) = core.dispatch("open_status") { put("id", id) }
+
+
     init {
         core.setEventListener { json -> onEvent(json) }
         core.dispatch("start") // load persisted accounts + timelines
@@ -502,7 +639,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                         val t = arr.getJSONObject(i)
                         add(
                             TabUi(
-                                title = t.optString("title"),
+                                title = if (t.optString("kind") == "conversations") "Messages" else t.optString("title"),
                                 kind = t.optString("kind"),
                                 dismissable = t.optBoolean("dismissable"),
                                 pinned = t.optBoolean("pinned"),
@@ -511,8 +648,28 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
                 }
+                val account = e.optString("account")
+                val oldKinds = _tabs.value.map { it.kind }
+                val newKinds = list.map { it.kind }
+                if (account != timelineAccount) {
+                    cancelEditPreparation()
+                    _rowsByTab.value = emptyMap()
+                    _selectedIdByTab.value = emptyMap()
+                    _scrollRequest.value = null
+                    _keyboardRowRequest.value = null
+                    explicitCoreMoveKey = null
+                    clearKeyboardFocus()
+                } else if (oldKinds != newKinds) {
+                    _rowsByTab.value = me.masonasons.fastsm.keyboard.remapTimelineSlots(oldKinds,newKinds,_rowsByTab.value)
+                    _selectedIdByTab.value = me.masonasons.fastsm.keyboard.remapTimelineSlots(oldKinds,newKinds,_selectedIdByTab.value)
+                    _scrollRequest.value = null
+                    _keyboardRowRequest.value = null
+                    explicitCoreMoveKey = null
+                    clearKeyboardFocus()
+                }
                 _tabs.value = list
                 _currentTab.value = e.optInt("current", 0)
+                timelineAccount = e.optString("account")
                 // Drop stale row lists for indices that no longer exist.
                 _rowsByTab.update { old -> old.filterKeys { it < list.size } }
             }
@@ -556,13 +713,21 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 _rowsByTab.update { it + (index to rows) }
-                _selectedIdByTab.update { it + (index to e.optString("selected_id")) }
+                val preferred = readingPositions.preferredSelection(readingKey(index),rows.map { it.id },e.optString("selected_id"))
+                _selectedIdByTab.update { it + (index to preferred) }
             }
 
             "auth_result" ->
                 _authResults.tryEmit(AuthResult(e.optBoolean("ok"), e.optString("error")))
 
-            "compose_context" -> _composeContext.value = parseComposeContext(e)
+            "compose_context" -> {
+                if (e.optString("mode") == "edit") {
+                    val accept = editPreparation.finish()
+                    _preparingEdit.value = false
+                    if (!accept || _composeContext.value != null) return
+                } else cancelEditPreparation()
+                _composeContext.value = parseComposeContext(e)
+            }
             "post_result" -> _postResults.tryEmit(e.optBoolean("ok"))
 
             "profile_editor" -> {
@@ -808,7 +973,14 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            "announce" -> _announcements.tryEmit(e.optString("message"))
+            "announce" -> {
+                val message = e.optString("message")
+                if (message.startsWith("Can't edit") || message.startsWith("You can only edit") ||
+                    message.startsWith("Editing posts isn't supported")) {
+                    editPreparation.fail(); _preparingEdit.value = false
+                }
+                _announcements.tryEmit(message)
+            }
             "copy_to_clipboard" -> _copyText.tryEmit(e.optString("text"))
             "open_url" -> _openUrls.tryEmit(e.optString("url"))
 
@@ -818,6 +990,10 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 val id = e.optString("id")
                 if (id.isNotBlank()) {
                     val idx = _currentTab.value
+                    val key = readingKey(idx)
+                    val explicit = explicitCoreMoveKey == key && android.os.SystemClock.uptimeMillis() <= explicitCoreMoveUntil
+                    explicitCoreMoveKey = null
+                    if (!readingPositions.acceptsCoreMove(key,explicit)) return
                     _selectedIdByTab.update { it + (idx to id) }
                     requestScroll(idx, id)
                 }
@@ -871,9 +1047,15 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun finishMastodonLogin(code: String) =
         core.dispatch("finish_mastodon_login") { put("code", code) }
 
-    fun switchAccount(key: String) = core.dispatch("select_account") { put("key", key) }
+    fun switchAccount(key: String) {
+        cancelEditPreparation()
+        core.dispatch("select_account") { put("key", key) }
+    }
 
-    fun removeAccount(key: String) = core.dispatch("remove_account") { put("key", key) }
+    fun removeAccount(key: String) {
+        cancelEditPreparation()
+        core.dispatch("remove_account") { put("key", key) }
+    }
 
     fun selectTimeline(index: Int) {
         _currentTab.value = index
@@ -1011,7 +1193,11 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     fun speakReply(rowId: String) = core.dispatch("speak_reply") { put("id", rowId); put("jump", false) }
 
     /** Jump to the post this reply is replying to (select it, or open the thread). */
-    fun jumpToReply(rowId: String) = core.dispatch("speak_reply") { put("id", rowId); put("jump", true) }
+    fun jumpToReply(rowId: String) {
+        explicitCoreMoveKey = readingKey(_currentTab.value)
+        explicitCoreMoveUntil = android.os.SystemClock.uptimeMillis() + 2_000
+        core.dispatch("speak_reply") { put("id", rowId); put("jump", true) }
+    }
 
     /** Open a specific picked user's profile. */
     fun openUserProfilePicked(rowId: String, accountId: String) {
@@ -1480,18 +1666,29 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- Compose ----------------------------------------------------------
 
-    fun composeNew() = core.dispatch("compose_context") { put("mode", "new") }
-
-    fun composeReply(id: String) = core.dispatch("compose_context") {
-        put("mode", "reply"); put("id", id)
+    fun composeNew() {
+        cancelEditPreparation()
+        core.dispatch("compose_context") { put("mode", "new") }
     }
 
-    fun composeQuote(id: String) = core.dispatch("compose_context") {
-        put("mode", "quote"); put("id", id)
+    fun composeReply(id: String) {
+        cancelEditPreparation()
+        core.dispatch("compose_context") { put("mode", "reply"); put("id", id) }
     }
 
-    fun composeEdit(id: String) = core.dispatch("compose_context") {
-        put("mode", "edit"); put("id", id)
+    fun composeQuote(id: String) {
+        cancelEditPreparation()
+        core.dispatch("compose_context") { put("mode", "quote"); put("id", id) }
+    }
+
+    fun composeEdit(id: String) {
+        if (!editPreparation.begin()) {
+            announceKeyboard("An editor request is still finishing. Please wait rather than pressing Edit again.")
+            return
+        }
+        _preparingEdit.value = true
+        announceKeyboard("Opening editor. Fetching the post's original text.")
+        core.dispatch("compose_context") { put("mode", "edit"); put("id", id) }
     }
 
     fun deletePost(id: String) = core.dispatch("delete_post") { put("id", id) }
