@@ -36,7 +36,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case VK_UP:
         case VK_DOWN:
-            send(s, {{"cmd", "media_volume"}, {"by", wp == VK_UP ? 10 : -10}});
+            send(s, {{"cmd", "media_volume"}, {"dir", wp == VK_UP ? 1 : -1}});
+            return 0;
+        case VK_PRIOR: // Page Up / Page Down: the same, by a bigger step
+        case VK_NEXT:
+            send(s, {{"cmd", "media_volume"},
+                     {"dir", wp == VK_PRIOR ? 1 : -1},
+                     {"coarse", true}});
             return 0;
         case 'P':
             send(s, {{"cmd", "media_position"}});

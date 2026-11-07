@@ -8,6 +8,14 @@
 
 namespace fastsm::media {
 
+// How far a volume key moves the level, on the 0-100 scale media_volume uses.
+// The arrow keys take the fine step; Page Up and Page Down take the coarse one,
+// so the range can be crossed in a few presses. Kept here rather than in each
+// player so they cannot drift apart: the Linux one used to carry a comment
+// reminding whoever touched it to match the Windows figure by hand.
+constexpr int kVolumeStep = 10;
+constexpr int kVolumeStepCoarse = 25;
+
 // Plays audio attachments and YouTube links through FastPlay's engine (the
 // fastplay_engine library: FFmpeg for nearly every format and stream, yt-dlp for
 // YouTube, fetched and kept up to date by the engine itself).

@@ -244,12 +244,39 @@ final class CorePlayerViewController: UIViewController {
         ])
     }
 
+    // With a hardware keyboard attached, the same keys as the desktop players:
+    // Space plays or pauses, the arrows seek and change the volume, and Page
+    // Up/Down change it by a bigger step. The buttons above remain the way to do
+    // all of it by touch.
+    override var keyCommands: [UIKeyCommand]? {
+        [
+            UIKeyCommand(input: " ", modifierFlags: [], action: #selector(toggle),
+                         discoverabilityTitle: "Play or Pause"),
+            UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [],
+                         action: #selector(back), discoverabilityTitle: "Back 5 Seconds"),
+            UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [],
+                         action: #selector(forward), discoverabilityTitle: "Forward 5 Seconds"),
+            UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [],
+                         action: #selector(louder), discoverabilityTitle: "Volume Up"),
+            UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [],
+                         action: #selector(quieter), discoverabilityTitle: "Volume Down"),
+            UIKeyCommand(input: UIKeyCommand.inputPageUp, modifierFlags: [],
+                         action: #selector(muchLouder),
+                         discoverabilityTitle: "Volume Up More"),
+            UIKeyCommand(input: UIKeyCommand.inputPageDown, modifierFlags: [],
+                         action: #selector(muchQuieter),
+                         discoverabilityTitle: "Volume Down More"),
+        ]
+    }
+
     @objc private func toggle() { state.mediaToggle() }
     @objc private func back() { state.mediaSeek(by: -5) }
     @objc private func forward() { state.mediaSeek(by: 5) }
     @objc private func position() { state.mediaPosition() }
-    @objc private func louder() { state.mediaVolume(by: 10) }
-    @objc private func quieter() { state.mediaVolume(by: -10) }
+    @objc private func louder() { state.mediaVolume(up: true) }
+    @objc private func quieter() { state.mediaVolume(up: false) }
+    @objc private func muchLouder() { state.mediaVolume(up: true, coarse: true) }
+    @objc private func muchQuieter() { state.mediaVolume(up: false, coarse: true) }
     @objc private func stop() {
         state.mediaStop()
         closeFromCore()

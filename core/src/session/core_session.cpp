@@ -4338,7 +4338,14 @@ void CoreSession::cmd_media_position() {
 }
 
 void CoreSession::cmd_media_volume(const json& cmd) {
-    const int level = std::clamp(settings_.media_volume + cmd.value("by", 10), 0, 100);
+    // `dir` (-1 down, 1 up) with `coarse` for the Page Up/Down jump, so a front
+    // end doesn't carry the step sizes itself. An explicit `by` still wins, for a
+    // caller that wants a particular amount.
+    const int step = cmd.value("coarse", false) ? media::kVolumeStepCoarse : media::kVolumeStep;
+    int by = cmd.value("by", 0);
+    if (by == 0)
+        by = cmd.value("dir", 1) < 0 ? -step : step;
+    const int level = std::clamp(settings_.media_volume + by, 0, 100);
     cmd_set_media_volume({{"volume", level}}); // persists, and is heard at once
     emit_announce("Volume " + std::to_string(level) + " percent");
 }

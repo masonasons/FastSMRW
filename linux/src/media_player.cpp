@@ -4,6 +4,8 @@
 
 #include <gst/gst.h>
 
+#include "fastsm/media/media_player.hpp" // kVolumeStep / kVolumeStepCoarse
+
 namespace fastsmgtk {
 
 namespace {
@@ -195,7 +197,7 @@ bool show_media_player(GtkWindow* parent, const std::string& title, const std::s
         GTK_RESPONSE_CANCEL, nullptr);
     GtkWidget* label = gtk_label_new(
         "Playing. Space pauses, Left and Right seek, Up and Down change the volume, "
-        "Escape closes.");
+        "Page Up and Page Down change it by more, Escape closes.");
     gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
     gtk_container_set_border_width(
         GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), 12);
@@ -217,11 +219,20 @@ bool show_media_player(GtkWindow* parent, const std::string& title, const std::s
                 player_ctx.player->seek(5);
                 return TRUE;
             case GDK_KEY_Up:
-            case GDK_KEY_Down: {
-                // Same step as the Windows player, so the shared saved level moves
-                // the same way whichever app you set it from.
-                const int level =
-                    player_ctx.player->adjust_volume(event->keyval == GDK_KEY_Up ? 10 : -10);
+            case GDK_KEY_Down:
+            case GDK_KEY_Page_Up:
+            case GDK_KEY_Page_Down: {
+                // This player is Linux's own (the core's needs FastPlay's engine),
+                // so it moves the level itself -- but by the core's steps, so the
+                // shared saved level moves the same way whichever app you set it
+                // from. Page Up/Down take the bigger one.
+                const bool up =
+                    event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_Page_Up;
+                const bool coarse = event->keyval == GDK_KEY_Page_Up ||
+                                    event->keyval == GDK_KEY_Page_Down;
+                const int step =
+                    coarse ? fastsm::media::kVolumeStepCoarse : fastsm::media::kVolumeStep;
+                const int level = player_ctx.player->adjust_volume(up ? step : -step);
                 if (player_ctx.on_volume && *player_ctx.on_volume)
                     (*player_ctx.on_volume)(level); // persist for the next thing you play
                 (*player_ctx.speak)("Volume " + std::to_string(level) + " percent");

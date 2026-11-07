@@ -661,7 +661,11 @@ final class AppState {
     // The core's player: what its keys and buttons do. The core says what happened.
     func mediaToggle() { client.send("media_toggle", [:]) }
     func mediaSeek(by seconds: Double) { client.send("media_seek", ["by": seconds]) }
-    func mediaVolume(by percent: Int) { client.send("media_volume", ["by": percent]) }
+    /// Move the volume one step. `coarse` is the bigger Page Up/Down jump; the
+    /// core owns both step sizes.
+    func mediaVolume(up: Bool, coarse: Bool = false) {
+        client.send("media_volume", ["dir": up ? 1 : -1, "coarse": coarse])
+    }
     func mediaPosition() { client.send("media_position", [:]) }
     func mediaStop() { client.send("media_stop", [:]) }
     // The player's settings as FastPlay keeps them (FastPlay.ini)
