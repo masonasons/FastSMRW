@@ -44,6 +44,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                      {"dir", wp == VK_PRIOR ? 1 : -1},
                      {"coarse", true}});
             return 0;
+        case VK_HOME: // Home / End: straight to full or silent
+        case VK_END:
+            send(s, {{"cmd", "media_volume"}, {"to", wp == VK_HOME ? 100 : 0}});
+            return 0;
         case 'P':
             send(s, {{"cmd", "media_position"}});
             return 0;

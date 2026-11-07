@@ -666,6 +666,8 @@ final class AppState {
     func mediaVolume(up: Bool, coarse: Bool = false) {
         client.send("media_volume", ["dir": up ? 1 : -1, "coarse": coarse])
     }
+    /// Set the volume outright, as Home and End do.
+    func mediaVolume(to percent: Int) { client.send("media_volume", ["to": percent]) }
     func mediaPosition() { client.send("media_position", [:]) }
     func mediaStop() { client.send("media_stop", [:]) }
     // The player's settings as FastPlay keeps them (FastPlay.ini)

@@ -54,9 +54,9 @@ final class ImageViewerWindowController: NSWindowController {
     }
 }
 
-/// AVPlayerView with Up/Down bound to the volume and Page Up/Down to a bigger
-/// jump of it, matching the Windows and Linux players (Left/Right stay
-/// AVPlayerView's own seek, Space its own play/pause).
+/// AVPlayerView with Up/Down bound to the volume, Page Up/Down to a bigger jump
+/// of it and Home/End to its ends, matching the Windows and Linux players
+/// (Left/Right stay AVPlayerView's own seek, Space its own play/pause).
 @MainActor
 final class VolumeKeyPlayerView: AVPlayerView {
     /// Called with the new level, 0-100, so it can be spoken and remembered.
@@ -65,31 +65,33 @@ final class VolumeKeyPlayerView: AVPlayerView {
     override func keyDown(with event: NSEvent) {
         let up = UInt16(126), down = UInt16(125)
         let pageUp = UInt16(116), pageDown = UInt16(121)
+        let home = UInt16(115), end = UInt16(119)
+        guard let player,
+              [up, down, pageUp, pageDown, home, end].contains(event.keyCode) else {
+            super.keyDown(with: event)
+            return
+        }
         // This view holds its own volume rather than the core's, so the steps are
         // repeated here; they match fastsm::media::kVolumeStep(Coarse).
-        let step: Int
+        let now = Int((player.volume * 100).rounded())
+        let target: Int
         switch event.keyCode {
-        case up: step = 10
-        case down: step = -10
-        case pageUp: step = 25
-        case pageDown: step = -25
-        default:
-            super.keyDown(with: event)
-            return
+        case up: target = now + 10
+        case down: target = now - 10
+        case pageUp: target = now + 25
+        case pageDown: target = now - 25
+        case home: target = 100
+        default: target = 0 // End
         }
-        guard let player else {
-            super.keyDown(with: event)
-            return
-        }
-        let clamped = max(0, min(100, Int((player.volume * 100).rounded()) + step))
+        let clamped = max(0, min(100, target))
         player.volume = Float(clamped) / 100
         onVolume?(clamped)
     }
 }
 
 /// An audio/video player. AVPlayerView exposes play/pause/scrubbing to VoiceOver;
-/// Space also toggles playback, Up/Down change the volume and Page Up/Down change
-/// it by a bigger step.
+/// Space also toggles playback, Up/Down change the volume, Page Up/Down change it
+/// by a bigger step, and Home/End go straight to full or silent.
 @MainActor
 final class MediaPlayerWindowController: NSWindowController, NSWindowDelegate {
     private let player: AVPlayer
@@ -204,6 +206,8 @@ final class PlayerKeyView: NSView {
         case 125: state.mediaVolume(up: false)                 // Down
         case 116: state.mediaVolume(up: true, coarse: true)    // Page Up
         case 121: state.mediaVolume(up: false, coarse: true)   // Page Down
+        case 115: state.mediaVolume(to: 100)                   // Home
+        case 119: state.mediaVolume(to: 0)                     // End
         case 35: state.mediaPosition()        // P
         case 53: window?.close()              // Escape
         default: super.keyDown(with: event)

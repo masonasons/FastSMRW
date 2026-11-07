@@ -245,9 +245,9 @@ final class CorePlayerViewController: UIViewController {
     }
 
     // With a hardware keyboard attached, the same keys as the desktop players:
-    // Space plays or pauses, the arrows seek and change the volume, and Page
-    // Up/Down change it by a bigger step. The buttons above remain the way to do
-    // all of it by touch.
+    // Space plays or pauses, the arrows seek and change the volume, Page Up/Down
+    // change it by a bigger step, and Home/End go straight to full or silent. The
+    // buttons above remain the way to do all of it by touch.
     override var keyCommands: [UIKeyCommand]? {
         [
             UIKeyCommand(input: " ", modifierFlags: [], action: #selector(toggle),
@@ -266,6 +266,11 @@ final class CorePlayerViewController: UIViewController {
             UIKeyCommand(input: UIKeyCommand.inputPageDown, modifierFlags: [],
                          action: #selector(muchQuieter),
                          discoverabilityTitle: "Volume Down More"),
+            UIKeyCommand(input: UIKeyCommand.inputHome, modifierFlags: [],
+                         action: #selector(fullVolume),
+                         discoverabilityTitle: "Full Volume"),
+            UIKeyCommand(input: UIKeyCommand.inputEnd, modifierFlags: [],
+                         action: #selector(silent), discoverabilityTitle: "Silent"),
         ]
     }
 
@@ -277,6 +282,8 @@ final class CorePlayerViewController: UIViewController {
     @objc private func quieter() { state.mediaVolume(up: false) }
     @objc private func muchLouder() { state.mediaVolume(up: true, coarse: true) }
     @objc private func muchQuieter() { state.mediaVolume(up: false, coarse: true) }
+    @objc private func fullVolume() { state.mediaVolume(to: 100) }
+    @objc private func silent() { state.mediaVolume(to: 0) }
     @objc private func stop() {
         state.mediaStop()
         closeFromCore()
