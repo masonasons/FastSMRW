@@ -1039,6 +1039,12 @@ void CoreSession::cmd_refresh_all() {
 }
 
 void CoreSession::cmd_resume() {
+    const bool was_backgrounded = backgrounded_.exchange(false);
+    if (was_backgrounded) {
+        log::write("resume: reopening audio and live streams");
+        sound_.resume(); // also holds back new-post chimes for the catch-up refresh
+        update_streaming();
+    }
     TimelineController* tc = current();
     if (!tc)
         return;
@@ -1052,6 +1058,12 @@ void CoreSession::cmd_resume() {
     // after resuming sets the flag again and still wins over the async pull.
     tc->reset_user_moved();
     tc->refresh();
+    // Nothing streamed or polled while in the background: catch the account's other
+    // open timelines up too (other accounts follow on the next auto-refresh).
+    if (was_backgrounded)
+        for (auto& other : timelines_)
+            if (other.get() != tc && (!other->account() || other->account()->background_refresh_allowed()))
+                other->refresh();
 }
 
 // The app is being backgrounded. On a phone the process can be suspended — or
@@ -1064,6 +1076,14 @@ void CoreSession::cmd_pause() {
         keys.push_back(key);
     for (const std::string& key : keys)
         commit_home_marker(key); // erases from marker_pending_, hence the snapshot
+    // Go idle. An open audio output keeps a phone awake (it holds the audio
+    // wakelock even when silent), and with it awake the streams and auto-refresh
+    // would keep the radio and CPU busy for a screen nobody is looking at.
+    if (!backgrounded_.exchange(true)) {
+        log::write("pause: closing audio and live streams until resume");
+        sound_.suspend();
+        streams_.clear(); // stop + join every stream
+    }
 }
 
 void CoreSession::cmd_load_gap(const json& cmd) {
@@ -5605,6 +5625,10 @@ CoreSession::timelines_for_account(const std::string& key) {
 }
 
 void CoreSession::update_streaming() {
+    if (backgrounded_.load()) {
+        streams_.clear(); // resume reconnects
+        return;
+    }
     if (!settings_.streaming_enabled) {
         if (!streams_.empty())
             log::write("update_streaming: streaming disabled, stopping all " +
@@ -5723,6 +5747,8 @@ void CoreSession::auto_refresh_loop() {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         if (!auto_refresh_running_.load())
             break;
+        if (backgrounded_.load())
+            continue; // resume refreshes; counting on would fire a burst the moment it does
         if (++rel_elapsed >= kRelativeRefreshSeconds) {
             rel_elapsed = 0;
             // Read current_ on the core loop, where the timeline state lives.

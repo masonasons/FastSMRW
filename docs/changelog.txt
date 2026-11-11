@@ -4,6 +4,8 @@ FastSMRW changelog
 0.6.1
 -----
 
+- Fixed: on Android and iPhone, FastSM no longer drains the battery in the background; it now stops its sound output, live updates and automatic refreshing while the app is not on screen, and catches up when you return.
+- Fixed: on Android, folding or unfolding the phone no longer briefly stops and restarts sounds and live updates.
 - New: in the media player, Page Up and Page Down change the volume by a bigger step than the arrows, and Home and End set it straight to full or silent.
 - New: closing a post you've started writing now asks before throwing it away; turn it off under Settings, Confirmation.
 - Fixed: on Windows, the Movement Units button's name showed garbled characters instead of an ellipsis.

@@ -66,8 +66,8 @@ private:
     void cmd_select_account(const nlohmann::json& cmd);
     void cmd_refresh();
     void cmd_refresh_all();
-    void cmd_resume(); // app returned from background: refresh + pull remote Home marker
-    void cmd_pause();  // app is being backgrounded: publish positions now, while we can
+    void cmd_resume(); // app returned from background: reopen audio, restream, refresh
+    void cmd_pause();  // backgrounded: publish positions now, then go idle
     void cmd_load_older(const nlohmann::json& cmd);
     void cmd_load_gap(const nlohmann::json& cmd);
     void cmd_note_selection(const nlohmann::json& cmd);
@@ -486,6 +486,11 @@ private:
     std::atomic<int> auto_refresh_seconds_{0};
     int refresh_tick_ = 0; // auto-refresh passes so far (core loop only); paces idle tabs
     std::atomic<bool> auto_refresh_running_{true};
+    // The app is in the background (a phone app between pause and resume): the
+    // audio output is closed, live streams are stopped and the auto-refresh timer
+    // does nothing, so FastSM holds no wakelock and spends no battery or data while
+    // nobody is looking. Push notifications cover new activity meanwhile.
+    std::atomic<bool> backgrounded_{false};
     std::thread auto_refresh_thread_;
 
     // Threads/clients last. Destruction order (reverse) is streams_, worker_,
