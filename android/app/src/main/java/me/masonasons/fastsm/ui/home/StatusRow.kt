@@ -149,6 +149,7 @@ fun StatusRow(
         row.groupActors == "reblogged_by" -> ({ onOpenRebloggedBy(row.id) })
         else -> ({ onOpenThread(row.id) })
     }
+    val shownText = row.textWithBreaks.ifEmpty { row.text }
 
     val base = Modifier
         .combinedClickable(
@@ -156,14 +157,14 @@ fun StatusRow(
             onLongClick = { onSelect(row.id); menuOpen = true },
         )
         .clearAndSetSemantics {
-            contentDescription = row.text
+            contentDescription = shownText
             customActions = actions
             onClick { onSelect(row.id); primaryOpen(); true }
         }
         .padding(horizontal = 16.dp, vertical = 12.dp)
 
     Column(modifier = base) {
-        Text(row.text, style = MaterialTheme.typography.bodyLarge)
+        Text(shownText, style = MaterialTheme.typography.bodyLarge)
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             menuActions.forEach { action ->
                 DropdownMenuItem(

@@ -67,6 +67,8 @@ data class RowUi(
     // The post's links (present only when the "expand_links" action is on) —
     // one action per link, labeled by its preview title.
     val links: List<LinkUi> = emptyList(),
+    /** The same label with the post's line breaks kept, for display. */
+    val textWithBreaks: String = "",
 )
 
 /** A link inside a post (title from its preview card or anchor text, plus url). */
@@ -551,6 +553,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                         LinkUi(lo.optString("title"), lo.optString("url"))
                                     }
                                 } ?: emptyList(),
+                                textWithBreaks = r.optString("text_with_breaks"),
                             )
                         )
                     }
