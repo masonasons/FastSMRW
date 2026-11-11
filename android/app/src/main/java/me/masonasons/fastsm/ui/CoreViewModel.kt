@@ -223,6 +223,12 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
     private val _accounts = MutableStateFlow<List<AccountUi>>(emptyList())
     val accounts: StateFlow<List<AccountUi>> = _accounts.asStateFlow()
 
+    // False until the core has reported the saved accounts once. Loading them can
+    // wait on the network (a Bluesky session refresh), and until then "no accounts"
+    // only means "not loaded yet" -- not a reason to show Add Account.
+    private val _accountsLoaded = MutableStateFlow(false)
+    val accountsLoaded: StateFlow<Boolean> = _accountsLoaded.asStateFlow()
+
     private val _selectedAccount = MutableStateFlow("")
     val selectedAccount: StateFlow<String> = _selectedAccount.asStateFlow()
 
@@ -487,6 +493,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _accounts.value = list
                 _selectedAccount.value = e.optString("selected")
+                _accountsLoaded.value = true
                 // Renew the push subscription once the accounts exist (doing it
                 // any earlier would find none), and again whenever one is added,
                 // so a newly signed-in account starts notifying too. A plain
