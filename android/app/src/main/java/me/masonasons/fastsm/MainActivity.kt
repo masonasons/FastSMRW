@@ -9,7 +9,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -96,6 +100,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App(vm: CoreViewModel) {
     val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val accountsLoaded by vm.accountsLoaded.collectAsStateWithLifecycle()
     val composeContext by vm.composeContext.collectAsStateWithLifecycle()
     val profile by vm.profile.collectAsStateWithLifecycle()
     val media by vm.media.collectAsStateWithLifecycle()
@@ -147,6 +152,13 @@ private fun App(vm: CoreViewModel) {
             onOpenUrl = { url -> CustomTabs.launch(context, android.net.Uri.parse(url)) },
             onClose = { vm.closeProfile() },
         )
+        // Until the saved accounts are loaded, show that, not Add Account.
+        !accountsLoaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Text("Loading accounts…", modifier = Modifier.padding(top = 16.dp))
+            }
+        }
         accounts.isEmpty() || addingAccount -> AddAccountScreen(
             viewModel = vm,
             onLoggedIn = { addingAccount = false },

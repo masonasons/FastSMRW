@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.1
 -----
 
+- Fixed: on Android, opening the app no longer shows the Add Account screen for a moment while your accounts load.
 - New: in the media player, Page Up and Page Down change the volume by a bigger step than the arrows, and Home and End set it straight to full or silent.
 - New: closing a post you've started writing now asks before throwing it away; turn it off under Settings, Confirmation.
 - Fixed: on Windows, the Movement Units button's name showed garbled characters instead of an ellipsis.
