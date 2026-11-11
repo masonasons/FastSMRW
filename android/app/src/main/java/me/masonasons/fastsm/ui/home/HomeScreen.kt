@@ -370,6 +370,7 @@ fun HomeScreen(
                 onCopy = viewModel::copyRow,
                 onSetRelationship = viewModel::setRelationship,
                 onMessageRequest = viewModel::messageRequestAction,
+                onLoadGap = viewModel::loadGap,
             )
         }
     }
@@ -820,6 +821,7 @@ private fun StatusList(
     onCopy: (String) -> Unit,
     onSetRelationship: (accountId: String, action: String, acct: String) -> Unit,
     onMessageRequest: (rowId: String, accept: Boolean) -> Unit,
+    onLoadGap: (String) -> Unit,
 ) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -844,6 +846,21 @@ private fun StatusList(
     }
     LaunchedEffect(listState, rows.size, isCurrent) {
         snapshotFlow { shouldLoadOlder }.distinctUntilChanged().collect { if (it) onLoadOlder() }
+    }
+
+    // Fill a gap (posts a refresh skipped) once a row next to it is on screen, as
+    // the other apps do when the cursor nears one. Each gap is asked for once.
+    val gapRows = rememberUpdatedState(rows)
+    val requestedGaps = remember(timelineKey) { mutableSetOf<String>() }
+    LaunchedEffect(listState, isCurrent) {
+        if (!isCurrent) return@LaunchedEffect
+        snapshotFlow {
+            val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+            val r = gapRows.value
+            visible.firstNotNullOfOrNull { i -> r.getOrNull(i)?.takeIf { it.gapAfter }?.id }
+        }.distinctUntilChanged().collect { id ->
+            if (id != null && requestedGaps.add(id)) onLoadGap(id)
+        }
     }
 
     // The rows as they are *now*. The effects below outlive individual updates, so
