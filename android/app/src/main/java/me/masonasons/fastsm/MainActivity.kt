@@ -45,7 +45,6 @@ import me.masonasons.fastsm.util.CustomTabs
 class MainActivity : ComponentActivity() {
 
     private val vm: CoreViewModel by viewModels()
-    private var hasResumed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,16 +65,27 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Startup already loads and syncs the timelines. Later resumes begin a
-        // new marker-sync window so a position moved on another client is pulled.
-        if (hasResumed) vm.resume() else hasResumed = true
+        // Coming back from a pause: reopen what it closed, refresh, and pull a
+        // position moved on another client. Startup does its own loading.
+        if (paused) {
+            paused = false
+            vm.resume()
+        }
     }
 
     override fun onPause() {
         super.onPause()
+        // Folding or unfolding rebuilds the window; that isn't leaving the app.
+        if (isChangingConfigurations) return
         // Android can kill a backgrounded process at any time, so send the reading
-        // position now instead of waiting out the idle timer.
+        // position now. The core also closes audio and streams until the window is back.
+        paused = true
         vm.pause()
+    }
+
+    companion object {
+        // Per process, not per window: a window rebuilt while paused still resumes.
+        private var paused = false
     }
 
     // singleTop: the fastsm://oauth redirect re-enters the live activity here.
