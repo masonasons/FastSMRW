@@ -63,6 +63,10 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -360,7 +364,13 @@ fun ComposeScreen(
             }
 
             if (ctx.featureVisibility) {
-                VisibilitySelector(current = visibility, enabled = !sending, onSelect = { visibility = it })
+                ComposeCombo(
+                    label = "Visibility",
+                    options = (0..3).map { visibilityLabel(it) },
+                    selected = visibility,
+                    enabled = !sending,
+                    onSelect = { visibility = it },
+                )
             }
 
             if (ctx.participants.isNotEmpty()) {
@@ -484,26 +494,34 @@ private fun MentionDialog(
     )
 }
 
+/** A labelled choice that opens a menu of [options]. */
 @Composable
-private fun VisibilitySelector(current: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("Visibility", style = MaterialTheme.typography.labelLarge)
-        (0..3).forEach { v ->
-            Row(
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clearAndSetSemantics {
-                        contentDescription =
-                            "${visibilityLabel(v)}${if (v == current) ", selected" else ""}"
-                    },
-            ) {
-                androidx.compose.material3.RadioButton(
-                    selected = v == current,
-                    onClick = { if (enabled) onSelect(v) },
-                    enabled = enabled,
-                )
-                Text(visibilityLabel(v), style = MaterialTheme.typography.bodyLarge)
+private fun ComposeCombo(
+    label: String,
+    options: List<String>,
+    selected: Int,
+    enabled: Boolean,
+    onSelect: (Int) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, role = Role.DropdownList) { open = true }
+                .semantics(mergeDescendants = true) {}
+                .padding(vertical = 8.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(options.getOrNull(selected).orEmpty(), style = MaterialTheme.typography.bodyLarge)
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            modifier = Modifier.heightIn(max = 400.dp),
+        ) {
+            options.forEachIndexed { i, name ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(i); open = false })
             }
         }
     }
