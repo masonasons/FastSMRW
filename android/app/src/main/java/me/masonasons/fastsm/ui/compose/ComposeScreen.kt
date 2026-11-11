@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -131,6 +132,15 @@ fun ComposeScreen(
     }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Open on the post text, ready to type (cursor at the end of any prefill, such as
+    // a reply's @mentions), rather than on the Cancel button.
+    val textFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        runCatching { textFocus.requestFocus() }
+        keyboard?.show()
+    }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -303,6 +313,7 @@ fun ComposeScreen(
                 // Ctrl+Return sends.
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(textFocus)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown ||
                             (event.key != Key.Enter && event.key != Key.NumPadEnter)) {

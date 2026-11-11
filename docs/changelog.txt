@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.1
 -----
 
+- Fixed: on Android, the post editor now opens in the text box, ready to type, instead of on the Cancel button.
 - Fixed: on Android and iPhone, FastSM no longer drains the battery in the background; it now stops its sound output, live updates and automatic refreshing while the app is not on screen, and catches up when you return.
 - Fixed: on Android, folding or unfolding the phone no longer briefly stops and restarts sounds and live updates.
 - Fixed: on Windows and Linux, Alt+P in the post window always takes you back to the text you're writing and never sends it; the Post button is now Alt+T.
