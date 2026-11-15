@@ -383,6 +383,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         }
     }
     @objc func refreshAll(_ sender: Any?) { state.refreshAll() }
+    @objc func refreshStatus(_ sender: Any?) { state.refreshStatus() }
     @objc func goBack(_ sender: Any?) { state.goBack() }
     @objc func filterTimeline(_ sender: Any?) { state.getClientFilter() }
     @objc func findInTimeline(_ sender: Any?) { postsViewController.findInTimeline() }

@@ -372,6 +372,8 @@ final class AppState {
         client.send("perform_action", ["action": action, "id": id])
     }
     func refresh() { client.send("refresh") }
+    /// Speak when the server last answered, and whether it's failing now.
+    func refreshStatus() { client.send("refresh_status") }
     /// The app became active after being backgrounded. Unlike a manual refresh,
     /// this starts a fresh Home-marker sync window so another client's position
     /// can be adopted.

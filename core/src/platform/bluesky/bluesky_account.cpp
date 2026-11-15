@@ -110,6 +110,7 @@ net::HttpResponse BlueskyAccount::send_authed(const std::string& method, const s
         }
         res = http_->send(build(refreshed));
     }
+    note_server_reply(res.status); // for "Speak refresh status"
     return res;
 }
 

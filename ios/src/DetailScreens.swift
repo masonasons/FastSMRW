@@ -21,11 +21,22 @@ class ActionListViewController: UITableViewController {
         let run: () -> Void
     }
 
-    private let body: String
+    /// The text sections above the actions: one plain body, or (Post Info) the
+    /// post's text and its details as separate headed rows, so the text can be
+    /// read on its own without the author, counts and so on.
+    private let texts: [(header: String?, text: String)]
     private var items: [Item]
+    private var actionSection: Int { texts.count }
 
     init(title: String, body: String, items: [Item]) {
-        self.body = body
+        self.texts = [(nil, body)]
+        self.items = items
+        super.init(style: .insetGrouped)
+        self.title = title
+    }
+
+    init(title: String, sections: [(header: String?, text: String)], items: [Item]) {
+        self.texts = sections
         self.items = items
         super.init(style: .insetGrouped)
         self.title = title
@@ -34,18 +45,23 @@ class ActionListViewController: UITableViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 2 }
+    override func numberOfSections(in tableView: UITableView) -> Int { texts.count + 1 }
 
     override func tableView(_ tableView: UITableView,
                             numberOfRowsInSection section: Int) -> Int {
-        section == 0 ? 1 : items.count
+        section < actionSection ? 1 : items.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForHeaderInSection section: Int) -> String? {
+        section < actionSection ? texts[section].header : nil
     }
 
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        if indexPath.section == 0 {
+        if indexPath.section < actionSection {
             let cell = PostCell(style: .default, reuseIdentifier: nil)
-            cell.configure(text: body)
+            cell.configure(text: texts[indexPath.section].text)
             cell.selectionStyle = .none
             return cell
         }
@@ -61,7 +77,9 @@ class ActionListViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        guard indexPath.section == 1, items.indices.contains(indexPath.row) else { return }
+        guard indexPath.section == actionSection, items.indices.contains(indexPath.row) else {
+            return
+        }
         let item = items[indexPath.row]
         if item.pops {
             navigationController?.popToRootViewController(animated: true)
@@ -105,7 +123,12 @@ final class PostInfoViewController: ActionListViewController {
         if info.hasUrl {
             items.append(Item(title: "Open in Browser", pops: true) { state.openStatus(id: id) })
         }
-        super.init(title: "Post Info", body: info.text, items: items)
+        // A media-only post has no text; leave that section out rather than show
+        // an empty row.
+        var sections: [(header: String?, text: String)] = []
+        if !info.body.isEmpty { sections.append(("Post text", info.body)) }
+        sections.append(("Post details", info.details))
+        super.init(title: "Post Info", sections: sections, items: items)
 
         if let poll = info.poll {
             insertVoteItem(state: state, statusId: id, poll: poll)

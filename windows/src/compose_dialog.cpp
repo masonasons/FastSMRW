@@ -286,11 +286,113 @@ void toggle_poll(HWND dlg, Ctx* ctx) {
     update_counter(dlg, ctx);
 }
 
+// The scheduled time is five labelled dropdowns (Year, Month, Day, Hour,
+// Minute), each its own tab stop that a screen reader announces by name and
+// value. A single date/time picker made it too easy to change the wrong segment
+// without noticing (issue 37).
+constexpr int kSchedControls[] = {
+    IDC_COMPOSE_SCHED_YEAR_LABEL,   IDC_COMPOSE_SCHED_YEAR,  IDC_COMPOSE_SCHED_MONTH_LABEL,
+    IDC_COMPOSE_SCHED_MONTH,        IDC_COMPOSE_SCHED_DAY_LABEL, IDC_COMPOSE_SCHED_DAY,
+    IDC_COMPOSE_SCHED_HOUR_LABEL,   IDC_COMPOSE_SCHED_HOUR,  IDC_COMPOSE_SCHED_MINUTE_LABEL,
+    IDC_COMPOSE_SCHED_MINUTE,
+};
+constexpr int kScheduleYears = 5; // this year and the next four
+constexpr const wchar_t* kMonthNames[] = {
+    L"January", L"February", L"March",     L"April",   L"May",      L"June",
+    L"July",    L"August",   L"September", L"October", L"November", L"December",
+};
+
+int combo_sel(HWND dlg, int id) {
+    return static_cast<int>(SendDlgItemMessageW(dlg, id, CB_GETCURSEL, 0, 0));
+}
+
+void combo_add(HWND dlg, int id, const std::wstring& text, LPARAM data) {
+    const LRESULT i =
+        SendDlgItemMessageW(dlg, id, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
+    SendDlgItemMessageW(dlg, id, CB_SETITEMDATA, static_cast<WPARAM>(i), data);
+}
+
+int sched_year(HWND dlg) {
+    const int sel = combo_sel(dlg, IDC_COMPOSE_SCHED_YEAR);
+    return sel < 0 ? 0
+                   : static_cast<int>(SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_YEAR,
+                                                          CB_GETITEMDATA, sel, 0));
+}
+
+int days_in_month(int year, int month) {
+    constexpr int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    return month == 2 && leap ? 29 : kDays[(month - 1) % 12];
+}
+
+// Refill Day for the chosen year and month, keeping the day picked where it
+// still exists (31 becomes 30 when the month changes to April, and so on).
+void fill_sched_days(HWND dlg) {
+    const int month = combo_sel(dlg, IDC_COMPOSE_SCHED_MONTH) + 1;
+    const int days = days_in_month(sched_year(dlg), month < 1 ? 1 : month);
+    int day = combo_sel(dlg, IDC_COMPOSE_SCHED_DAY);
+    if (day < 0)
+        day = 0;
+    if (static_cast<int>(SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_DAY, CB_GETCOUNT, 0, 0)) ==
+        days)
+        return; // nothing to change; leave the list alone
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_DAY, CB_RESETCONTENT, 0, 0);
+    for (int d = 1; d <= days; ++d)
+        combo_add(dlg, IDC_COMPOSE_SCHED_DAY, std::to_wstring(d), d);
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_DAY, CB_SETCURSEL, day < days ? day : days - 1, 0);
+}
+
+// Fill the five dropdowns, starting an hour from now (the server wants a time
+// at least a few minutes ahead).
+void init_schedule_fields(HWND dlg) {
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    SYSTEMTIME when = now;
+    FILETIME ft{};
+    if (SystemTimeToFileTime(&now, &ft)) {
+        ULARGE_INTEGER u{};
+        u.LowPart = ft.dwLowDateTime;
+        u.HighPart = ft.dwHighDateTime;
+        u.QuadPart += 3600ULL * 10000000ULL; // one hour, in 100ns ticks
+        ft.dwLowDateTime = u.LowPart;
+        ft.dwHighDateTime = u.HighPart;
+        FileTimeToSystemTime(&ft, &when);
+    }
+    for (int y = 0; y < kScheduleYears; ++y)
+        combo_add(dlg, IDC_COMPOSE_SCHED_YEAR, std::to_wstring(now.wYear + y), now.wYear + y);
+    for (int m = 0; m < 12; ++m)
+        combo_add(dlg, IDC_COMPOSE_SCHED_MONTH, kMonthNames[m], m + 1);
+    for (int h = 0; h < 24; ++h)
+        combo_add(dlg, IDC_COMPOSE_SCHED_HOUR, std::to_wstring(h), h);
+    for (int m = 0; m < 60; ++m)
+        combo_add(dlg, IDC_COMPOSE_SCHED_MINUTE, std::to_wstring(m), m);
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_YEAR, CB_SETCURSEL, when.wYear - now.wYear, 0);
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_MONTH, CB_SETCURSEL, when.wMonth - 1, 0);
+    fill_sched_days(dlg);
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_DAY, CB_SETCURSEL, when.wDay - 1, 0);
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_HOUR, CB_SETCURSEL, when.wHour, 0);
+    SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_MINUTE, CB_SETCURSEL, when.wMinute, 0);
+}
+
+// The local time the dropdowns describe.
+SYSTEMTIME sched_time(HWND dlg) {
+    SYSTEMTIME st{};
+    st.wYear = static_cast<WORD>(sched_year(dlg));
+    st.wMonth = static_cast<WORD>(combo_sel(dlg, IDC_COMPOSE_SCHED_MONTH) + 1);
+    st.wDay = static_cast<WORD>(combo_sel(dlg, IDC_COMPOSE_SCHED_DAY) + 1);
+    st.wHour = static_cast<WORD>(combo_sel(dlg, IDC_COMPOSE_SCHED_HOUR));
+    st.wMinute = static_cast<WORD>(combo_sel(dlg, IDC_COMPOSE_SCHED_MINUTE));
+    return st;
+}
+
 void toggle_schedule(HWND dlg) {
     const bool on =
         SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHEDULE, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    show(dlg, IDC_COMPOSE_SCHED_TIME, on);
-    SetDlgItemTextW(dlg, IDOK, on ? L"&Schedule" : L"&Post");
+    for (int id : kSchedControls)
+        show(dlg, id, on);
+    // Distinct from the Schedule checkbox's Alt+S, and from the Post field's
+    // Alt+P: Alt+T is always the send button.
+    SetDlgItemTextW(dlg, IDOK, on ? L"Schedule pos&t" : L"Pos&t");
 }
 
 std::int64_t systemtime_to_unix(const SYSTEMTIME& local) {
@@ -536,15 +638,10 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         // Schedule.
         const bool sched = req.features.scheduling && !editing;
         show(dlg, IDC_COMPOSE_SCHEDULE, sched);
-        show(dlg, IDC_COMPOSE_SCHED_TIME, false);
-        if (sched) {
-            HWND dtp = GetDlgItem(dlg, IDC_COMPOSE_SCHED_TIME);
-            SendMessageW(dtp, DTM_SETFORMATW, 0,
-                         reinterpret_cast<LPARAM>(L"yyyy-MM-dd HH:mm"));
-            SYSTEMTIME now{};
-            GetLocalTime(&now);
-            SendMessageW(dtp, DTM_SETRANGE, GDTR_MIN, reinterpret_cast<LPARAM>(&now));
-        }
+        for (int id : kSchedControls)
+            show(dlg, id, false);
+        if (sched)
+            init_schedule_fields(dlg);
 
         // Media attachments (not while editing an existing post).
         const bool media = req.features.media && !editing;
@@ -559,7 +656,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 
         // Prefill + post button label.
         SetDlgItemTextW(dlg, IDC_COMPOSE_EDIT, to_wide(req.prefill_text).c_str());
-        SetDlgItemTextW(dlg, IDOK, editing ? L"&Save" : L"&Post");
+        // Not Alt+P: that's the Post field, and sharing it meant Alt+P could
+        // publish a draft when you only meant to go back to it.
+        SetDlgItemTextW(dlg, IDOK, editing ? L"&Save" : L"Pos&t");
 
         SetWindowSubclass(GetDlgItem(dlg, IDC_COMPOSE_EDIT), EditProc, 1,
                           reinterpret_cast<DWORD_PTR>(ctx));
@@ -592,6 +691,11 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         }
         if (id == IDC_COMPOSE_SCHEDULE) {
             toggle_schedule(dlg);
+            return TRUE;
+        }
+        if ((id == IDC_COMPOSE_SCHED_YEAR || id == IDC_COMPOSE_SCHED_MONTH) &&
+            HIWORD(wp) == CBN_SELCHANGE) {
+            fill_sched_days(dlg); // February has 28 or 29 days, April 30, ...
             return TRUE;
         }
         if (id == IDC_COMPOSE_EDIT && HIWORD(wp) == EN_CHANGE) {
@@ -643,11 +747,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
                                                                              : 86400;
                 draft.poll = poll;
             }
-            if (IsWindowVisible(GetDlgItem(dlg, IDC_COMPOSE_SCHED_TIME))) {
-                SYSTEMTIME st{};
-                if (SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHED_TIME, DTM_GETSYSTEMTIME, 0,
-                                        reinterpret_cast<LPARAM>(&st)) == GDT_VALID)
-                    draft.scheduled_at = systemtime_to_unix(st);
+            if (IsWindowVisible(GetDlgItem(dlg, IDC_COMPOSE_SCHED_YEAR))) {
+                if (const std::int64_t at = systemtime_to_unix(sched_time(dlg)); at > 0)
+                    draft.scheduled_at = at;
             }
             // The reply recipients left checked (the core prepends the @handles).
             if (IsWindowVisible(GetDlgItem(dlg, IDC_COMPOSE_RECIPIENTS))) {

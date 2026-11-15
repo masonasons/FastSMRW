@@ -124,6 +124,7 @@ Managing your open timelines (Timeline menu):
 - `Delete` — Close the timeline (press it in the posts list or the sidebar; also on the Timeline menu as Close Timeline).
 - `Cmd+R` — Refresh the current timeline.
 - `Cmd+Shift+R` — Refresh all timelines.
+- `Cmd+Option+R` — Speak when the server last answered, and whether it is unreachable now.
 - `Cmd+Z` — Undo navigation (go back).
 - `Cmd+L` — Filter the current timeline.
 - `Cmd+Shift+Delete` — Clear the current timeline.

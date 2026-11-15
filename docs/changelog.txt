@@ -6,6 +6,11 @@ FastSMRW changelog
 
 - Fixed: on Android and iPhone, FastSM no longer drains the battery in the background; it now stops its sound output, live updates and automatic refreshing while the app is not on screen, and catches up when you return.
 - Fixed: on Android, folding or unfolding the phone no longer briefly stops and restarts sounds and live updates.
+- Fixed: on Windows and Linux, Alt+P in the post window always takes you back to the text you're writing and never sends it; the Post button is now Alt+T.
+- Changed: Post Info shows the post's text and its details (author, time, counts and so on) in two separate fields, so selecting all and copying gives you just the post.
+- Changed: on Windows and Linux, a scheduled post's time is now set with separate Year, Month, Day, Hour and Minute boxes instead of a single date and time field.
+- Fixed: on Windows, how long ago a post was made keeps counting up in the timeline even when no new posts arrive, instead of staying stuck at "just now".
+- New: Speak Refresh Status (Timeline menu, Ctrl+Shift+R; Cmd+Option+R on Mac and iPad; the overflow menu on Android) tells you how long ago your server last answered and whether it can't be reached right now, so a quiet timeline and a server that's down no longer sound the same.
 - New: in the media player, Page Up and Page Down change the volume by a bigger step than the arrows, and Home and End set it straight to full or silent.
 - New: closing a post you've started writing now asks before throwing it away; turn it off under Settings, Confirmation.
 - Fixed: on Windows, the Movement Units button's name showed garbled characters instead of an ellipsis.

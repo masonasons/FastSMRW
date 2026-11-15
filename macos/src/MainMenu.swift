@@ -128,6 +128,12 @@ enum MainMenu {
                                               action: #selector(MainWindowController.refreshAll(_:)),
                                               keyEquivalent: "r")
         refreshAll.keyEquivalentModifierMask = [.command, .shift]
+        // When the server last answered: a quiet timeline and an unreachable
+        // server otherwise sound the same (issue 37).
+        let refreshStatus = timelineMenu.addItem(withTitle: "Speak Refresh Status",
+                                                 action: #selector(MainWindowController.refreshStatus(_:)),
+                                                 keyEquivalent: "r")
+        refreshStatus.keyEquivalentModifierMask = [.command, .option]
         timelineMenu.addItem(withTitle: "Load Older Posts",
                              action: #selector(MainWindowController.loadOlderPosts(_:)),
                              keyEquivalent: "")

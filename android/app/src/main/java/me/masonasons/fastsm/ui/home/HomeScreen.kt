@@ -182,6 +182,12 @@ fun HomeScreen(
                                 text = { Text("Add timeline or search") },
                                 onClick = { menuOpen = false; onOpenAddTimeline() },
                             )
+                            // When the server last answered: a quiet timeline and an
+                            // unreachable server otherwise sound the same (issue 37).
+                            DropdownMenuItem(
+                                text = { Text("Speak refresh status") },
+                                onClick = { menuOpen = false; viewModel.refreshStatus() },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Find in timeline") },
                                 onClick = { menuOpen = false; showFindDialog = true },

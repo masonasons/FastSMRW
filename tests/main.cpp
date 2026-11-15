@@ -88,6 +88,8 @@ void test_presenter_boosted_by_handle();
 void test_presenter_copy_keeps_line_breaks();
 void test_presenter_quotes();
 void test_presenter_post_info_visibility();
+void test_presenter_post_info_split();
+void test_presenter_refresh_status();
 void test_reply_participants();
 void test_post_links();
 
@@ -108,6 +110,7 @@ void test_capi_session_events();
 // From test_thread.cpp
 void test_mastodon_thread_fetch();
 void test_mastodon_rate_limit_pauses_refresh();
+void test_mastodon_tracks_server_replies();
 void test_mastodon_thread_folding();
 void test_mastodon_instance_max_chars();
 void test_mastodon_user_pinned_posts();
@@ -251,6 +254,8 @@ int main() {
     test_presenter_copy_keeps_line_breaks();
 	test_presenter_quotes();
     test_presenter_post_info_visibility();
+    test_presenter_post_info_split();
+    test_presenter_refresh_status();
     test_reply_participants();
     test_post_links();
     test_speech_defaults();
@@ -263,6 +268,7 @@ int main() {
     test_capi_session_events();
     test_mastodon_thread_fetch();
     test_mastodon_rate_limit_pauses_refresh();
+    test_mastodon_tracks_server_replies();
     test_mastodon_thread_folding();
     test_mastodon_instance_max_chars();
     test_mastodon_user_pinned_posts();

@@ -655,7 +655,9 @@ static std::string detail_body(const Status& s) {
 	return body_source(s, /*keep_breaks=*/true);
 }
 
-std::string post_info(const Status& s, std::int64_t now) {
+// What comes before the body in the full post view: who, when, to whom, and
+// the content warning.
+static std::string post_info_head(const Status& s, std::int64_t now) {
     const Status& d = s.display_status();
     std::string out;
     out += display_name_for(s.account) + " (@" + s.account.acct + ")\n";
@@ -667,7 +669,13 @@ std::string post_info(const Status& s, std::int64_t now) {
     out += "\n";
     if (s.has_content_warning())
         out += "Content warning: " + *s.spoiler_text + "\n";
-    out += "\n" + detail_body(s) + "\n";
+    return out;
+}
+
+// What comes after it: the quoted post, poll, media, counts and posting app.
+// Each part opens with its own blank line.
+static std::string post_info_tail(const Status& s, std::int64_t now) {
+    std::string out;
 	if (s.quote)
 		out += "\nQuoting " + post_info(*s.quote, now) + "\n";
     if (s.poll)
@@ -686,6 +694,37 @@ std::string post_info(const Status& s, std::int64_t now) {
     if (s.application_name && !s.application_name->empty()) // the posting app, when known
         out += "\nvia " + *s.application_name;
     return out;
+}
+
+std::string post_info(const Status& s, std::int64_t now) {
+    return post_info_head(s, now) + "\n" + detail_body(s) + "\n" + post_info_tail(s, now);
+}
+
+std::string post_info_body(const Status& s) {
+    return detail_body(s);
+}
+
+std::string post_info_details(const Status& s, std::int64_t now) {
+    std::string out = post_info_head(s, now) + post_info_tail(s, now);
+    while (!out.empty() && (out.back() == '\n' || out.back() == ' '))
+        out.pop_back(); // no empty last line for a screen reader to land on
+    return out;
+}
+
+std::string refresh_status(const std::string& server, std::int64_t last_answer,
+                           std::int64_t last_failure, std::int64_t now) {
+    const std::string name = server.empty() ? std::string("the server") : server;
+    // Always relative, even with absolute timestamps on: the question is how long
+    // it has been, not what the clock said.
+    if (last_failure > last_answer) {
+        if (last_answer == 0)
+            return "Can't reach " + name + ". It hasn't answered since FastSMRW started.";
+        return "Can't reach " + name + ". Last heard from it " +
+               util::relative_spoken(last_answer, now) + ".";
+    }
+    if (last_answer == 0)
+        return "No word from " + name + " yet.";
+    return "Last heard from " + name + " " + util::relative_spoken(last_answer, now) + ".";
 }
 
 std::string user_profile(const User& u) {

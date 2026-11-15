@@ -163,6 +163,7 @@ Bluetooth keyboards but work on iPhone too):
 - `Cmd+N` — New post.
 - `Cmd+R` — Refresh.
 - `Cmd+Shift+R` — Refresh all.
+- `Cmd+Option+R` — Speak refresh status.
 - `Cmd+Z` — Undo navigation.
 - `Cmd+T` — New timeline.
 - `Cmd+W` — Close timeline.

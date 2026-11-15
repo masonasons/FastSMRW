@@ -15,21 +15,16 @@ import AppKit
 class DetailSheetController: NSWindowController {
     private var actions: [() -> Void] = []
 
-    func configure(title: String, body: String, buttons: [(String, Bool, () -> Void)]) {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 380),
-                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = title
-        self.window = window
-        guard let content = window.contentView else { return }
-
+    /// A selectable, read-only text area in a bordered scroll view.
+    private func makeTextArea(_ text: String, label: String) -> (NSScrollView, NSTextView) {
         let textView = NSTextView()
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 6, height: 6)
         textView.font = .systemFont(ofSize: 13)
-        textView.string = body
-        textView.setAccessibilityLabel(title)
+        textView.string = text
+        textView.setAccessibilityLabel(label)
         let scroll = NSScrollView()
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
@@ -38,6 +33,37 @@ class DetailSheetController: NSWindowController {
         textView.autoresizingMask = [.width]
         textView.isVerticallyResizable = true
         textView.textContainer?.widthTracksTextView = true
+        return (scroll, textView)
+    }
+
+    /// `details`, when given, goes in a second labelled text area under the body
+    /// (Post Info: the post's text, then everything else, so selecting all in the
+    /// first copies just the post).
+    func configure(title: String, body: String, bodyLabel: String? = nil,
+                   details: String? = nil, detailsLabel: String = "",
+                   buttons: [(String, Bool, () -> Void)]) {
+        let height: CGFloat = details == nil ? 380 : 480
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: height),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.title = title
+        self.window = window
+        guard let content = window.contentView else { return }
+
+        var areas: [NSView] = []
+        let (scroll, textView) = makeTextArea(body, label: bodyLabel ?? title)
+        if let bodyLabel { areas.append(NSTextField(labelWithString: bodyLabel + ":")) }
+        areas.append(scroll)
+        var detailsScroll: NSScrollView?
+        var firstResponder: NSView = textView
+        if let details {
+            let (dScroll, dView) = makeTextArea(details, label: detailsLabel)
+            areas.append(NSTextField(labelWithString: detailsLabel + ":"))
+            areas.append(dScroll)
+            detailsScroll = dScroll
+            // Nothing to read in an empty body (a media-only post): start on the details.
+            if body.isEmpty { firstResponder = dView }
+        }
+        window.initialFirstResponder = firstResponder
 
         let buttonRow = NSStackView()
         buttonRow.orientation = .horizontal
@@ -53,13 +79,14 @@ class DetailSheetController: NSWindowController {
             buttonRow.addArrangedSubview(button)
         }
 
-        let stack = NSStackView(views: [scroll, buttonRow])
+        let stack = NSStackView(views: areas + [buttonRow])
         stack.orientation = .vertical
+        stack.alignment = .leading
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
-        NSLayoutConstraint.activate([
+        var constraints = [
             stack.topAnchor.constraint(equalTo: content.topAnchor),
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
@@ -68,7 +95,15 @@ class DetailSheetController: NSWindowController {
             scroll.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16),
             buttonRow.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16),
             buttonRow.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16),
-        ])
+        ]
+        if let detailsScroll {
+            constraints += [
+                detailsScroll.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16),
+                detailsScroll.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16),
+                detailsScroll.heightAnchor.constraint(equalTo: scroll.heightAnchor),
+            ]
+        }
+        NSLayoutConstraint.activate(constraints)
     }
 
     func beginSheet(for parent: NSWindow, completion: @escaping () -> Void) {
@@ -273,7 +308,8 @@ final class PostInfoWindowController: DetailSheetController {
             presentReport(state: state, id: id, accountId: nil, acct: "", remote: false)
         }))
         buttons.append(("Close", true, { [weak self] in self?.dismiss() }))
-        configure(title: "Post Info", body: info.text, buttons: buttons)
+        configure(title: "Post Info", body: info.body, bodyLabel: "Post text",
+                  details: info.details, detailsLabel: "Post details", buttons: buttons)
     }
 
     @available(*, unavailable)

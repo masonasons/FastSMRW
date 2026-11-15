@@ -33,20 +33,32 @@ std::optional<PostInfoResult> show_post_info_dialog(GtkWindow* parent, const jso
     gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), box, TRUE, TRUE,
                        0);
 
-    // The post details, read-only but focusable so a screen reader can review
-    // them line by line.
-    GtkWidget* text_view = gtk_text_view_new();
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), FALSE);
-    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD_CHAR);
-    gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(text_view), FALSE);
-    atk_object_set_name(gtk_widget_get_accessible(text_view), "Post details");
-    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view)),
-                             e.value("text", std::string{}).c_str(), -1);
-    GtkWidget* scroll = gtk_scrolled_window_new(nullptr, nullptr);
-    gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_IN);
-    gtk_container_add(GTK_CONTAINER(scroll), text_view);
-    gtk_widget_set_vexpand(scroll, TRUE);
-    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    // The post's text and its details in two labelled read-only fields, both
+    // focusable so a screen reader can review them line by line. Separate, so
+    // selecting all in the first copies just the post (issue 37).
+    auto add_text_field = [&](const char* mnemonic_label, const char* name,
+                              const std::string& text) {
+        GtkWidget* label = gtk_label_new_with_mnemonic(mnemonic_label);
+        gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+        GtkWidget* view = gtk_text_view_new();
+        gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+        gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+        gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(view), FALSE);
+        gtk_label_set_mnemonic_widget(GTK_LABEL(label), view);
+        atk_object_set_name(gtk_widget_get_accessible(view), name);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), text.c_str(), -1);
+        GtkWidget* scroll = gtk_scrolled_window_new(nullptr, nullptr);
+        gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_IN);
+        gtk_container_add(GTK_CONTAINER(scroll), view);
+        gtk_widget_set_vexpand(scroll, TRUE);
+        gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+        return view;
+    };
+    const std::string body = e.value("body", std::string{});
+    GtkWidget* body_view = add_text_field("Po_st text:", "Post text", body);
+    GtkWidget* details_view =
+        add_text_field("Post d_etails:", "Post details", e.value("details", std::string{}));
 
     // Votable poll: a checklist (multi-choice) or radio group (single).
     std::vector<GtkWidget*> poll_toggles;
@@ -123,7 +135,8 @@ std::optional<PostInfoResult> show_post_info_dialog(GtkWindow* parent, const jso
     gtk_box_pack_start(GTK_BOX(box), grid, FALSE, FALSE, 0);
 
     gtk_widget_show_all(dialog);
-    gtk_widget_grab_focus(text_view);
+    // Read the post first; a post with no text (media only) starts on the details.
+    gtk_widget_grab_focus(body.empty() ? details_view : body_view);
 
     std::optional<PostInfoResult> result;
     const int response = gtk_dialog_run(GTK_DIALOG(dialog));

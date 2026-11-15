@@ -484,6 +484,8 @@ void CoreSession::handle(const json& cmd) {
         cmd_select_account(cmd);
     else if (c == "refresh")
         cmd_refresh();
+    else if (c == "refresh_status")
+        cmd_refresh_status();
     else if (c == "refresh_all")
         cmd_refresh_all();
     else if (c == "resume")
@@ -1031,6 +1033,18 @@ std::string CoreSession::timeline_position_text(const TimelineController* tc) co
 void CoreSession::cmd_refresh() {
     if (TimelineController* tc = current())
         tc->refresh();
+}
+
+// Speak how long since the current account's server last answered, and whether
+// it's failing now. A stale timeline sounds the same as a quiet one; this tells
+// them apart (issue 37).
+void CoreSession::cmd_refresh_status() {
+    TimelineController* tc = current();
+    SocialAccount* acct = tc && tc->account() ? tc->account() : accounts_.selected();
+    if (!acct)
+        return;
+    emit_announce(present::refresh_status(acct->server(), acct->last_answer(),
+                                          acct->last_failure(), util::now_unix()));
 }
 
 void CoreSession::cmd_refresh_all() {
@@ -3522,7 +3536,9 @@ void CoreSession::cmd_post_info(const json& cmd) {
         return;
     json ev = {{"event", "post_info"},
                {"id", cmd.value("id", std::string{})},
-               {"text", present::post_info(*s, util::now_unix())},
+               // Separate fields so the body can be selected and copied on its own.
+               {"body", present::post_info_body(*s)},
+               {"details", present::post_info_details(*s, util::now_unix())},
                {"features", features_json(tc->account()->features())},
                {"has_url", !s->url.empty()},
                {"is_mine", s->account.id == tc->account()->me().id},
@@ -4607,6 +4623,8 @@ void CoreSession::cmd_perform_action(const json& cmd) {
         return cmd_go_back();
     if (a == "refresh")
         return cmd_refresh();
+    if (a == "RefreshStatus")
+        return cmd_refresh_status();
     if (a == "NextAccount" || a == "PrevAccount") {
         // cmd_select_account announces the account and its server itself; announcing
         // here as well read it out twice.

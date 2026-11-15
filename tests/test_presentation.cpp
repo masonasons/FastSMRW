@@ -545,3 +545,52 @@ void test_presenter_post_info_visibility() {
     boost.reblog = std::make_shared<Status>(inner);
     CHECK(contains(present::post_info(boost, now), "Followers"));
 }
+
+// Issue 37: "Speak refresh status" says how long since the server last
+// answered, and whether it's failing now.
+void test_presenter_refresh_status() {
+    const std::int64_t now = 100000;
+    CHECK_EQ(present::refresh_status("mastodon.social", 0, 0, now),
+             std::string("No word from mastodon.social yet."));
+    CHECK_EQ(present::refresh_status("mastodon.social", now - 120, 0, now),
+             std::string("Last heard from mastodon.social 2 minutes ago."));
+    // A failure older than the last answer is over: the server is back.
+    CHECK_EQ(present::refresh_status("mastodon.social", now - 2, now - 60, now),
+             std::string("Last heard from mastodon.social just now."));
+    CHECK_EQ(present::refresh_status("mastodon.social", now - 600, now - 30, now),
+             std::string("Can't reach mastodon.social. Last heard from it 10 minutes ago."));
+    CHECK_EQ(present::refresh_status("bsky.social", 0, now - 5, now),
+             std::string("Can't reach bsky.social. It hasn't answered since FastSMRW started."));
+    CHECK(contains(present::refresh_status("", now, 0, now), "the server"));
+}
+
+// Issue 37: Post Info shows the body in its own field, so Ctrl+A, Ctrl+C copies
+// just the post, with everything else in a separate details field.
+void test_presenter_post_info_split() {
+    const std::int64_t now = 1000;
+    Status s;
+    s.account.display_name = "Alice";
+    s.account.acct = "alice.example";
+    s.text = "First line\nSecond line";
+    s.created_at = now - 60;
+    s.visibility = Visibility::Public;
+    s.spoiler_text = std::string("spoilers");
+    s.replies_count = 2;
+    s.application_name = std::string("Tusky");
+
+    const std::string body = present::post_info_body(s);
+    CHECK_EQ(body, std::string("First line\nSecond line"));
+
+    const std::string details = present::post_info_details(s, now);
+    CHECK(contains(details, "Alice (@alice.example)"));
+    CHECK(contains(details, "Public"));
+    CHECK(contains(details, "Content warning: spoilers"));
+    CHECK(contains(details, "via Tusky"));
+    CHECK(!contains(details, "First line"));
+    CHECK(details.back() != '\n'); // no blank last line to arrow onto
+
+    // The combined view still has it all, body in the middle.
+    const std::string all = present::post_info(s, now);
+    CHECK(all.find("Content warning") < all.find("First line"));
+    CHECK(all.find("First line") < all.find("via Tusky"));
+}

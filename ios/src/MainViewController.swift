@@ -864,6 +864,9 @@ final class MainViewController: UIViewController {
         addKey("r", [.command, .shift], "Refresh All Timelines") { [weak self] in
             self?.state.refreshAll()
         }
+        addKey("r", [.command, .alternate], "Speak Refresh Status") { [weak self] in
+            self?.state.refreshStatus()
+        }
         addKey("z", .command, "Undo Navigation") { [weak self] in self?.state.goBack() }
         addKey("t", .command, "New Timeline") { [weak self] in self?.state.getSpawnable() }
         addKey("w", .command, "Close Timeline") { [weak self] in
@@ -998,6 +1001,13 @@ final class MainViewController: UIViewController {
                 UIAction(title: "Refresh All Timelines",
                          image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
                     self?.state.refreshAll()
+                },
+                // When the server last answered: a quiet timeline and an
+                // unreachable server otherwise sound the same (issue 37).
+                UIAction(title: "Speak Refresh Status",
+                         image: UIImage(systemName: "antenna.radiowaves.left.and.right")) {
+                    [weak self] _ in
+                    self?.state.refreshStatus()
                 },
                 UIAction(title: "Undo Navigation",
                          image: UIImage(systemName: "arrow.uturn.backward")) { [weak self] _ in

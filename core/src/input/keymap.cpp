@@ -167,6 +167,7 @@ KeyBindings layer_keymap() {
         {"o", "Url"},                {"w", "CloseTimeline"}, // W closes the current timeline
         {";", "SpeakUser"},          // speak the post's user(s)
         {"shift+;", "SpeakReply"},   // speak the post this reply is replying to
+        {"s", "RefreshStatus"},      // S: when the server last answered
     };
 }
 
@@ -206,6 +207,7 @@ std::string layer_help_text() {
            "W: Close timeline\n"
            "Semicolon: Speak the post's user, or open a list of its users\n"
            "Shift+Semicolon: Speak the post this reply is replying to\n"
+           "S: Speak when the server last answered\n"
            "Shift+H: Show or hide window\n"
            "Slash: Show these keys\n"
            "Escape: Leave the layer";
@@ -305,6 +307,8 @@ const std::vector<ActionDef>& action_catalog() {
         {"speak_item", "Speak current item", "alt+win+space"},
         {"UndoNavigation", "Undo navigation (go back)", "alt+win+z"},
         {"refresh", "Refresh timeline", "control+alt+win+u"},
+        // How long since the server last answered, and whether it's failing now.
+        {"RefreshStatus", "Speak refresh status", "control+alt+win+r"},
         {"Find", "Find in timeline", ""},   // unbound by default (in-app Ctrl+F)
         {"FindNext", "Find next", ""},      // unbound by default (in-app F3)
         {"FindPrev", "Find previous", ""},  // unbound by default (in-app Shift+F3)

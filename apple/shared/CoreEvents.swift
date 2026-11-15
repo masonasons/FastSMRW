@@ -196,7 +196,10 @@ struct PostInfoPoll: Decodable { var multiple = false; let options: [String] }
 /// Enter-on-post detail dialog.
 struct PostInfo: Decodable {
     let id: String
-    let text: String
+    /// The post's own text, and everything else (author, time, counts, ...),
+    /// kept apart so the text can be read and copied on its own.
+    let body: String
+    let details: String
     var hasUrl = false
     var isMine = false
     var muted = false
@@ -206,7 +209,7 @@ struct PostInfo: Decodable {
     var poll: PostInfoPoll?
 
     enum CodingKeys: String, CodingKey {
-        case id, text, features, poll, muted
+        case id, body, details, features, poll, muted
         case hasUrl = "has_url"
         case isMine = "is_mine"
         case favoritesCount = "favorites_count"

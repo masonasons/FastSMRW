@@ -948,6 +948,9 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshAll() = core.dispatch("refresh_all")
 
+    /** Speak when the server last answered, and whether it's failing now. */
+    fun refreshStatus() = core.dispatch("refresh_status")
+
     fun resume() = core.dispatch("resume")
 
     /**

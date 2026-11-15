@@ -2,6 +2,8 @@
 
 #include "fastsm/models/push_alerts.hpp"
 
+#include <atomic>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -10,6 +12,7 @@
 #include "fastsm/models/user_cache.hpp"
 #include "fastsm/net/http_client.hpp"
 #include "fastsm/timeline/timeline_source.hpp"
+#include "fastsm/util/date_parsing.hpp"
 
 // SocialAccount unifies Mastodon and Bluesky behind one interface. M1 covers the
 // home-timeline vertical slice: paged fetch, post, and boost/favorite toggles.
@@ -241,6 +244,19 @@ public:
     // auto-refresh backs off and leaves room for the user's own actions.
     virtual bool background_refresh_allowed() const { return true; }
 
+    // When this account's own server last answered, and last failed to (Unix
+    // seconds; 0 = not this session). The newest post's age can't tell you a
+    // server has gone quiet, so "Speak refresh status" reads these (issue 37).
+    // Any reply below 500 counts as an answer -- a 404 or 429 still means the
+    // server is there; no reply at all, or a 5xx from a proxy in front of a dead
+    // instance, counts as a failure. Called from worker and stream threads.
+    void note_server_reply(long http_status) {
+        const bool answered = http_status > 0 && http_status < 500;
+        (answered ? last_answer_ : last_failure_).store(util::now_unix());
+    }
+    std::int64_t last_answer() const { return last_answer_.load(); }
+    std::int64_t last_failure() const { return last_failure_.load(); }
+
     // Fetch one page. Implementations run synchronously on the worker thread.
     virtual TimelinePage items(const TimelineSource& source, int limit,
                                const PageCursor& cursor) = 0;
@@ -442,6 +458,8 @@ public:
     }
 private:
     UserCache seen_users_;
+    std::atomic<std::int64_t> last_answer_{0};
+    std::atomic<std::int64_t> last_failure_{0};
 
 };
 

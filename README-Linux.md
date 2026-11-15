@@ -130,6 +130,7 @@ for a value, like the hashtag name or a search query.
 Timeline housekeeping:
 
 - `Ctrl+R` — Refresh the timeline.
+- `Ctrl+Shift+R` — Speak when the server last answered, and whether it is unreachable now.
 - `Ctrl+P` — Pin the timeline so you cannot close it accidentally.
 - `Ctrl+M` — Mute the timeline's sounds.
 - `Ctrl+W` — Close the timeline.

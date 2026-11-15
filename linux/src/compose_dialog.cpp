@@ -1,5 +1,6 @@
 #include "compose_dialog.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -189,6 +190,117 @@ bool run_attachments_dialog(GtkWindow* parent, std::vector<Attachment>& attachme
     return ok;
 }
 
+// ------------------------------------------------------------ schedule ---
+// The scheduled time is five labelled dropdowns -- Year, Month, Day, Hour,
+// Minute -- each its own tab stop, matching the Windows composer. Typing a
+// "YYYY-MM-DD HH:MM" string by ear made it easy to change the wrong value
+// (issue 37).
+
+constexpr int kScheduleYears = 5; // this year and the next four
+constexpr const char* kMonthNames[] = {"January", "February", "March",     "April",
+                                       "May",     "June",     "July",      "August",
+                                       "September", "October", "November", "December"};
+
+struct SchedFields {
+    GtkWidget* grid = nullptr;
+    GtkWidget* year = nullptr;
+    GtkWidget* month = nullptr;
+    GtkWidget* day = nullptr;
+    GtkWidget* hour = nullptr;
+    GtkWidget* minute = nullptr;
+    int first_year = 0;
+};
+SchedFields sched_fields;
+
+int active(GtkWidget* combo) { return gtk_combo_box_get_active(GTK_COMBO_BOX(combo)); }
+
+// Refill Day for the chosen year and month, keeping the day picked where it
+// still exists (31 becomes 30 when the month changes to April, and so on).
+void fill_sched_days() {
+    const int year = sched_fields.first_year + std::max(0, active(sched_fields.year));
+    const int month = std::max(0, active(sched_fields.month)) + 1;
+    const int days = g_date_get_days_in_month(static_cast<GDateMonth>(month),
+                                              static_cast<GDateYear>(year));
+    const int day = std::max(0, active(sched_fields.day));
+    GtkTreeModel* model = gtk_combo_box_get_model(GTK_COMBO_BOX(sched_fields.day));
+    if (gtk_tree_model_iter_n_children(model, nullptr) == days)
+        return; // nothing to change; leave the list alone
+    gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(sched_fields.day));
+    for (int d = 1; d <= days; ++d)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sched_fields.day),
+                                       std::to_string(d).c_str());
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.day), std::min(day, days - 1));
+}
+
+// Build the five dropdowns, starting an hour from now (the server wants a time
+// at least a few minutes ahead).
+GtkWidget* build_sched_fields() {
+    GDateTime* now = g_date_time_new_now_local();
+    GDateTime* when = g_date_time_add_hours(now, 1);
+    sched_fields = SchedFields{};
+    sched_fields.first_year = g_date_time_get_year(now);
+
+    GtkWidget* grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 2);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 6);
+    int column = 0;
+    auto add = [&](const char* mnemonic_label) {
+        GtkWidget* label = gtk_label_new_with_mnemonic(mnemonic_label);
+        gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+        GtkWidget* combo = gtk_combo_box_text_new();
+        gtk_label_set_mnemonic_widget(GTK_LABEL(label), combo);
+        gtk_grid_attach(GTK_GRID(grid), label, column, 0, 1, 1);
+        gtk_grid_attach(GTK_GRID(grid), combo, column, 1, 1, 1);
+        ++column;
+        return combo;
+    };
+    sched_fields.year = add("Y_ear:");
+    sched_fields.month = add("Mo_nth:");
+    sched_fields.day = add("Da_y:");
+    sched_fields.hour = add("_Hour:");
+    sched_fields.minute = add("M_inute:");
+    sched_fields.grid = grid;
+
+    for (int y = 0; y < kScheduleYears; ++y)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sched_fields.year),
+                                       std::to_string(sched_fields.first_year + y).c_str());
+    for (const char* m : kMonthNames)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sched_fields.month), m);
+    for (int h = 0; h < 24; ++h)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sched_fields.hour),
+                                       std::to_string(h).c_str());
+    for (int m = 0; m < 60; ++m)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sched_fields.minute),
+                                       std::to_string(m).c_str());
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.year),
+                             g_date_time_get_year(when) - sched_fields.first_year);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.month), g_date_time_get_month(when) - 1);
+    fill_sched_days();
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.day),
+                             g_date_time_get_day_of_month(when) - 1);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.hour), g_date_time_get_hour(when));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.minute), g_date_time_get_minute(when));
+    g_date_time_unref(when);
+    g_date_time_unref(now);
+
+    for (GtkWidget* combo : {sched_fields.year, sched_fields.month})
+        g_signal_connect(combo, "changed",
+                         G_CALLBACK(+[](GtkComboBox*, gpointer) { fill_sched_days(); }), nullptr);
+    return grid;
+}
+
+// The chosen local time as a Unix timestamp, or 0 if it doesn't make a time.
+gint64 sched_unix_time() {
+    GDateTime* when = g_date_time_new_local(
+        sched_fields.first_year + active(sched_fields.year), active(sched_fields.month) + 1,
+        active(sched_fields.day) + 1, active(sched_fields.hour), active(sched_fields.minute), 0);
+    if (!when)
+        return 0;
+    const gint64 at = g_date_time_to_unix(when);
+    g_date_time_unref(when);
+    return at;
+}
+
 // ------------------------------------------------------------- composer ---
 
 // Title-bar character counter, like Windows: "Reply (487)".
@@ -245,7 +357,9 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         base_title.c_str(), parent,
         static_cast<GtkDialogFlags>(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT), "_Cancel",
-        GTK_RESPONSE_CANCEL, editing ? "_Save" : "_Post", GTK_RESPONSE_OK, nullptr);
+        // Not Alt+P: that's the Post field, and sharing it meant Alt+P could
+        // publish a draft when you only meant to go back to it (issue 37).
+        GTK_RESPONSE_CANCEL, editing ? "_Save" : "Pos_t", GTK_RESPONSE_OK, nullptr);
     gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 620, 560);
 
@@ -396,30 +510,24 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
                          poll_box);
     }
 
-    // Schedule: a local "YYYY-MM-DD HH:MM" time, shown when checked.
+    // Schedule: Year/Month/Day/Hour/Minute dropdowns, shown when checked.
     GtkWidget* sched_check = nullptr;
-    GtkWidget* sched_entry = nullptr;
+    GtkWidget* sched_grid = nullptr;
     if (has_schedule) {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         sched_check = gtk_check_button_new_with_mnemonic("_Schedule");
-        sched_entry = gtk_entry_new();
-        atk_object_set_name(gtk_widget_get_accessible(sched_entry),
-                            "Scheduled time, year dash month dash day space hour colon minute");
-        GDateTime* now = g_date_time_new_now_local();
-        GDateTime* in_an_hour = g_date_time_add_hours(now, 1);
-        gchar* seed = g_date_time_format(in_an_hour, "%Y-%m-%d %H:%M");
-        gtk_entry_set_text(GTK_ENTRY(sched_entry), seed);
-        g_free(seed);
-        g_date_time_unref(in_an_hour);
-        g_date_time_unref(now);
-        gtk_box_pack_start(GTK_BOX(row), sched_check, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(row), sched_entry, TRUE, TRUE, 0);
-        gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
-        g_signal_connect(sched_check, "toggled", G_CALLBACK(+[](GtkToggleButton* b, gpointer p) {
-                             gtk_widget_set_visible(static_cast<GtkWidget*>(p),
-                                                    gtk_toggle_button_get_active(b));
+        sched_grid = build_sched_fields();
+        gtk_box_pack_start(GTK_BOX(box), sched_check, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), sched_grid, FALSE, FALSE, 0);
+        g_signal_connect(sched_check, "toggled", G_CALLBACK(+[](GtkToggleButton* b, gpointer d) {
+                             const bool on = gtk_toggle_button_get_active(b);
+                             gtk_widget_set_visible(sched_fields.grid, on);
+                             // Alt+T is always the send button, whatever it says.
+                             if (GtkWidget* send = gtk_dialog_get_widget_for_response(
+                                     GTK_DIALOG(d), GTK_RESPONSE_OK))
+                                 gtk_button_set_label(GTK_BUTTON(send),
+                                                      on ? "Schedule pos_t" : "Pos_t");
                          }),
-                         sched_entry);
+                         dialog);
     }
 
     // Autocomplete @mention (Alt+A via the mnemonic) — hidden without a picker.
@@ -525,8 +633,8 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
     gtk_widget_show_all(dialog);
     if (poll_box)
         gtk_widget_set_visible(poll_box, FALSE);
-    if (sched_entry)
-        gtk_widget_set_visible(sched_entry, FALSE);
+    if (sched_grid)
+        gtk_widget_set_visible(sched_grid, FALSE);
     update_counter();
     gtk_widget_grab_focus(text_view);
 
@@ -597,16 +705,9 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
 
         gint64 scheduled_at = 0;
         if (sched_check && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(sched_check))) {
-            int y = 0, mo = 0, d = 0, h = 0, mi = 0;
-            if (std::sscanf(gtk_entry_get_text(GTK_ENTRY(sched_entry)), "%d-%d-%d %d:%d", &y,
-                            &mo, &d, &h, &mi) == 5) {
-                if (GDateTime* when = g_date_time_new_local(y, mo, d, h, mi, 0)) {
-                    scheduled_at = g_date_time_to_unix(when);
-                    g_date_time_unref(when);
-                }
-            }
+            scheduled_at = sched_unix_time();
             if (scheduled_at == 0) {
-                gtk_widget_error_bell(dialog); // unparsable time: fix or uncheck
+                gtk_widget_error_bell(dialog); // not a real time: fix or uncheck
                 continue;
             }
         }

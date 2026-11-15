@@ -15,7 +15,8 @@ constexpr int kPollListId = 1500;
 constexpr int kVoteBtnId = 1501;
 
 struct Ctx {
-    const std::wstring* text;
+    const std::wstring* body;
+    const std::wstring* details;
     bool quote_ok;
     bool browser_ok;
     bool is_mine;  // your own post -> the Delete button is shown
@@ -51,11 +52,11 @@ std::vector<int> collect_choices(const Ctx* c) {
 }
 
 // Build the voting control (list box / checklist) and Vote button in the space
-// freed by shrinking the read-only text field.
+// freed by shrinking the read-only details field.
 void build_poll_controls(HWND dlg, Ctx* c) {
     if (!c->poll || !c->poll->present || c->poll->options.empty())
         return;
-    HWND hText = GetDlgItem(dlg, IDC_POSTINFO_TEXT);
+    HWND hText = GetDlgItem(dlg, IDC_POSTINFO_DETAILS);
     RECT tr;
     GetWindowRect(hText, &tr);
     MapWindowPoints(nullptr, dlg, reinterpret_cast<POINT*>(&tr), 2);
@@ -109,7 +110,7 @@ void build_poll_controls(HWND dlg, Ctx* c) {
     HFONT font = reinterpret_cast<HFONT>(SendMessageW(dlg, WM_GETFONT, 0, 0));
     SendMessageW(c->poll_list, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
     SendMessageW(vote, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    // Tab order: poll list, then Vote, right after the text field.
+    // Tab order: poll list, then Vote, right after the details field.
     SetWindowPos(c->poll_list, hText, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     SetWindowPos(vote, c->poll_list, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     // Enter votes (the default push button becomes Vote while a poll is open).
@@ -121,9 +122,13 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_INITDIALOG: {
         auto* c = reinterpret_cast<Ctx*>(lp);
         SetWindowLongPtrW(dlg, DWLP_USER, reinterpret_cast<LONG_PTR>(c));
+        // The post's text and its details sit in separate fields, so Ctrl+A,
+        // Ctrl+C on the first copies just the post (issue 37).
         // Win32 multiline EDIT needs CRLF line breaks; the core composes with LF.
-        SetDlgItemTextW(dlg, IDC_POSTINFO_TEXT, to_crlf(*c->text).c_str());
+        SetDlgItemTextW(dlg, IDC_POSTINFO_TEXT, to_crlf(*c->body).c_str());
+        SetDlgItemTextW(dlg, IDC_POSTINFO_DETAILS, to_crlf(*c->details).c_str());
         enable_edit_select_all(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // Ctrl+A select-all
+        enable_edit_select_all(GetDlgItem(dlg, IDC_POSTINFO_DETAILS));
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_QUOTE), c->quote_ok);
         EnableWindow(GetDlgItem(dlg, IDC_POSTINFO_BROWSER), c->browser_ok);
         // Delete is only for your own posts; hide it entirely otherwise.
@@ -156,8 +161,10 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         else
             ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_BOOSTBY), SW_HIDE);
         build_poll_controls(dlg, c);
-        SetFocus(GetDlgItem(dlg, IDC_POSTINFO_TEXT)); // read the post immediately
-        return FALSE;                                 // focus set explicitly
+        // Read the post immediately. A post with no text (media only) has nothing
+        // to read there, so start on the details instead of an empty field.
+        SetFocus(GetDlgItem(dlg, c->body->empty() ? IDC_POSTINFO_DETAILS : IDC_POSTINFO_TEXT));
+        return FALSE; // focus set explicitly
     }
     case WM_COMMAND: {
         auto* c = reinterpret_cast<Ctx*>(GetWindowLongPtrW(dlg, DWLP_USER));
@@ -234,12 +241,14 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 
 } // namespace
 
-PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
+PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& body,
+                                     const std::wstring& details,
                                      bool quote_ok, bool browser_ok, bool is_mine, bool mute_ok,
                                      bool muted, bool favorited, bool boosted, bool bookmarked,
                                      bool bookmark_ok, int favorites_count, int boosts_count,
                                      const PollInfo& poll) {
-    Ctx ctx{&text,       quote_ok,   browser_ok,      is_mine,      mute_ok,
+    Ctx ctx{&body,       &details,
+            quote_ok,    browser_ok,      is_mine,      mute_ok,
             muted,       favorited,  boosted,         bookmarked,   bookmark_ok,
             favorites_count, boosts_count, &poll, nullptr, {}};
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_POST_INFO), parent, Proc,

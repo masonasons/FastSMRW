@@ -297,6 +297,9 @@ void MainWindow::build_menu() {
     GtkWidget* tl_menu = gtk_menu_new();
     plain(tl_menu, "_New Timeline…", GDK_KEY_t, ctrl, "get_spawnable");
     plain(tl_menu, "Re_fresh Timeline", GDK_KEY_r, ctrl, "refresh");
+    // When the server last answered: a quiet timeline and an unreachable server
+    // otherwise sound the same (issue 37).
+    plain(tl_menu, "Speak Refresh S_tatus", GDK_KEY_r, ctrl_shift, "refresh_status");
     plain(tl_menu, "_Pin Timeline", GDK_KEY_p, ctrl, "toggle_pin");
     plain(tl_menu, "_Mute Timeline Sounds", GDK_KEY_m, ctrl, "toggle_mute");
     plain(tl_menu, "Auto-_read New Posts", 0, none, "toggle_auto_read");

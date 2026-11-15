@@ -40,6 +40,10 @@ void StreamingClient::start(SocialAccount* account, const StreamRequest& spec, T
             http_->send_stream(
                 req, [&running] { return running->load(); },
                 [&](std::string_view bytes) {
+                    // Any bytes -- the server's keep-alive comments included --
+                    // mean it's still answering, even when no posts arrive and
+                    // streaming has made polling unnecessary.
+                    account->note_server_reply(200);
                     parser.feed(bytes, [&](const net::SseEvent& e) {
                         if (auto item = account->parse_stream_event(e.event, e.data, route)) {
                             main_->post([cb = on_item, it = std::move(*item)]() mutable {
@@ -54,6 +58,7 @@ void StreamingClient::start(SocialAccount* account, const StreamRequest& spec, T
             }
             // Reconnect after a drop: ~5s, but wake promptly on stop().
             log::write("stream[" + key + "]: connection dropped, reconnecting in ~5s");
+            account->note_server_reply(0); // the server stopped talking to us
             for (int i = 0; i < 50 && running->load(); ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }

@@ -65,6 +65,7 @@ private:
     void cmd_select_timeline(const nlohmann::json& cmd);
     void cmd_select_account(const nlohmann::json& cmd);
     void cmd_refresh();
+    void cmd_refresh_status();
     void cmd_refresh_all();
     void cmd_resume(); // app returned from background: reopen audio, restream, refresh
     void cmd_pause();  // backgrounded: publish positions now, then go idle

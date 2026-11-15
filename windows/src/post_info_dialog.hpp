@@ -41,10 +41,11 @@ struct PostInfoResult {
     std::vector<int> choices; // set only for Vote
 };
 
-// Modal Post Info dialog (Mac parity): a read-only review of the post plus action
-// buttons, and (when the poll is votable) a voting list + Vote button. The caller
-// performs the action (dispatches the matching command).
-PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
+// Modal Post Info dialog (Mac parity): the post's text and its details in two
+// read-only fields, action buttons, and (when the poll is votable) a voting list
+// + Vote button. The caller performs the action (dispatches the matching command).
+PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& body,
+                                     const std::wstring& details,
                                      bool quote_ok, bool browser_ok, bool is_mine, bool mute_ok,
                                      bool muted, bool favorited, bool boosted, bool bookmarked,
                                      bool bookmark_ok, int favorites_count, int boosts_count,

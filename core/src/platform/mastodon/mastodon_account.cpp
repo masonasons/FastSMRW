@@ -148,6 +148,9 @@ net::HttpResponse MastodonAccount::send(const net::HttpRequest& req) {
     // ponytail: fixed reserve; scale by X-RateLimit-Limit if servers vary widely.
     constexpr int kReserve = 100;
     if (req.url.rfind(credentials_.instance_url, 0) == 0) {
+        // Only our own instance says whether *our* server is reachable; a remote
+        // instance timeline answering proves nothing about it.
+        note_server_reply(res.status);
         const auto remaining = res.header("X-RateLimit-Remaining");
         if (res.status == 429 || (remaining && std::atoi(remaining->c_str()) < kReserve)) {
             const auto reset = res.header("X-RateLimit-Reset");

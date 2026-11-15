@@ -68,6 +68,20 @@ std::vector<std::string> post_text_link_urls(const Status& s);
 // parity): author/@handle, spoken time, content warning, text, media, stats.
 std::string post_info(const Status& s, std::int64_t now);
 
+// The same, split in two for a Post Info view with separate fields: the body
+// alone (exactly what the author wrote, line breaks kept), so selecting and
+// copying it doesn't drag along the author, counts and so on, and everything
+// else post_info shows — author, time, visibility, content warning, quoted
+// post, poll, media, counts, posting app.
+std::string post_info_body(const Status& s);
+std::string post_info_details(const Status& s, std::int64_t now);
+
+// "Speak refresh status": how long since the account's server last answered,
+// and whether it's failing now -- what the newest post's age can't tell you
+// (issue 37). Times are Unix seconds; 0 means not this session.
+std::string refresh_status(const std::string& server, std::int64_t last_answer,
+                           std::int64_t last_failure, std::int64_t now);
+
 // Multi-line profile for the Open User Profile dialog: name, @handle, flags
 // (bot / locked), bio, then follower/following/post counts. Mirrors the Mac.
 std::string user_profile(const User& u);

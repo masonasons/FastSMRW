@@ -145,6 +145,7 @@ Managing your open timelines:
 - `Ctrl+M` — Mute or unmute this timeline's sounds.
 - `Ctrl+W` — Close the timeline.
 - `Ctrl+R` — Refresh it now.
+- `Ctrl+Shift+R` — Speak when the server last answered, and whether it is unreachable now.
 - `Ctrl+Delete` — Clear the posts in this timeline.
 - `Ctrl+Shift+Delete` — Clear every timeline.
 - `Ctrl+Z` — Undo your last navigation (go back).
@@ -225,6 +226,7 @@ Timeline menu:
 
 - `Ctrl+T` — New timeline.
 - `Ctrl+R` — Refresh timeline.
+- `Ctrl+Shift+R` — Speak refresh status.
 - `Ctrl+P` — Pin timeline.
 - `Ctrl+M` — Mute timeline sounds.
 - `A` — Auto-read new posts.
@@ -317,6 +319,7 @@ Navigation:
 - `Alt+Win+Space` — Speak the current post.
 - `Alt+Win+Z` — Undo navigation (go back).
 - `Ctrl+Alt+Win+U` — Refresh the timeline.
+- `Ctrl+Alt+Win+R` — Speak when the server last answered, and whether it's unreachable now.
 
 Posts:
 

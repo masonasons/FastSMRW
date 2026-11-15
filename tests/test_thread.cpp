@@ -303,3 +303,35 @@ void test_mastodon_rate_limit_pauses_refresh() {
     limited.items(TimelineSource::home(), 40, {});
     CHECK(!limited.background_refresh_allowed());
 }
+
+// Issue 37: the account remembers when its own server last answered and last
+// failed, for "Speak refresh status".
+void test_mastodon_tracks_server_replies() {
+    FakeRateLimitHttp http;
+    MastodonCredentials cred;
+    cred.instance_url = "https://example.social";
+    cred.access_token = "tok";
+    User me;
+    me.id = "me";
+    MastodonAccount account(cred, me, &http);
+    CHECK_EQ(account.last_answer(), std::int64_t{0});
+    CHECK_EQ(account.last_failure(), std::int64_t{0});
+
+    // A 404 still means the server is there.
+    http.status = 404;
+    account.items(TimelineSource::home(), 40, {});
+    CHECK(account.last_answer() > 0);
+    CHECK_EQ(account.last_failure(), std::int64_t{0});
+
+    // No reply at all, or a 502 from the proxy in front of a dead instance.
+    MastodonAccount down(cred, me, &http);
+    http.status = 0;
+    down.items(TimelineSource::home(), 40, {});
+    CHECK(down.last_failure() > 0);
+    CHECK_EQ(down.last_answer(), std::int64_t{0});
+    MastodonAccount proxied(cred, me, &http);
+    http.status = 502;
+    proxied.items(TimelineSource::home(), 40, {});
+    CHECK(proxied.last_failure() > 0);
+    CHECK_EQ(proxied.last_answer(), std::int64_t{0});
+}

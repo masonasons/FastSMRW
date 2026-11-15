@@ -52,6 +52,7 @@ enum {
     ID_TRAY_EXIT,
     ID_NEW_POST,
     ID_REFRESH,
+    ID_REFRESH_STATUS,
     ID_REPLY,
     ID_BOOST,
     ID_FAVORITE,
@@ -267,6 +268,9 @@ HMENU build_menu() {
     HMENU timeline = CreatePopupMenu();
     AppendMenuW(timeline, MF_STRING, ID_NEW_TIMELINE, L"&New Timeline…\tCtrl+T");
     AppendMenuW(timeline, MF_STRING, ID_REFRESH, L"Re&fresh Timeline\tCtrl+R");
+    // When the server last answered: a quiet timeline and an unreachable server
+    // otherwise sound the same (issue 37).
+    AppendMenuW(timeline, MF_STRING, ID_REFRESH_STATUS, L"Speak Refresh S&tatus\tCtrl+Shift+R");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_PIN, L"&Pin Timeline\tCtrl+P");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_MUTE, L"&Mute Timeline Sounds\tCtrl+M");
     AppendMenuW(timeline, MF_STRING, ID_TOGGLE_AUTO_READ, L"Auto-&read New Posts\tA");
@@ -337,6 +341,7 @@ bool MainWindow::create() {
     std::vector<ACCEL> accels = {
         {FVIRTKEY | FCONTROL, 'N', ID_NEW_POST},
         {FVIRTKEY | FCONTROL, 'R', ID_REFRESH},
+        {FVIRTKEY | FCONTROL | FSHIFT, 'R', ID_REFRESH_STATUS},
         {FVIRTKEY | FCONTROL, 'T', ID_NEW_TIMELINE},
         {FVIRTKEY | FCONTROL, 'P', ID_TOGGLE_PIN}, // Ctrl+P: pin/unpin the current tab
         {FVIRTKEY | FCONTROL, 'M', ID_TOGGLE_MUTE}, // Ctrl+M: mute/unmute the current tab's sounds
@@ -779,8 +784,14 @@ void MainWindow::bind_current_to_view(bool force) {
     // *switch* must always rebind — otherwise switching to an empty timeline (ids
     // == the cleared rendered_ids_) would leave the previous timeline's row count
     // in place, showing blank rows.
-    if (!force && ids == rendered_ids_)
+    if (!force && ids == rendered_ids_) {
+        // Same rows, but their text may have changed -- most often the core's
+        // periodic re-emit moving "just now" on to "2 minutes ago" while nothing
+        // new arrives (issue 37). Repaint so the visible list isn't left showing
+        // the old age; selection and focus stay untouched, so nothing is spoken.
+        InvalidateRect(timeline_view_, nullptr, FALSE);
         return;
+    }
     rendered_ids_ = ids;
 
     const int count = static_cast<int>(ids.size());
@@ -1254,7 +1265,8 @@ void MainWindow::do_post_info() {
 void MainWindow::ev_post_info(const json& e) {
     leave_layer(); // a modal dialog is opening; leave the layer (restores an overlay)
     const std::string id = e.value("id", std::string{});
-    const std::wstring text = to_wide(e.value("text", std::string{}));
+    const std::wstring body = to_wide(e.value("body", std::string{}));
+    const std::wstring details = to_wide(e.value("details", std::string{}));
     const bool quote_ok = e.contains("features") && e["features"].value("quote_posts", false);
     const bool browser_ok = e.value("has_url", false);
     const bool is_mine = e.value("is_mine", false);
@@ -1275,7 +1287,7 @@ void MainWindow::ev_post_info(const json& e) {
     }
     const std::string keep_id = selected_id();
     auto guard = enter_modal();
-    PostInfoResult res = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, is_mine,
+    PostInfoResult res = show_post_info_dialog(hwnd_, inst_, body, details, quote_ok, browser_ok, is_mine,
                                                mute_ok, muted, favorited, boosted, bookmarked,
                                                bookmark_ok, fav_count, boost_count, poll);
     restore_selection(keep_id);
@@ -2175,6 +2187,9 @@ void MainWindow::handle_command(int id) {
         break;
     case ID_REFRESH:
         dispatch_cmd({{"cmd", "refresh"}});
+        break;
+    case ID_REFRESH_STATUS:
+        dispatch_cmd({{"cmd", "refresh_status"}});
         break;
     case ID_REPLY:
         compose("reply");
