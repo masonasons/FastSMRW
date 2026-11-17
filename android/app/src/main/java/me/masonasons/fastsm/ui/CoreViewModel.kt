@@ -69,6 +69,8 @@ data class RowUi(
     val links: List<LinkUi> = emptyList(),
     /** The same label with the post's line breaks kept, for display. */
     val textWithBreaks: String = "",
+    /** Posts are missing after this row (a refresh skipped them); load_gap fills them. */
+    val gapAfter: Boolean = false,
 )
 
 /** A link inside a post (title from its preview card or anchor text, plus url). */
@@ -561,6 +563,7 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                 } ?: emptyList(),
                                 textWithBreaks = r.optString("text_with_breaks"),
+                                gapAfter = r.optBoolean("gap_after"),
                             )
                         )
                     }
@@ -1338,6 +1341,9 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
         core.dispatch("toggle_mute_conversation") { put("id", id) }
 
     fun openPostInfo(id: String) = core.dispatch("post_info") { put("id", id) }
+
+    /** Fill the missing posts after row [id] (a gap left by a refresh). */
+    fun loadGap(id: String) = core.dispatch("load_gap") { put("id", id) }
 
     /** Open a user list of everyone who favorited / boosted a post (Mastodon). */
     fun openFavoritedBy(id: String) = core.dispatch("open_favorited_by") { put("id", id) }
