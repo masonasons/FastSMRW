@@ -10,6 +10,8 @@
 #include <sstream>
 
 #include <glib.h>
+#include <gdk/gdkx.h>
+#include <X11/XKBlib.h>
 
 namespace fastsmgtk {
 
@@ -107,6 +109,11 @@ bool InvisibleHotkeys::start(std::unordered_map<std::string, std::string> bindin
             denied = true;
     }
     if (fds_.empty()) {
+        if (start_x11(bindings)) {
+            on_action_ = std::move(on_action);
+            running_.store(true);
+            return true;
+        }
         error = denied ? "Invisible interface: no permission to read the keyboard. Add your "
                          "user to the input group and log in again."
                        : "Invisible interface: no keyboard devices found.";
@@ -126,6 +133,7 @@ bool InvisibleHotkeys::start(std::unordered_map<std::string, std::string> bindin
 
 void InvisibleHotkeys::stop() {
     running_.store(false);
+    stop_x11();
     if (wake_pipe_[1] >= 0) {
         const char x = 'x';
         [[maybe_unused]] ssize_t n = ::write(wake_pipe_[1], &x, 1);
@@ -140,6 +148,106 @@ void InvisibleHotkeys::stop() {
             ::close(fd);
         fd = -1;
     }
+}
+
+bool InvisibleHotkeys::start_x11(
+    const std::unordered_map<std::string, std::string>& bindings) {
+    auto* display = gdk_display_get_default();
+    if (!GDK_IS_X11_DISPLAY(display))
+        return false;
+
+    auto* xdisplay = gdk_x11_display_get_xdisplay(display);
+    auto* root = gdk_get_default_root_window();
+    const auto xid = gdk_x11_window_get_xid(root);
+    const unsigned alt = XkbKeysymToModifiers(xdisplay, XK_Alt_L) |
+                         XkbKeysymToModifiers(xdisplay, XK_Alt_R);
+    const unsigned super = XkbKeysymToModifiers(xdisplay, XK_Super_L) |
+                           XkbKeysymToModifiers(xdisplay, XK_Super_R);
+    x11_locks_ = LockMask | XkbKeysymToModifiers(xdisplay, XK_Num_Lock) |
+                 XkbKeysymToModifiers(xdisplay, XK_Scroll_Lock);
+
+    for (const auto& [combo, action] : bindings) {
+        const auto split = combo.rfind('+');
+        if (split == std::string::npos)
+            continue;
+        unsigned modifiers = 0;
+        std::istringstream tokens(combo.substr(0, split));
+        for (std::string token; std::getline(tokens, token, '+');) {
+            if (token == "control") modifiers |= ControlMask;
+            else if (token == "shift") modifiers |= ShiftMask;
+            else if (token == "alt" && alt) modifiers |= alt;
+            else if (token == "win" && super) modifiers |= super;
+            else { modifiers = 0; break; }
+        }
+        // Never take over ordinary typing in another window.
+        if (!(modifiers & (ControlMask | alt | super)))
+            continue;
+
+        const auto name = combo.substr(split + 1);
+        for (unsigned code = 1; code + 8 <= 255; ++code) {
+            const char* known = key_name(code);
+            if (!known || name != known)
+                continue;
+            // Xorg evdev and Xvfb use the Linux keycode plus eight.
+            const unsigned key = code + 8;
+            const unsigned id = (modifiers << 8) | key;
+            if (x11_actions_.contains(id))
+                break;
+            gdk_x11_display_error_trap_push(display);
+            for (unsigned locks = x11_locks_;; locks = (locks - 1) & x11_locks_) {
+                XGrabKey(xdisplay, key, modifiers | locks, xid, False,
+                         GrabModeAsync, GrabModeAsync);
+                if (!locks) break;
+            }
+            if (gdk_x11_display_error_trap_pop(display) == 0) {
+                x11_actions_.emplace(id, action);
+            } else {
+                for (unsigned locks = x11_locks_;; locks = (locks - 1) & x11_locks_) {
+                    XUngrabKey(xdisplay, key, modifiers | locks, xid);
+                    if (!locks) break;
+                }
+                g_warning("FastSMRW could not register X11 shortcut %s", combo.c_str());
+            }
+            break;
+        }
+    }
+    if (x11_actions_.empty())
+        return false;
+    x11_root_ = root;
+    gdk_window_add_filter(root, filter_x11, this);
+    return true;
+}
+
+void InvisibleHotkeys::stop_x11() {
+    if (!x11_root_)
+        return;
+    gdk_window_remove_filter(x11_root_, filter_x11, this);
+    auto* display = gdk_x11_display_get_xdisplay(gdk_window_get_display(x11_root_));
+    const auto root = gdk_x11_window_get_xid(x11_root_);
+    for (const auto& [id, action] : x11_actions_) {
+        for (unsigned locks = x11_locks_;; locks = (locks - 1) & x11_locks_) {
+            XUngrabKey(display, id & 255, (id >> 8) | locks, root);
+            if (!locks) break;
+        }
+    }
+    XFlush(display);
+    x11_actions_.clear();
+    x11_root_ = nullptr;
+}
+
+GdkFilterReturn InvisibleHotkeys::filter_x11(GdkXEvent* event, GdkEvent*, gpointer data) {
+    auto* self = static_cast<InvisibleHotkeys*>(data);
+    const auto* xevent = static_cast<const XEvent*>(event);
+    if (xevent->type != KeyPress)
+        return GDK_FILTER_CONTINUE;
+    const auto& key = xevent->xkey;
+    const unsigned mods = (key.state & 255) & ~self->x11_locks_;
+    const auto match = self->x11_actions_.find((mods << 8) | key.keycode);
+    if (match == self->x11_actions_.end())
+        return GDK_FILTER_CONTINUE;
+    const auto action = match->second;
+    self->on_action_(action);
+    return GDK_FILTER_REMOVE;
 }
 
 void InvisibleHotkeys::run() {

@@ -14,8 +14,8 @@ OUT=build/linux
 APP_OBJ="$OUT/app-obj"
 mkdir -p "$APP_OBJ"
 
-GTK_CFLAGS=$(pkg-config --cflags gtk+-3.0 gstreamer-1.0)
-GTK_LIBS=$(pkg-config --libs gtk+-3.0 gstreamer-1.0)
+GTK_CFLAGS=$(pkg-config --cflags gtk+-3.0 gstreamer-1.0 x11)
+GTK_LIBS=$(pkg-config --libs gtk+-3.0 gstreamer-1.0 x11)
 SPD_CFLAGS=$(pkg-config --cflags speech-dispatcher 2>/dev/null || echo "")
 SPD_LIBS=$(pkg-config --libs speech-dispatcher 2>/dev/null || echo "-lspeechd")
 
