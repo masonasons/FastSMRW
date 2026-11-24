@@ -793,11 +793,18 @@ void MainWindow::do_hide_window() {
     dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", false}});
 }
 
-void MainWindow::surface_window() {
-    gtk_window_present(GTK_WINDOW(window_));
+void MainWindow::surface_window(guint32 timestamp) {
+    gtk_widget_show(window_);
+    gtk_window_present_with_time(GTK_WINDOW(window_), timestamp);
     dispatch_cmd({{"cmd", "set_window_shown"}, {"shown", true}});
 }
 
+void MainWindow::toggle_window(guint32 timestamp) {
+    if (gtk_widget_get_visible(window_))
+        do_hide_window();
+    else
+        surface_window(timestamp);
+}
 // ---------------------------------------------------------------- actions ---
 
 void MainWindow::compose(const std::string& mode) {
@@ -1677,7 +1684,13 @@ void MainWindow::ev_keymap(const json& e) {
             bindings[key] = action.get<std::string>();
     std::string error;
     if (!invisible_.start(std::move(bindings),
-                          [this](const std::string& action) {
+                          [this](const std::string& action, guint32 timestamp) {
+                              // MATE uses the X11 keypress time to decide whether
+                              // a background window may take keyboard focus.
+                              if (action == "ToggleWindow" && timestamp != GDK_CURRENT_TIME) {
+                                  toggle_window(timestamp);
+                                  return;
+                              }
                               dispatch_cmd({{"cmd", "perform_action"}, {"action", action}});
                           },
                           error))
@@ -1687,10 +1700,7 @@ void MainWindow::ev_keymap(const json& e) {
 void MainWindow::ev_invisible_ui_action(const json& e) {
     const std::string action = e.value("action", std::string{});
     if (action == "ToggleWindow") {
-        if (gtk_widget_get_visible(window_))
-            do_hide_window();
-        else
-            surface_window();
+        toggle_window();
     } else if (action == "Options") {
         do_settings();
     } else if (action == "KeymapManager") {

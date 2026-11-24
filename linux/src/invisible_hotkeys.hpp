@@ -13,7 +13,7 @@ namespace fastsmgtk {
 // Global shortcuts via evdev, with X11 grabs when evdev is unavailable.
 class InvisibleHotkeys {
 public:
-    using ActionFn = std::function<void(const std::string& action)>; // main thread
+    using ActionFn = std::function<void(const std::string& action, guint32 timestamp)>; // main thread
 
     ~InvisibleHotkeys() { stop(); }
 

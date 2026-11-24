@@ -5,6 +5,7 @@ FastSMRW changelog
 -----
 
 - The invisible interface can now use global shortcuts in X11 sessions without direct keyboard access.
+- Restoring FastSMRW with its invisible interface shortcut now returns keyboard focus to the window on X11.
 
 - Fixed: on Android, opening the app no longer shows the Add Account screen for a moment while your accounts load.
 - Fixed: on Android, the post editor now opens in the text box, ready to type, instead of on the Cancel button.
