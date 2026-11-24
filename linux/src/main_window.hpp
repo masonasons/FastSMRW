@@ -118,7 +118,8 @@ private:
     void ev_user_suggestions(const nlohmann::json& e);
     void add_tray_icon();
     void do_hide_window();
-    void surface_window();
+    void surface_window(guint32 timestamp = GDK_CURRENT_TIME);
+    void toggle_window(guint32 timestamp = GDK_CURRENT_TIME);
     void ev_media_open(const nlohmann::json& e);
     void ev_media_picker(const nlohmann::json& e);
     void play_media_background(const std::string& url, const std::string& title);

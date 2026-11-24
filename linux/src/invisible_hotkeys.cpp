@@ -246,7 +246,7 @@ GdkFilterReturn InvisibleHotkeys::filter_x11(GdkXEvent* event, GdkEvent*, gpoint
     if (match == self->x11_actions_.end())
         return GDK_FILTER_CONTINUE;
     const auto action = match->second;
-    self->on_action_(action);
+    self->on_action_(action, key.time);
     return GDK_FILTER_REMOVE;
 }
 
@@ -302,7 +302,7 @@ void InvisibleHotkeys::run() {
                     +[](gpointer data) -> gboolean {
                         auto* f = static_cast<Fire*>(data);
                         if (f->self->running_.load() && f->self->on_action_)
-                            f->self->on_action_(f->action);
+                            f->self->on_action_(f->action, GDK_CURRENT_TIME);
                         delete f;
                         return G_SOURCE_REMOVE;
                     },
