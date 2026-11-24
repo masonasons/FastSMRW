@@ -41,9 +41,20 @@ if [ -f "$OUT/fastsm_core.a" ] &&
 fi
 
 CORE=core/src
+# Media plays in the core through FastPlay's engine (fastsm::media), as on
+# Windows and macOS: libfastplay_engine.so from linux/fetch-deps.sh.
+ENGINE=deps/fastplay_engine
 CXXFLAGS=(-std=c++20 -fexceptions -frtti -O2 -g "${SAN[@]}"
     -I core/include -I deps -I deps/stb_vorbis
+    -DFASTSM_FASTPLAY_ENGINE -I "$ENGINE/include"
     -Wall -Wno-deprecated-declarations)
+
+# Objects built with different flags (a define added, say) are stale even when
+# no file changed: rebuild everything when the flags do.
+if [ "$(cat "$OUT/cxxflags" 2>/dev/null)" != "${CXXFLAGS[*]}" ]; then
+    rm -f "$OBJ"/*.o
+    printf '%s' "${CXXFLAGS[*]}" > "$OUT/cxxflags"
+fi
 
 # Portable core sources (mirrors macos/build-core.sh), plus the C-ABI factory
 # and the libcurl transport.
@@ -73,7 +84,9 @@ CORE_SRC=(
     capi/fastsm_core.cpp
 )
 
-CORE_LIBS=(-lcurl -lpthread -ldl -lm)
+# The tests run from the build tree, so they find the engine where it was fetched.
+CORE_LIBS=(-L "$ENGINE/lib" -lfastplay_engine -Wl,-rpath,"$(pwd)/$ENGINE/lib"
+    -lcurl -lpthread -ldl -lm)
 
 JOBS=$(nproc)
 PIDS=()

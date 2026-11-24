@@ -24,8 +24,8 @@ Dispatcher.
    the FastSMRW folder, run `linux/build.sh`; the finished program is
    `dist/linux/FastSMRW`. You will need these packages
    (Debian/Ubuntu names): g++, pkg-config, libgtk-3-dev, libcurl4-openssl-dev,
-   libspeechd-dev, libgstreamer1.0-dev, and the gstreamer1.0-plugins-base and
-   gstreamer1.0-plugins-good plugin packages (for the audio player).
+   libspeechd-dev and unzip. The build downloads FastPlay's audio engine, which
+   plays media, and puts it beside the program.
 
 2. Add your account. Open the Account menu and choose "Add Account" (or press
    Ctrl+Shift+A). Pick Mastodon or Bluesky and sign in — Mastodon opens your
@@ -166,7 +166,7 @@ back in. The keyboard manager lets you edit which key combinations run actions.
 
 Open Settings with `Ctrl+Comma`. The pages match the Windows app: General,
 Timelines, Audio, Earcons, Speech, Advanced, Confirmations, Behavior,
-Invisible interface, and Updates. Highlights:
+Invisible interface, Updates, and FastPlay. Highlights:
 
 - Timelines: auto-refresh, streaming, reversed timelines, home-position sync,
   and the Movement Units editor.
@@ -178,6 +178,25 @@ Invisible interface, and Updates. Highlights:
   warnings, emoji stripping, and mention collapsing live here too.
 - Confirmations: which actions ask before doing.
 - Behavior: what Enter and Shift+Enter do.
+- FastPlay: the media player's effects (reverb, echo, EQ and more) and its
+  tempo, pitch, and rate. Changes take effect at once. You can also import
+  your settings from FastPlay's own FastPlay.ini, export them, or reset them.
+
+## Media
+
+Audio attachments and YouTube links play in FastSM's own player, which uses
+FastPlay's audio engine. Images and videos open in your usual viewer. While the
+player window is open:
+
+- `Space` — Play or pause.
+- `Left` / `Right` — Back or forward five seconds.
+- `Up` / `Down` — Volume up or down; `Page Up` / `Page Down` by a bigger step.
+- `Home` / `End` — Full volume or silent.
+- `P` — Say where you are in the audio.
+- `Escape` — Stop and close the player.
+
+To play media without a window, turn on background playback on the Behavior
+page; `Ctrl+S` stops it.
 
 ## Sounds
 

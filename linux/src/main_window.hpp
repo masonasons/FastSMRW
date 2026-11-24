@@ -14,6 +14,7 @@
 #include "invisible_hotkeys.hpp"
 #include "keymap_manager_dialog.hpp"
 #include "media_player.hpp"
+#include "settings_dialog.hpp"
 
 namespace fastsmgtk {
 
@@ -50,6 +51,11 @@ struct Timeline {
     bool enter_opens_thread = false;
     bool reversed = false;
     std::vector<Row> rows;
+    // This timeline's own list model, kept in step with `rows` as updates
+    // arrive. Switching timelines just swaps which model the posts view shows,
+    // so a switch costs nothing per row (refilling one store per switch was
+    // slow — every inserted row is an accessibility event Orca processes).
+    std::shared_ptr<GtkListStore> store;
 };
 
 // The main window: timelines pane + posts list, menu bar, keyboard handling,
@@ -84,13 +90,12 @@ private:
     // --- list plumbing
     void populate_timelines_list();
     void bind_current_to_view();
-    // A content-only update to the visible timeline (relative timestamps ticking
-    // over, counts changing) whose row ids are unchanged: rewrites just the
-    // changed cells' text in place and leaves the cursor alone, so Orca doesn't
-    // re-announce the focused row. Returns false (and changes nothing) when the
-    // ids differ, so the caller falls back to a full rebind. old_rows is the row
-    // set the store currently shows; new rows are already in the timeline.
-    bool refresh_current_rows_text(const std::vector<Row>& old_rows);
+    // Bring tl.store from showing old_rows to showing tl.rows with the fewest
+    // edits: rows whose id is unchanged keep their place (only changed text is
+    // rewritten), and only the run that actually differs is removed/inserted.
+    // On the visible timeline the cursor therefore stays on the same post, so
+    // Orca doesn't re-announce it when a post streams in or an age ticks over.
+    void sync_store(Timeline& tl, const std::vector<Row>& old_rows);
     void set_posts_cursor(int row);
     int index_of_id(const Timeline& tl, const std::string& id) const;
     void maybe_load_older(int row);
@@ -121,7 +126,8 @@ private:
     void surface_window();
     void ev_media_open(const nlohmann::json& e);
     void ev_media_picker(const nlohmann::json& e);
-    void play_media_background(const std::string& url, const std::string& title);
+    void ev_media_player(const nlohmann::json& e);
+    void ev_media_effects(const nlohmann::json& e);
     void stop_media();
     void do_boost();
     void do_favorite();
@@ -129,6 +135,9 @@ private:
     void do_delete_post();
     void do_load_older();
     void do_add_account();
+    void do_report(const std::string& id);
+    void do_about();
+    void do_user_analysis();
     void restore_selection(const std::string& id);
 
     // --- event renderers
@@ -177,7 +186,7 @@ private:
     GtkWidget* timelines_view_ = nullptr;
     GtkWidget* posts_view_ = nullptr;
     GtkListStore* timelines_store_ = nullptr;
-    GtkListStore* posts_store_ = nullptr;
+    std::vector<std::string> shown_titles_; // what timelines_store_ currently lists
 
     std::vector<Timeline> timelines_;
     int current_ = 0;
@@ -185,6 +194,8 @@ private:
     nlohmann::json settings_ = nlohmann::json::object();
     std::vector<std::string> soundpacks_;
     std::vector<std::string> sound_devices_; // mixer output devices, from the settings event
+    std::vector<std::string> media_devices_; // media player output devices, likewise
+    MediaEffectChoices media_effects_;       // the FastPlay page's, from media_effects
     bool load_pending_ = false;
     bool updating_ = false; // suppress cursor-changed while (re)binding models
     std::string find_query_;
@@ -197,8 +208,6 @@ private:
     GtkWidget* mention_view_ = nullptr;
     std::vector<std::string> mention_handles_;
     GtkStatusIcon* tray_ = nullptr; // deprecated API, but the only X11 tray
-    std::unique_ptr<MediaPlayback> media_bg_; // background audio (no window)
-    guint media_bg_timer_ = 0;                // auto-clear when it ends
     std::vector<KmAction> action_catalog_;    // loaded once for the Keyboard Manager
     KeymapManagerDialog* keymap_mgr_ = nullptr; // tracked while open (event forwarding)
 };

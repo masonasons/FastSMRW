@@ -141,15 +141,7 @@ void MainWindow::build_menu() {
     GtkWidget* app_menu = gtk_menu_new();
     add_item(app_menu, "_About FastSMRW", accel, 0, none,
              G_CALLBACK(+[](GtkMenuItem*, gpointer u) {
-                 auto* self = static_cast<MainWindow*>(u);
-                 GtkWidget* d = gtk_message_dialog_new(
-                     GTK_WINDOW(self->window_), GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
-                     GTK_BUTTONS_OK, "FastSMRW\nVersion %s\n\nA fast, accessible "
-                                     "Mastodon/Bluesky client.",
-                     fastsm::version());
-                 gtk_window_set_title(GTK_WINDOW(d), "About FastSMRW");
-                 gtk_dialog_run(GTK_DIALOG(d));
-                 gtk_widget_destroy(d);
+                 static_cast<MainWindow*>(u)->do_about();
              }),
              this);
     add_item(app_menu, "_Help (User Guide)", accel, GDK_KEY_F1, none,
@@ -212,18 +204,7 @@ void MainWindow::build_menu() {
     plain(me_menu, "_Trending Hashtags…", 0, none, "list_trending_hashtags");
     add_item(me_menu, "User A_nalysis…", accel, 0, none,
              G_CALLBACK(+[](GtkMenuItem*, gpointer u) {
-                 auto* self = static_cast<MainWindow*>(u);
-                 auto choice = run_list_manager(
-                     GTK_WINDOW(self->window_), "User Analysis",
-                     {"People you follow who don't follow you back",
-                      "Followers you don't follow back", "Mutuals (you follow each other)"},
-                     {"_Analyze"});
-                 if (!choice || choice->second < 0 || choice->second > 2)
-                     return;
-                 const char* category = choice->second == 0   ? "not_following_back"
-                                        : choice->second == 1 ? "no_followback"
-                                                              : "mutuals";
-                 self->dispatch_cmd({{"cmd", "analyze_users"}, {"category", category}});
+                 static_cast<MainWindow*>(u)->do_user_analysis();
              }),
              this);
     plain(me_menu, "User A_liases…", 0, none, "list_aliases");
@@ -393,9 +374,11 @@ void MainWindow::build_menu() {
 
 void MainWindow::build_views() {
     timelines_store_ = gtk_list_store_new(1, G_TYPE_STRING);
-    posts_store_ = gtk_list_store_new(1, G_TYPE_STRING);
     timelines_view_ = make_list_view(timelines_store_, "Timelines");
-    posts_view_ = make_list_view(posts_store_, "Timeline");
+    // The posts view starts on an empty model; each timeline brings its own.
+    GtkListStore* empty = gtk_list_store_new(1, G_TYPE_STRING);
+    posts_view_ = make_list_view(empty, "Timeline");
+    g_object_unref(empty); // the view holds it now
 
     g_signal_connect(posts_view_, "key-press-event", G_CALLBACK(&MainWindow::on_posts_key), this);
     g_signal_connect(posts_view_, "cursor-changed",
@@ -495,36 +478,72 @@ void MainWindow::open_url(const std::string& url) {
 
 void MainWindow::populate_timelines_list() {
     updating_ = true;
-    gtk_list_store_clear(timelines_store_);
-    for (const auto& tl : timelines_) {
+    // Edit the list in place rather than clearing it: a plain switch changes no
+    // titles at all, so it costs only the cursor move.
+    GtkTreeModel* model = GTK_TREE_MODEL(timelines_store_);
+    const size_t n = timelines_.size();
+    for (size_t i = 0; i < n; ++i) {
+        const std::string& title = timelines_[i].title;
         GtkTreeIter iter;
-        gtk_list_store_append(timelines_store_, &iter);
-        gtk_list_store_set(timelines_store_, &iter, 0, tl.title.c_str(), -1);
+        if (i < shown_titles_.size()) {
+            if (shown_titles_[i] != title &&
+                gtk_tree_model_iter_nth_child(model, &iter, nullptr, static_cast<int>(i)))
+                gtk_list_store_set(timelines_store_, &iter, 0, title.c_str(), -1);
+        } else {
+            gtk_list_store_insert_with_values(timelines_store_, nullptr, -1, 0, title.c_str(), -1);
+        }
     }
+    GtkTreeIter iter;
+    while (gtk_tree_model_iter_nth_child(model, &iter, nullptr, static_cast<int>(n)))
+        gtk_list_store_remove(timelines_store_, &iter);
+    shown_titles_.clear();
+    for (const auto& tl : timelines_)
+        shown_titles_.push_back(tl.title);
+
     if (!timelines_.empty()) {
-        GtkTreePath* path = gtk_tree_path_new_from_indices(current_, -1);
-        gtk_tree_view_set_cursor(GTK_TREE_VIEW(timelines_view_), path, nullptr, FALSE);
-        gtk_tree_path_free(path);
+        GtkTreePath* at = nullptr;
+        gtk_tree_view_get_cursor(GTK_TREE_VIEW(timelines_view_), &at, nullptr);
+        const bool there = at && gtk_tree_path_get_indices(at)[0] == current_;
+        if (at)
+            gtk_tree_path_free(at);
+        if (!there) {
+            GtkTreePath* path = gtk_tree_path_new_from_indices(current_, -1);
+            gtk_tree_view_set_cursor(GTK_TREE_VIEW(timelines_view_), path, nullptr, FALSE);
+            gtk_tree_path_free(path);
+        }
     }
     updating_ = false;
 }
 
+namespace {
+
+std::shared_ptr<GtkListStore> new_posts_store(const std::vector<Row>& rows) {
+    GtkListStore* store = gtk_list_store_new(1, G_TYPE_STRING);
+    // Filled before it is ever shown, so these inserts reach no view.
+    for (size_t i = 0; i < rows.size(); ++i)
+        gtk_list_store_insert_with_values(store, nullptr, -1, 0, rows[i].text.c_str(), -1);
+    return {store, [](GtkListStore* s) { g_object_unref(s); }};
+}
+
+} // namespace
+
 void MainWindow::bind_current_to_view() {
     updating_ = true;
-    gtk_list_store_clear(posts_store_);
     Timeline* tc = current();
     // User lists allow a multi-selection (Shift+arrows) so batch actions can act
     // on several users at once, like the Windows list view. Post lists stay
     // single-selection.
-    gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(posts_view_)),
-                                tc && tc->user_list ? GTK_SELECTION_MULTIPLE
-                                                    : GTK_SELECTION_SINGLE);
+    GtkTreeSelection* sel = gtk_tree_view_get_selection(GTK_TREE_VIEW(posts_view_));
+    const GtkSelectionMode mode =
+        tc && tc->user_list ? GTK_SELECTION_MULTIPLE : GTK_SELECTION_SINGLE;
+    if (gtk_tree_selection_get_mode(sel) != mode)
+        gtk_tree_selection_set_mode(sel, mode);
     if (tc) {
-        for (const auto& row : tc->rows) {
-            GtkTreeIter iter;
-            gtk_list_store_append(posts_store_, &iter);
-            gtk_list_store_set(posts_store_, &iter, 0, row.text.c_str(), -1);
-        }
+        if (!tc->store)
+            tc->store = new_posts_store(tc->rows);
+        GtkTreeModel* model = GTK_TREE_MODEL(tc->store.get());
+        if (gtk_tree_view_get_model(GTK_TREE_VIEW(posts_view_)) != model)
+            gtk_tree_view_set_model(GTK_TREE_VIEW(posts_view_), model);
         if (!tc->rows.empty()) {
             int target = 0;
             if (!tc->selected_id.empty())
@@ -532,35 +551,64 @@ void MainWindow::bind_current_to_view() {
                     target = idx;
             set_posts_cursor(target);
         }
+    } else {
+        GtkListStore* empty = gtk_list_store_new(1, G_TYPE_STRING);
+        gtk_tree_view_set_model(GTK_TREE_VIEW(posts_view_), GTK_TREE_MODEL(empty));
+        g_object_unref(empty);
     }
     updating_ = false;
 }
 
-bool MainWindow::refresh_current_rows_text(const std::vector<Row>& old_rows) {
-    Timeline* tc = current();
-    if (!tc)
-        return false;
-    // Only a same-length, same-order, same-id update can be edited in place; any
-    // structural change (a post streamed in, a gap filled, a deletion) needs the
-    // full rebind so rows are inserted/removed and the cursor re-anchored.
-    if (old_rows.size() != tc->rows.size())
-        return false;
-    for (size_t i = 0; i < old_rows.size(); ++i)
-        if (old_rows[i].id != tc->rows[i].id)
-            return false;
-    // Same rows: rewrite only the cells whose text actually changed, without
-    // touching the cursor (moving it would make Orca re-read the row).
-    GtkTreeModel* model = GTK_TREE_MODEL(posts_store_);
-    updating_ = true;
-    for (size_t i = 0; i < tc->rows.size(); ++i) {
-        if (old_rows[i].text == tc->rows[i].text)
-            continue;
+void MainWindow::sync_store(Timeline& tl, const std::vector<Row>& old_rows) {
+    if (!tl.store) {
+        tl.store = new_posts_store(tl.rows);
+        return;
+    }
+    GtkListStore* store = tl.store.get();
+    GtkTreeModel* model = GTK_TREE_MODEL(store);
+    const std::vector<Row>& now = tl.rows;
+    // The unchanged run at each end (matched by id), then the differing middle.
+    size_t head = 0;
+    while (head < old_rows.size() && head < now.size() && old_rows[head].id == now[head].id)
+        ++head;
+    size_t tail = 0;
+    while (tail < old_rows.size() - head && tail < now.size() - head &&
+           old_rows[old_rows.size() - 1 - tail].id == now[now.size() - 1 - tail].id)
+        ++tail;
+    const size_t removed = old_rows.size() - head - tail;
+    const size_t added = now.size() - head - tail;
+
+    // A wholesale change (an account's timeline reloaded from scratch) is
+    // cheaper as a fresh model than as hundreds of edits to a shown one.
+    if (removed + added > 64 && removed + added > now.size() / 2) {
+        tl.store = new_posts_store(now);
+        return;
+    }
+
+    auto set_text = [&](size_t i) {
         GtkTreeIter iter;
         if (gtk_tree_model_iter_nth_child(model, &iter, nullptr, static_cast<int>(i)))
-            gtk_list_store_set(posts_store_, &iter, 0, tc->rows[i].text.c_str(), -1);
+            gtk_list_store_set(store, &iter, 0, now[i].text.c_str(), -1);
+    };
+    for (size_t i = 0; i < head; ++i)
+        if (old_rows[i].text != now[i].text)
+            set_text(i);
+    if (removed > 0) {
+        GtkTreeIter iter;
+        if (gtk_tree_model_iter_nth_child(model, &iter, nullptr, static_cast<int>(head)))
+            for (size_t k = 0; k < removed; ++k)
+                if (!gtk_list_store_remove(store, &iter))
+                    break;
     }
-    updating_ = false;
-    return true;
+    for (size_t k = 0; k < added; ++k)
+        gtk_list_store_insert_with_values(store, nullptr, static_cast<int>(head + k), 0,
+                                          now[head + k].text.c_str(), -1);
+    for (size_t t = 0; t < tail; ++t) {
+        const size_t oi = old_rows.size() - 1 - t;
+        const size_t ni = now.size() - 1 - t;
+        if (old_rows[oi].text != now[ni].text)
+            set_text(ni);
+    }
 }
 
 void MainWindow::set_posts_cursor(int row) {
@@ -625,66 +673,52 @@ void MainWindow::first_letter_nav(gunichar ch) {
 // ----------------------------------------------------------------- media ---
 
 void MainWindow::ev_media_open(const json& e) {
-    const std::string kind = e.value("kind", std::string{});
     const std::string url = e.value("url", std::string{});
-    const std::string title = e.value("title", std::string{});
     if (url.empty())
         return;
-    // Only audio streams in the in-app player; images/video/gifv open in the
-    // system handler (browser), same as Windows.
-    if (!kind.empty() && kind != "audio") {
-        open_url(url);
-        return;
-    }
-    if (settings_.value("media_background", false)) { // no window; stop with Ctrl+S
-        play_media_background(url, title);
-        return;
-    }
-    MediaPlayerOptions opts;
-    opts.device = settings_.value("media_device", std::string{});
-    opts.volume = settings_.value("media_volume", 100);
-    // Up/Down in the player move the same level the Sounds page shows, and it
-    // sticks: the core persists it and hands it back on the next settings event.
-    opts.on_volume = [this](int level) {
-        dispatch_cmd({{"cmd", "set_media_volume"}, {"volume", level}});
-    };
-    const bool played = show_media_player(GTK_WINDOW(window_), title, url,
-                                          [this](const std::string& m) { announce(m); },
-                                          std::move(opts));
-    if (!played) // couldn't render it (unsupported codec) -> system player
-        open_url(url);
+    // Audio (and YouTube) the core plays itself (media_player); what comes here
+    // is images, video and GIFs, for the system's own viewer — as on Windows.
+    open_url(url);
 }
 
-void MainWindow::play_media_background(const std::string& url, const std::string& title) {
-    if (!media_bg_)
-        media_bg_ = std::make_unique<MediaPlayback>();
-    media_bg_->set_output_device(settings_.value("media_device", std::string{}));
-    media_bg_->set_volume(settings_.value("media_volume", 100));
-    if (media_bg_->play(url)) {
-        announce("Playing " + title);
-        if (!media_bg_timer_)
-            media_bg_timer_ = g_timeout_add(1000, +[](gpointer u) -> gboolean {
-                auto* self = static_cast<MainWindow*>(u);
-                if (self->media_bg_ && self->media_bg_->completed()) {
-                    self->media_bg_->stop();
-                    self->media_bg_timer_ = 0;
-                    return G_SOURCE_REMOVE;
-                }
-                return G_SOURCE_CONTINUE;
-            }, this);
+void MainWindow::ev_media_player(const json& e) {
+    const std::string state = e.value("state", std::string{});
+    const std::string title = e.value("title", std::string{});
+    if (state == "opening") {
+        if (e.value("background", false))
+            return; // no window: Stop Media (Ctrl+S) stops it
+        show_media_player(GTK_WINDOW(window_), title,
+                          [this](const json& cmd) { dispatch_cmd(cmd); });
+    } else if (state == "playing") {
+        retitle_media_player(title);
     } else {
-        open_url(url);
+        close_media_player(); // ended, failed or stopped
     }
 }
 
-void MainWindow::stop_media() {
-    if (media_bg_ && media_bg_->active()) {
-        media_bg_->stop();
-        if (media_bg_timer_) {
-            g_source_remove(media_bg_timer_);
-            media_bg_timer_ = 0;
-        }
-        announce("Stopped");
+void MainWindow::stop_media() { dispatch_cmd({{"cmd", "media_stop"}}); }
+
+void MainWindow::ev_media_effects(const json& e) {
+    media_effects_.available = e.value("available", false);
+    media_effects_.effects.clear();
+    media_effects_.params.clear();
+    for (const auto& x : e.value("effects", json::array()))
+        media_effects_.effects.push_back({x.value("key", std::string{}),
+                                          x.value("name", std::string{}), x.value("enabled", false)});
+    for (const auto& x : e.value("params", json::array())) {
+        MediaEffectChoices::Param p;
+        p.key = x.value("key", std::string{});
+        p.name = x.value("name", std::string{});
+        p.unit = x.value("unit", std::string{});
+        p.effect = x.value("effect", std::string{});
+        p.display = x.value("display", std::string{});
+        p.min_value = x.value("min", 0.0f);
+        p.max_value = x.value("max", 1.0f);
+        p.step = x.value("step", 0.01f);
+        p.value = x.value("value", 0.0f);
+        for (const auto& c : x.value("choices", json::array()))
+            p.choices.push_back(c.get<std::string>());
+        media_effects_.params.push_back(std::move(p));
     }
 }
 
@@ -1370,6 +1404,10 @@ void MainWindow::on_event(const std::string& js) {
     }
     else if (ev == "media_open")
         ev_media_open(e);
+    else if (ev == "media_player")
+        ev_media_player(e);
+    else if (ev == "media_effects")
+        ev_media_effects(e);
     else if (ev == "media_picker")
         ev_media_picker(e);
     else if (ev == "update_status") {
@@ -1520,6 +1558,7 @@ void MainWindow::ev_timelines_changed(const json& e) {
     const bool same_account = account == current_account_;
     current_account_ = account;
     std::vector<Timeline> next;
+    std::vector<bool> claimed(timelines_.size(), false);
     for (const auto& t : e.value("timelines", json::array())) {
         Timeline tl;
         tl.title = t.value("title", std::string{});
@@ -1531,12 +1570,25 @@ void MainWindow::ev_timelines_changed(const json& e) {
         tl.user_list = t.value("user_list", false);
         tl.enter_opens_thread = t.value("enter_opens_thread", false);
         if (same_account)
-            for (const auto& old : timelines_)
-                if (old.kind == tl.kind) {
-                    tl.rows = old.rows;
-                    tl.selected_id = old.selected_id;
-                    break;
+            for (size_t i = 0; i < timelines_.size(); ++i) {
+                Timeline& old = timelines_[i];
+                if (old.kind != tl.kind)
+                    continue;
+                tl.reversed = old.reversed;
+                tl.selected_id = old.selected_id;
+                if (!claimed[i]) { // the common case: take it over wholesale
+                    claimed[i] = true;
+                    tl.rows = std::move(old.rows);
+                    tl.store = std::move(old.store);
+                } else { // a duplicate kind: copy the rows; it builds its own model
+                    for (const Timeline& n : next)
+                        if (n.kind == tl.kind) {
+                            tl.rows = n.rows;
+                            break;
+                        }
                 }
+                break;
+            }
         next.push_back(std::move(tl));
     }
     timelines_ = std::move(next);
@@ -1588,11 +1640,29 @@ void MainWindow::ev_timeline_updated(const json& e) {
         if (!core_id.empty() && index_of_id(tl, core_id) >= 0)
             tl.selected_id = core_id;
     }
-    if (index == current_) {
-        load_pending_ = false;
-        if (!refresh_current_rows_text(old_rows))
-            bind_current_to_view();
+    if (index != current_) {
+        sync_store(tl, old_rows); // off-screen: no view, no announcements
+        return;
     }
+    load_pending_ = false;
+    updating_ = true; // edits may nudge the cursor; that is not the user moving
+    GtkListStore* before = tl.store.get();
+    sync_store(tl, old_rows);
+    if (tl.store.get() != before) { // replaced wholesale: show the new model
+        updating_ = false;
+        bind_current_to_view();
+        return;
+    }
+    // The cursor rode along with its row through the edits. Only move it if
+    // that isn't the post we track (it was deleted, or this is the first load).
+    if (!tl.rows.empty()) {
+        int target = tl.selected_id.empty() ? 0 : index_of_id(tl, tl.selected_id);
+        if (target < 0)
+            target = 0;
+        if (selected_row() != target)
+            set_posts_cursor(target);
+    }
+    updating_ = false;
 }
 
 void MainWindow::ev_settings(const json& e) {
@@ -1603,14 +1673,14 @@ void MainWindow::ev_settings(const json& e) {
     sound_devices_.clear();
     for (const auto& d : e.value("sound_devices", json::array()))
         sound_devices_.push_back(d.get<std::string>());
-    // A media volume change while something is already playing in the background
-    // should be heard now, not next time. (The device only applies to a new
-    // stream — it's chosen when the graph is built.)
-    if (media_bg_)
-        media_bg_->set_volume(settings_.value("media_volume", 100));
+    media_devices_.clear(); // FastPlay's engine's, as the media player uses
+    for (const auto& d : e.value("media_devices", json::array()))
+        media_devices_.push_back(d.get<std::string>());
     apply_invisible();
-    if (action_catalog_.empty()) // load once so the Keyboard Manager has its actions
+    if (action_catalog_.empty()) { // load once so the Keyboard Manager has its actions
         dispatch_cmd({{"cmd", "get_action_catalog"}});
+        dispatch_cmd({{"cmd", "get_media_effects"}}); // fills the FastPlay settings page
+    }
 }
 
 void MainWindow::do_settings() {
@@ -1618,8 +1688,22 @@ void MainWindow::do_settings() {
     AudioChoices audio;
     audio.soundpacks = soundpacks_;
     audio.sound_devices = sound_devices_;      // the core's mixer devices
-    audio.media_devices = media_output_devices(); // GStreamer's, which can differ
-    if (auto result = show_settings_dialog(GTK_WINDOW(window_), std::move(s), audio))
+    audio.media_devices = media_devices_;      // the media player's (FastPlay's engine)
+    MediaCallbacks media;
+    media.command = [this](const std::string& cmd, const std::string& path) {
+        json c = {{"cmd", cmd}};
+        if (!path.empty())
+            c["path"] = path;
+        dispatch_cmd(c);
+    };
+    media.set_effect = [this](const std::string& effect, bool on) {
+        dispatch_cmd({{"cmd", "set_media_effect"}, {"effect", effect}, {"on", on}});
+    };
+    media.set_param = [this](const std::string& key, float value) {
+        dispatch_cmd({{"cmd", "set_media_effect_param"}, {"key", key}, {"value", value}});
+    };
+    if (auto result = show_settings_dialog(GTK_WINDOW(window_), std::move(s), audio,
+                                           media_effects_, std::move(media)))
         dispatch_cmd(
             {{"cmd", "update_settings"}, {"settings", fastsm::store::settings_to_json(*result)}});
 }
@@ -1705,9 +1789,51 @@ void MainWindow::ev_invisible_ui_action(const json& e) {
         dispatch_cmd({{"cmd", "get_spawnable"}});
     } else if (action == "UserActions") {
         show_user_actions();
+    } else if (action == "StopMedia") {
+        stop_media();
+    } else if (action == "Exit") {
+        // Speak first, then quit after a beat so the words aren't cut off — the
+        // real quit, like the menu's, not a hide.
+        announce("Exiting");
+        g_timeout_add(500, +[](gpointer w) -> gboolean {
+            gtk_widget_destroy(GTK_WIDGET(w));
+            return G_SOURCE_REMOVE;
+        }, window_);
+    } else {
+        // The dialog-style actions bring the window up first (if hidden) so the
+        // dialog isn't orphaned behind a hidden main window, as on Windows.
+        auto surface_for_dialog = [this] {
+            if (!gtk_widget_get_visible(window_))
+                surface_window();
+        };
+        if (action == "Lists") {
+            surface_for_dialog();
+            dispatch_cmd({{"cmd", "list_lists"}});
+        } else if (action == "ClientFilters") {
+            surface_for_dialog();
+            dispatch_cmd({{"cmd", "get_client_filter"}});
+        } else if (action == "UserAnalysis") {
+            surface_for_dialog();
+            do_user_analysis();
+        } else if (action == "ManageAliases") {
+            surface_for_dialog();
+            dispatch_cmd({{"cmd", "list_aliases"}});
+        } else if (action == "AddAccount") {
+            surface_for_dialog();
+            do_add_account();
+        } else if (action == "CheckUpdates") {
+            surface_for_dialog();
+            announce("Checking for updates…");
+            dispatch_cmd({{"cmd", "check_for_update"}, {"silent", false}});
+        } else if (action == "About") {
+            surface_for_dialog();
+            do_about();
+        } else if (action == "Report") {
+            surface_for_dialog();
+            do_report(e.value("id", std::string{}));
+        }
+        // EnterLayer: the Windows-only "layer" mode (not offered on Linux).
     }
-    // Other UI-side actions (media, dialogs not yet built on Linux) are
-    // ignored for now.
 }
 
 // The core-driven accept/reject choice (the core's Enter action can't show UI).
@@ -1882,16 +2008,45 @@ void MainWindow::ev_post_info(const json& e) {
     } else if (act == "boosted_by") {
         dispatch_cmd({{"cmd", "open_reblogged_by"}, {"id", id}});
     } else if (act == "report") {
-        if (auto r = show_report_dialog(GTK_WINDOW(window_), /*remote=*/false)) {
-            json cmd = {{"cmd", "report"},
-                        {"id", id},
-                        {"category", r->category},
-                        {"forward", r->forward}};
-            if (!r->comment.empty())
-                cmd["comment"] = r->comment;
-            dispatch_cmd(cmd);
-        }
+        do_report(id);
     }
+}
+
+void MainWindow::do_report(const std::string& id) {
+    if (id.empty())
+        return;
+    if (auto r = show_report_dialog(GTK_WINDOW(window_), /*remote=*/false)) {
+        json cmd = {{"cmd", "report"}, {"id", id}, {"category", r->category},
+                    {"forward", r->forward}};
+        if (!r->comment.empty())
+            cmd["comment"] = r->comment;
+        dispatch_cmd(cmd);
+    }
+}
+
+void MainWindow::do_about() {
+    GtkWidget* d = gtk_message_dialog_new(GTK_WINDOW(window_), GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
+                                          GTK_BUTTONS_OK,
+                                          "FastSMRW\nVersion %s\n\nA fast, accessible "
+                                          "Mastodon/Bluesky client.",
+                                          fastsm::version());
+    gtk_window_set_title(GTK_WINDOW(d), "About FastSMRW");
+    gtk_dialog_run(GTK_DIALOG(d));
+    gtk_widget_destroy(d);
+}
+
+void MainWindow::do_user_analysis() {
+    auto choice = run_list_manager(
+        GTK_WINDOW(window_), "User Analysis",
+        {"People you follow who don't follow you back", "Followers you don't follow back",
+         "Mutuals (you follow each other)"},
+        {"_Analyze"});
+    if (!choice || choice->second < 0 || choice->second > 2)
+        return;
+    const char* category = choice->second == 0   ? "not_following_back"
+                           : choice->second == 1 ? "no_followback"
+                                                 : "mutuals";
+    dispatch_cmd({{"cmd", "analyze_users"}, {"category", category}});
 }
 
 void MainWindow::ev_user_profile(const json& e) {

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Linux GTK app: fastsm_core via linux/build-core.sh, then the GTK3
 # front end, then assembles the dist/linux run folder (binary + bundled default
-# soundpacks). Requires: g++, pkg-config, libgtk-3-dev, libcurl4-openssl-dev,
-# libspeechd-dev.
+# soundpacks + FastPlay's engine library). Requires: g++, pkg-config,
+# libgtk-3-dev, libcurl4-openssl-dev, libspeechd-dev, unzip.
 #
 # Usage:  linux/build.sh [clean] [test] [smoke]
 set -euo pipefail
@@ -14,12 +14,16 @@ OUT=build/linux
 APP_OBJ="$OUT/app-obj"
 mkdir -p "$APP_OBJ"
 
-GTK_CFLAGS=$(pkg-config --cflags gtk+-3.0 gstreamer-1.0 x11)
-GTK_LIBS=$(pkg-config --libs gtk+-3.0 gstreamer-1.0 x11)
+GTK_CFLAGS=$(pkg-config --cflags gtk+-3.0 x11)
+GTK_LIBS=$(pkg-config --libs gtk+-3.0 x11)
 SPD_CFLAGS=$(pkg-config --cflags speech-dispatcher 2>/dev/null || echo "")
 SPD_LIBS=$(pkg-config --libs speech-dispatcher 2>/dev/null || echo "-lspeechd")
 
 CXXFLAGS=(-std=c++20 -O2 -g -Wall -I core/include -I deps)
+# FastPlay's engine plays media in the core; it ships beside the binary, which
+# looks for it there ($ORIGIN), like the Windows exe's DLL.
+ENGINE=deps/fastplay_engine
+ENGINE_LIBS=(-L "$ENGINE/lib" -lfastplay_engine -Wl,-rpath,'$ORIGIN')
 
 APP_SRC=(main.cpp main_window.cpp compose_dialog.cpp post_info_dialog.cpp settings_dialog.cpp
     speech_detail_dialog.cpp user_profile_dialog.cpp invisible_hotkeys.cpp report_dialog.cpp
@@ -48,14 +52,16 @@ done
 
 echo "=== Linking FastSMRW ==="
 # shellcheck disable=SC2086
-g++ "${OBJS[@]}" "$OUT/fastsm_core.a" $GTK_LIBS $SPD_LIBS -lcurl -lpthread -ldl -lm \
-    -o "$OUT/FastSMRW"
+g++ "${OBJS[@]}" "$OUT/fastsm_core.a" "${ENGINE_LIBS[@]}" $GTK_LIBS $SPD_LIBS \
+    -lcurl -lpthread -ldl -lm -o "$OUT/FastSMRW"
+cp -p "$ENGINE/lib/libfastplay_engine.so" "$OUT/" # so build/linux/FastSMRW runs too
 
 echo "=== Assembling dist/linux ==="
 mkdir -p dist/linux
 # The build/ copy keeps its debug info (for gdb); the shipped binary is
 # stripped — the -g DWARF for the whole inlined core is tens of MB.
 strip -o dist/linux/FastSMRW "$OUT/FastSMRW"
+cp -p "$ENGINE/lib/libfastplay_engine.so" dist/linux/
 rm -rf dist/linux/soundpacks
 cp -r assets/soundpacks dist/linux/soundpacks
 

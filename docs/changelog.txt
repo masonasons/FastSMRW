@@ -5,6 +5,11 @@ FastSMRW changelog
 -----
 
 - The invisible interface can now use global shortcuts in X11 sessions without direct keyboard access.
+- Fixed: on Linux, moving between timelines is now instant instead of sluggish, and a new post arriving no longer makes Orca re-read the post you're on.
+- Fixed: on Linux, windows opened from the invisible interface (Options, Post Info and so on) now take focus right away instead of opening behind the app you were in.
+- New: on Linux, media now plays through FastPlay's engine like on Windows and Mac, so far more audio formats play, YouTube links play too, P tells you where you are, and the player no longer blocks the main window.
+- New: on Linux, Settings has a FastPlay page with the player's effects, tempo, pitch and rate, plus importing your settings from FastPlay.
+- New: on Linux, the invisible interface can now stop media, report a post, quit, and open Lists, Client Filters, User Analysis, User Aliases, Add Account, Check for Updates and About, just like on Windows.
 
 - Fixed: on Android, opening the app no longer shows the Add Account screen for a moment while your accounts load.
 - Fixed: on Android, the post editor now opens in the text box, ready to type, instead of on the Cancel button.

@@ -1,6 +1,7 @@
 #include "settings_dialog.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 
@@ -284,10 +285,304 @@ const std::vector<int> kEmojiValues = {static_cast<int>(EmojiRemoval::None),
                                        static_cast<int>(EmojiRemoval::Mastodon),
                                        static_cast<int>(EmojiRemoval::Both)};
 
+// --- FastPlay page: the media player's effects and settings -----------------
+// Everything here goes to the core at once and is remembered there; none of it
+// waits for OK (the same as the Windows page).
+struct FastPlayPage {
+    using Param = MediaEffectChoices::Param;
+
+    MediaEffectChoices fx;
+    MediaCallbacks media;
+    GtkWindow* dialog = nullptr;
+    GtkListStore* params_store = nullptr;
+    GtkWidget* params_view = nullptr;
+    GtkWidget* value_label = nullptr;
+    GtkWidget* scale = nullptr;
+    std::vector<int> shown; // Setting-list row -> index into fx.params
+    bool updating = false;  // filling controls: not the user changing them
+
+    // A parameter applies when it belongs to no effect (pitch, tempo, rate) or
+    // its effect is on; offering the rest would offer settings that do nothing.
+    bool applies(const Param& p) const {
+        if (p.effect.empty())
+            return true;
+        for (const auto& e : fx.effects)
+            if (e.key == p.effect)
+                return e.enabled;
+        return false;
+    }
+    static float step_of(const Param& p) { return p.step > 0.0f ? p.step : 1.0f; }
+    // The slider works in whole steps from the minimum, so a 0.1-dB step stays usable.
+    static int steps(const Param& p) {
+        const int n = static_cast<int>((p.max_value - p.min_value) / step_of(p) + 0.5f);
+        return n > 0 ? n : 1;
+    }
+    // The value as words, for a value just set here (the core's own wording
+    // comes with the next media_effects; it also speaks what it took).
+    static std::string describe(const Param& p) {
+        if (!p.choices.empty()) {
+            const int i = static_cast<int>(p.value - p.min_value + 0.5f);
+            if (i >= 0 && i < static_cast<int>(p.choices.size()))
+                return p.choices[static_cast<size_t>(i)];
+        }
+        const float s = step_of(p);
+        const int decimals = s >= 1.0f ? 0 : (s >= 0.1f ? 1 : 2);
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "%.*f", decimals, static_cast<double>(p.value));
+        return p.unit.empty() ? std::string(buf) : std::string(buf) + " " + p.unit;
+    }
+    static std::string row_text(const Param& p) {
+        return p.display.empty() ? p.name : p.name + ": " + p.display;
+    }
+
+    int selected_row() const {
+        GtkTreeModel* model = nullptr;
+        GtkTreeIter iter;
+        if (!gtk_tree_selection_get_selected(
+                gtk_tree_view_get_selection(GTK_TREE_VIEW(params_view)), &model, &iter))
+            return -1;
+        GtkTreePath* path = gtk_tree_model_get_path(model, &iter);
+        const int row = gtk_tree_path_get_indices(path)[0];
+        gtk_tree_path_free(path);
+        return row;
+    }
+    Param* selected_param() {
+        const int row = selected_row();
+        if (row < 0 || row >= static_cast<int>(shown.size()))
+            return nullptr;
+        return &fx.params[static_cast<size_t>(shown[static_cast<size_t>(row)])];
+    }
+
+    // The value label carries the words ("Cathedral", "+3.0 dB"): a slider on
+    // its own only says a number. It names the slider for Orca, too.
+    void show_value() {
+        updating = true;
+        if (Param* p = selected_param()) {
+            gtk_widget_set_sensitive(scale, TRUE);
+            gtk_range_set_range(GTK_RANGE(scale), 0, steps(*p));
+            gtk_range_set_value(GTK_RANGE(scale),
+                                static_cast<int>((p->value - p->min_value) / step_of(*p) + 0.5f));
+            gtk_label_set_text_with_mnemonic(
+                GTK_LABEL(value_label), ("_Value: " + p->name + ", " + p->display).c_str());
+        } else {
+            gtk_widget_set_sensitive(scale, FALSE);
+            gtk_label_set_text_with_mnemonic(GTK_LABEL(value_label), "_Value:");
+        }
+        updating = false;
+    }
+
+    // Refill the Setting list from the effects that are on, keeping the
+    // selection where it can be kept.
+    void fill_params() {
+        std::string keep;
+        if (const Param* p = selected_param())
+            keep = p->key;
+        updating = true;
+        gtk_list_store_clear(params_store);
+        shown.clear();
+        int sel = 0;
+        for (size_t i = 0; i < fx.params.size(); ++i) {
+            const Param& p = fx.params[i];
+            if (!applies(p))
+                continue;
+            if (p.key == keep)
+                sel = static_cast<int>(shown.size());
+            gtk_list_store_insert_with_values(params_store, nullptr, -1, 0, row_text(p).c_str(), -1);
+            shown.push_back(static_cast<int>(i));
+        }
+        if (!shown.empty()) {
+            GtkTreePath* path = gtk_tree_path_new_from_indices(sel, -1);
+            gtk_tree_view_set_cursor(GTK_TREE_VIEW(params_view), path, nullptr, FALSE);
+            gtk_tree_path_free(path);
+        }
+        updating = false;
+        show_value();
+    }
+
+    void on_scale() {
+        if (updating)
+            return;
+        Param* p = selected_param();
+        if (!p)
+            return;
+        const double pos = gtk_range_get_value(GTK_RANGE(scale));
+        p->value = p->min_value + static_cast<float>(pos) * step_of(*p);
+        p->display = describe(*p);
+        gtk_label_set_text_with_mnemonic(GTK_LABEL(value_label),
+                                         ("_Value: " + p->name + ", " + p->display).c_str());
+        GtkTreeIter iter;
+        if (gtk_tree_model_iter_nth_child(GTK_TREE_MODEL(params_store), &iter, nullptr,
+                                          selected_row()))
+            gtk_list_store_set(params_store, &iter, 0, row_text(*p).c_str(), -1);
+        // The core speaks the value it actually took (it clamps): nothing said here.
+        if (media.set_param)
+            media.set_param(p->key, p->value);
+    }
+
+    std::string pick_ini(bool save) {
+        GtkWidget* chooser = gtk_file_chooser_dialog_new(
+            save ? "Export player settings" : "Import settings from FastPlay.ini", dialog,
+            save ? GTK_FILE_CHOOSER_ACTION_SAVE : GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel",
+            GTK_RESPONSE_CANCEL, save ? "_Save" : "_Open", GTK_RESPONSE_ACCEPT, nullptr);
+        GtkFileFilter* ini = gtk_file_filter_new();
+        gtk_file_filter_set_name(ini, "FastPlay settings (*.ini)");
+        gtk_file_filter_add_pattern(ini, "*.ini");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), ini);
+        GtkFileFilter* all = gtk_file_filter_new();
+        gtk_file_filter_set_name(all, "All files");
+        gtk_file_filter_add_pattern(all, "*");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), all);
+        if (save) {
+            gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser), TRUE);
+            gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser),
+                                              "FastPlay player settings.ini");
+        }
+        std::string path;
+        if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
+            if (gchar* f = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser))) {
+                path = f;
+                g_free(f);
+            }
+        }
+        gtk_widget_destroy(chooser);
+        return path;
+    }
+
+    void build(GtkWidget* page) {
+        if (!fx.available) { // no engine in this build: say so, not empty lists
+            gtk_box_pack_start(GTK_BOX(page),
+                               gtk_label_new("This build of FastSMRW has no FastPlay player."),
+                               FALSE, FALSE, 0);
+            return;
+        }
+        GtkWidget* intro = gtk_label_new(
+            "The media player is FastPlay's. Turn effects on below, pick one of their "
+            "settings, then set its value. Everything here takes effect at once and is "
+            "remembered.");
+        gtk_label_set_line_wrap(GTK_LABEL(intro), TRUE);
+        gtk_label_set_xalign(GTK_LABEL(intro), 0.0f);
+        gtk_box_pack_start(GTK_BOX(page), intro, FALSE, FALSE, 0);
+
+        // Effects: one check button each, in a group Orca names.
+        GtkWidget* frame_label = gtk_label_new_with_mnemonic("_Effects to use:");
+        GtkWidget* frame = gtk_frame_new(nullptr);
+        gtk_frame_set_label_widget(GTK_FRAME(frame), frame_label);
+        GtkWidget* effects_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+        gtk_container_set_border_width(GTK_CONTAINER(effects_box), 6);
+        for (size_t i = 0; i < fx.effects.size(); ++i) {
+            GtkWidget* check = gtk_check_button_new_with_label(fx.effects[i].name.c_str());
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check), fx.effects[i].enabled);
+            g_object_set_data(G_OBJECT(check), "fastsm-effect", GINT_TO_POINTER(i));
+            g_signal_connect(check, "toggled", G_CALLBACK(+[](GtkToggleButton* t, gpointer u) {
+                                 auto* self = static_cast<FastPlayPage*>(u);
+                                 const auto i = static_cast<size_t>(GPOINTER_TO_INT(
+                                     g_object_get_data(G_OBJECT(t), "fastsm-effect")));
+                                 auto& e = self->fx.effects[i];
+                                 e.enabled = gtk_toggle_button_get_active(t);
+                                 if (self->media.set_effect)
+                                     self->media.set_effect(e.key, e.enabled);
+                                 self->fill_params(); // its settings come and go with it
+                             }),
+                             this);
+            gtk_box_pack_start(GTK_BOX(effects_box), check, FALSE, FALSE, 0);
+            if (i == 0)
+                gtk_label_set_mnemonic_widget(GTK_LABEL(frame_label), check);
+        }
+        GtkWidget* effects_scroll = gtk_scrolled_window_new(nullptr, nullptr);
+        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(effects_scroll), GTK_POLICY_NEVER,
+                                       GTK_POLICY_AUTOMATIC);
+        gtk_widget_set_size_request(effects_scroll, -1, 140);
+        gtk_container_add(GTK_CONTAINER(effects_scroll), effects_box);
+        gtk_container_add(GTK_CONTAINER(frame), effects_scroll);
+        gtk_box_pack_start(GTK_BOX(page), frame, FALSE, FALSE, 0);
+
+        // The settings of the effects that are on (and the always-on ones).
+        GtkWidget* params_label = gtk_label_new_with_mnemonic("_Setting to adjust:");
+        gtk_label_set_xalign(GTK_LABEL(params_label), 0.0f);
+        gtk_box_pack_start(GTK_BOX(page), params_label, FALSE, FALSE, 0);
+        params_store = gtk_list_store_new(1, G_TYPE_STRING);
+        params_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(params_store));
+        g_object_unref(params_store); // the view holds it
+        gtk_tree_view_append_column(
+            GTK_TREE_VIEW(params_view),
+            gtk_tree_view_column_new_with_attributes("", gtk_cell_renderer_text_new(), "text", 0,
+                                                     nullptr));
+        gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(params_view), FALSE);
+        gtk_label_set_mnemonic_widget(GTK_LABEL(params_label), params_view);
+        g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(params_view)), "changed",
+                         G_CALLBACK(+[](GtkTreeSelection*, gpointer u) {
+                             auto* self = static_cast<FastPlayPage*>(u);
+                             if (!self->updating)
+                                 self->show_value();
+                         }),
+                         this);
+        GtkWidget* params_scroll = gtk_scrolled_window_new(nullptr, nullptr);
+        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(params_scroll), GTK_POLICY_NEVER,
+                                       GTK_POLICY_AUTOMATIC);
+        gtk_widget_set_size_request(params_scroll, -1, 110);
+        gtk_container_add(GTK_CONTAINER(params_scroll), params_view);
+        gtk_box_pack_start(GTK_BOX(page), params_scroll, FALSE, FALSE, 0);
+
+        // The value, in whole steps of the selected setting.
+        value_label = gtk_label_new_with_mnemonic("_Value:");
+        gtk_label_set_xalign(GTK_LABEL(value_label), 0.0f);
+        gtk_box_pack_start(GTK_BOX(page), value_label, FALSE, FALSE, 0);
+        scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 1, 1);
+        gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE); // the label says it in words
+        gtk_label_set_mnemonic_widget(GTK_LABEL(value_label), scale);
+        g_signal_connect(scale, "value-changed", G_CALLBACK(+[](GtkRange*, gpointer u) {
+                             static_cast<FastPlayPage*>(u)->on_scale();
+                         }),
+                         this);
+        gtk_box_pack_start(GTK_BOX(page), scale, FALSE, FALSE, 0);
+
+        // Import / export / reset: at once, outside OK.
+        GtkWidget* buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        auto button = [&](const char* label, GCallback cb) {
+            GtkWidget* b = gtk_button_new_with_mnemonic(label);
+            g_signal_connect(b, "clicked", cb, this);
+            gtk_box_pack_start(GTK_BOX(buttons), b, FALSE, FALSE, 0);
+        };
+        button("_Import from FastPlay.ini…", G_CALLBACK(+[](GtkButton*, gpointer u) {
+                   auto* self = static_cast<FastPlayPage*>(u);
+                   const std::string path = self->pick_ini(false);
+                   if (!path.empty() && self->media.command)
+                       self->media.command("media_settings_import", path);
+               }));
+        button("E_xport settings…", G_CALLBACK(+[](GtkButton*, gpointer u) {
+                   auto* self = static_cast<FastPlayPage*>(u);
+                   const std::string path = self->pick_ini(true);
+                   if (!path.empty() && self->media.command)
+                       self->media.command("media_settings_export", path);
+               }));
+        button("_Reset player settings", G_CALLBACK(+[](GtkButton*, gpointer u) {
+                   auto* self = static_cast<FastPlayPage*>(u);
+                   GtkWidget* ask = gtk_message_dialog_new(
+                       self->dialog, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+                       "Put the player's tempo, pitch, rate and effects back to their defaults?");
+                   gtk_window_set_title(GTK_WINDOW(ask), "Reset Player Settings");
+                   const bool yes = gtk_dialog_run(GTK_DIALOG(ask)) == GTK_RESPONSE_YES;
+                   gtk_widget_destroy(ask);
+                   if (yes && self->media.command)
+                       self->media.command("media_settings_reset", std::string());
+               }));
+        gtk_box_pack_start(GTK_BOX(page), buttons, FALSE, FALSE, 0);
+        GtkWidget* where = gtk_label_new(
+            "FastPlay keeps its own settings in FastPlay.ini, in ~/.local/share/FastPlay.");
+        gtk_label_set_line_wrap(GTK_LABEL(where), TRUE);
+        gtk_label_set_xalign(GTK_LABEL(where), 0.0f);
+        gtk_box_pack_start(GTK_BOX(page), where, FALSE, FALSE, 0);
+
+        fill_params();
+    }
+};
+
 } // namespace
 
 std::optional<AppSettings> show_settings_dialog(GtkWindow* parent, AppSettings settings,
-                                                const AudioChoices& audio) {
+                                                const AudioChoices& audio,
+                                                MediaEffectChoices effects,
+                                                MediaCallbacks media) {
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Settings", parent,
         static_cast<GtkDialogFlags>(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT), "_Cancel",
@@ -559,6 +854,12 @@ std::optional<AppSettings> show_settings_dialog(GtkWindow* parent, AppSettings s
                      "Every day", "Every week"},
                     {0, 1, 6, 12, 24, 168}, &settings.update_check_hours);
     }
+    // --- FastPlay (the media player's effects; applied at once, not on OK) ---
+    FastPlayPage fastplay;
+    fastplay.fx = std::move(effects);
+    fastplay.media = std::move(media);
+    fastplay.dialog = GTK_WINDOW(dialog);
+    fastplay.build(b.page("Fast_Play"));
 
     gtk_widget_show_all(dialog);
 

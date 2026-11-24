@@ -174,8 +174,8 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ pkg-config libgtk-3-dev libcurl4-openssl-dev \
-            libspeechd-dev libgstreamer1.0-dev
+          sudo apt-get install -y g++ pkg-config unzip libgtk-3-dev libcurl4-openssl-dev \
+            libspeechd-dev
 
       - name: Build, test, and smoke-test
         run: |

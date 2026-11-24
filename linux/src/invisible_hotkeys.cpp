@@ -11,11 +11,74 @@
 
 #include <glib.h>
 #include <gdk/gdkx.h>
+#include <gtk/gtk.h>
 #include <X11/XKBlib.h>
 
 namespace fastsmgtk {
 
 namespace {
+
+// --- Focus for windows the invisible interface opens ------------------------
+// An invisible-interface key never reaches GTK as an ordinary event: it is read
+// from the keyboard device, or grabbed and swallowed before GDK sees it. So a
+// window it opens is stamped with a stale "last user activity" time, and the
+// window manager's focus-stealing prevention (Marco, Metacity, Mutter, KWin…)
+// shows the dialog without focusing it — the screen reader stays in whatever
+// app had focus. For a few seconds after each such key, a window of ours that
+// opens is stamped with the X server's current time instead (newer than any
+// activity in the other app) and asks to be activated, as a click would.
+
+gint64 focus_armed_until = 0; // g_get_monotonic_time() microseconds
+constexpr gint64 kFocusArmWindow = 10 * G_USEC_PER_SEC; // covers a network round trip
+
+gboolean on_window_map(GSignalInvocationHint*, guint, const GValue* params, gpointer) {
+    if (g_get_monotonic_time() > focus_armed_until)
+        return TRUE;
+    GObject* object = static_cast<GObject*>(g_value_get_object(&params[0]));
+    if (!GTK_IS_WINDOW(object))
+        return TRUE;
+    GtkWindow* window = GTK_WINDOW(object);
+    if (gtk_window_get_window_type(window) != GTK_WINDOW_TOPLEVEL) // menus, tooltips
+        return TRUE;
+    GdkWindow* gdk_window = gtk_widget_get_window(GTK_WIDGET(window)); // realized by now
+    if (!gdk_window || !GDK_IS_X11_WINDOW(gdk_window))
+        return TRUE;
+    // gdk_x11_get_server_time waits for a PropertyNotify, so the window must
+    // be listening for those or it would wait forever.
+    gdk_window_set_events(gdk_window,
+                          static_cast<GdkEventMask>(gdk_window_get_events(gdk_window) |
+                                                    GDK_PROPERTY_CHANGE_MASK));
+    const guint32 now = gdk_x11_get_server_time(gdk_window);
+    gdk_x11_window_set_user_time(gdk_window, now); // read by the WM as it maps
+    // Once mapped, ask for activation with that time too (some WMs only honour
+    // the request, not the user time).
+    struct Present {
+        GtkWindow* window;
+        guint32 time;
+    };
+    g_object_ref(window);
+    g_idle_add(
+        +[](gpointer data) -> gboolean {
+            auto* p = static_cast<Present*>(data);
+            if (gtk_widget_get_mapped(GTK_WIDGET(p->window)))
+                gtk_window_present_with_time(p->window, p->time);
+            g_object_unref(p->window);
+            delete p;
+            return G_SOURCE_REMOVE;
+        },
+        new Present{window, now});
+    return TRUE; // keep the hook
+}
+
+void arm_focus_for_new_windows() {
+    static bool hooked = false;
+    if (!hooked) {
+        hooked = true;
+        g_signal_add_emission_hook(g_signal_lookup("map", GTK_TYPE_WIDGET), 0, on_window_map,
+                                   nullptr, nullptr);
+    }
+    focus_armed_until = g_get_monotonic_time() + kFocusArmWindow;
+}
 
 // Linux keycode -> the core's canonical key name (input/keymap.cpp). Physical
 // QWERTY positions, like the original FastSM's table.
@@ -246,6 +309,7 @@ GdkFilterReturn InvisibleHotkeys::filter_x11(GdkXEvent* event, GdkEvent*, gpoint
     if (match == self->x11_actions_.end())
         return GDK_FILTER_CONTINUE;
     const auto action = match->second;
+    arm_focus_for_new_windows();
     self->on_action_(action);
     return GDK_FILTER_REMOVE;
 }
@@ -301,8 +365,10 @@ void InvisibleHotkeys::run() {
                 g_idle_add(
                     +[](gpointer data) -> gboolean {
                         auto* f = static_cast<Fire*>(data);
-                        if (f->self->running_.load() && f->self->on_action_)
+                        if (f->self->running_.load() && f->self->on_action_) {
+                            arm_focus_for_new_windows();
                             f->self->on_action_(f->action);
+                        }
                         delete f;
                         return G_SOURCE_REMOVE;
                     },
