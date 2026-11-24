@@ -153,15 +153,14 @@ The invisible interface lets you control FastSM from anywhere on the system
 with global hotkeys, without the window focused. Turn it on in Settings, on
 the Invisible interface page.
 
-On Linux it reads the keyboard directly, which needs one piece of setup: your
-user must be in the `input` group. Run `sudo usermod -a -G input $USER`, then
-log out and back in. Two things to know, inherited from the original FastSM:
-the keys are matched by physical position (a QWERTY layout is assumed), and
-the hotkeys are simple key combos — the keymap file in your config folder's
-keymaps directory decides what each combo does.
+On Linux the app uses direct keyboard input when it can read the keyboard devices.
+In an X11 session without direct keyboard access, it registers the configured
+global shortcuts with X11 instead. X11 shortcuts need Control, Alt, or Super,
+and a shortcut already in use by another app may need to be reassigned. Keys
+use physical QWERTY positions.
 
-Note for WSL users: WSL does not expose the keyboard this way, so the
-invisible interface only works on a real Linux system.
+For direct keyboard input, add your user to the `input` group and log out and
+back in. The keyboard manager lets you edit which key combinations run actions.
 
 ## Settings
 

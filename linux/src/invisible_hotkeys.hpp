@@ -1,5 +1,6 @@
 #pragma once
 
+#include <gdk/gdk.h>
 #include <atomic>
 #include <functional>
 #include <string>
@@ -9,13 +10,7 @@
 
 namespace fastsmgtk {
 
-// Invisible-interface driver: system-wide hotkeys via raw evdev, the same
-// mechanism as the original FastSM's linux_shortcuts.py. Reads every keyboard
-// in /dev/input (found via /proc/bus/input/devices), tracks modifier state,
-// and fires the bound action for canonical core key-strings
-// ("control+win+r"). Caveats inherited from the original: the user must be in
-// the `input` group, and keycodes are physical QWERTY positions. Note: WSLg
-// exposes no evdev keyboards, so this only works on real Linux systems.
+// Global shortcuts via evdev, with X11 grabs when evdev is unavailable.
 class InvisibleHotkeys {
 public:
     using ActionFn = std::function<void(const std::string& action)>; // main thread
@@ -32,6 +27,12 @@ public:
 
 private:
     void run();
+    bool start_x11(const std::unordered_map<std::string, std::string>& bindings);
+    void stop_x11();
+    static GdkFilterReturn filter_x11(GdkXEvent* event, GdkEvent*, gpointer data);
+    GdkWindow* x11_root_ = nullptr;
+    unsigned x11_locks_ = 0;
+    std::unordered_map<unsigned, std::string> x11_actions_;
 
     std::unordered_map<std::string, std::string> bindings_;
     ActionFn on_action_;
