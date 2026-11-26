@@ -594,3 +594,18 @@ void test_presenter_post_info_split() {
     CHECK(all.find("Content warning") < all.find("First line"));
     CHECK(all.find("First line") < all.find("via Tusky"));
 }
+
+// Issue 42: the reason a reopened composer gives for its post not going out.
+void test_presenter_post_failed() {
+    CHECK_EQ(present::post_failed("mastodon.social", 0, "", false),
+             std::string("Your post wasn't sent: couldn't reach mastodon.social."));
+    CHECK_EQ(present::post_failed("mastodon.social", 422,
+                                  "Validation failed: Text character limit of 500 exceeded", false),
+             std::string("Your post wasn't sent. mastodon.social said: Validation failed: "
+                         "Text character limit of 500 exceeded."));
+    CHECK_EQ(present::post_failed("mastodon.social", 503, "", false),
+             std::string("Your post wasn't sent. mastodon.social answered with error 503."));
+    CHECK_EQ(present::post_failed("bsky.social", -1, "", true),
+             std::string("Your changes weren't saved."));
+    CHECK(contains(present::post_failed("", 0, "", false), "the server"));
+}

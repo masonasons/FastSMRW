@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -257,6 +258,32 @@ public:
     std::int64_t last_answer() const { return last_answer_.load(); }
     std::int64_t last_failure() const { return last_failure_.load(); }
 
+    // Why the most recent request that changes something (a post, an edit, an
+    // upload...) failed: the HTTP status (0 = no reply at all) and the server's
+    // own message, when it sent one. A failed post reopens the composer with this
+    // reason instead of vanishing (issue 42). Written on worker threads, read on
+    // the core loop after the post's callback has hopped over, hence the lock.
+    struct RequestError {
+        long status = 0;
+        std::string message;
+    };
+    void note_request_error(long status, std::string message) {
+        std::lock_guard<std::mutex> lk(request_error_mtx_);
+        last_request_error_ = {status, std::move(message)};
+    }
+    RequestError last_request_error() const {
+        std::lock_guard<std::mutex> lk(request_error_mtx_);
+        return last_request_error_;
+    }
+
+    // This account's own id for a post. A post fetched from another instance's
+    // timeline carries that server's id, which means nothing on ours, so a platform
+    // that has such posts looks up its local copy; nullopt if it can't be found.
+    // Runs on a worker thread (it may hit the network).
+    virtual std::optional<std::string> local_status_id(const Status& s) {
+        return s.display_status().id;
+    }
+
     // Fetch one page. Implementations run synchronously on the worker thread.
     virtual TimelinePage items(const TimelineSource& source, int limit,
                                const PageCursor& cursor) = 0;
@@ -460,6 +487,8 @@ private:
     UserCache seen_users_;
     std::atomic<std::int64_t> last_answer_{0};
     std::atomic<std::int64_t> last_failure_{0};
+    mutable std::mutex request_error_mtx_;
+    RequestError last_request_error_;
 
 };
 

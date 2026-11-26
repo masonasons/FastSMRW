@@ -2050,13 +2050,16 @@ void CoreSession::cmd_open_thread(const json& cmd) {
         emit_announce("There's no conversation to open here.");
         return;
     }
-    const std::string status_id = s->id;
     std::string title = "Thread";
     const std::string& name =
         s->account.display_name.empty() ? s->account.acct : s->account.display_name;
     if (!name.empty())
         title = "Thread: " + name;
-    spawn_source(TimelineSource::thread(status_id, title));
+    // A remote instance's post is opened as its copy on our server; its own id
+    // would fetch nothing, or someone else's post (issue 45).
+    with_local_status(*s, [this, title](const std::string& status_id) {
+        spawn_source(TimelineSource::thread(status_id, title));
+    });
 }
 
 void CoreSession::cmd_open_status_actors(const json& cmd, bool boosted) {
@@ -2069,8 +2072,10 @@ void CoreSession::cmd_open_status_actors(const json& cmd, bool boosted) {
     const Status* s = item->actionable_status();
     if (!s)
         return;
-    spawn_source(boosted ? TimelineSource::boosted_by(s->id, "Boosted by")
-                         : TimelineSource::favorited_by(s->id, "Favorited by"));
+    with_local_status(*s, [this, boosted](const std::string& id) {
+        spawn_source(boosted ? TimelineSource::boosted_by(id, "Boosted by")
+                             : TimelineSource::favorited_by(id, "Favorited by"));
+    });
 }
 
 std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
@@ -2133,7 +2138,52 @@ std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
     add_status(*outer);            // booster/quoter + its mentions
     if (outer->reblog)             // boosted author + its mentions
         add_status(*outer->reblog);
+    // A remote instance's row: every id above is that server's, not ours. Note
+    // them so whatever is done with these users -- now, or after the picker
+    // hands an id back -- looks them up by handle instead (issue 45).
+    if (outer->instance_url || (outer->reblog && outer->reblog->instance_url))
+        for (const auto& u : users)
+            if (const std::string& h = u.acct.empty() ? u.username : u.acct; !h.empty())
+                foreign_users_[u.id] = h;
     return users;
+}
+
+std::optional<std::string> CoreSession::foreign_user_handle(const std::string& id) const {
+    if (auto it = foreign_users_.find(id); it != foreign_users_.end())
+        return it->second;
+    return std::nullopt;
+}
+
+void CoreSession::with_local_user(const std::string& id, const std::string& handle,
+                                  std::function<void(const User&)> then) {
+    if (const auto foreign = foreign_user_handle(id)) {
+        resolve_handle(*foreign, std::move(then)); // announces if it can't be found
+        return;
+    }
+    User u;
+    u.id = id;
+    u.acct = handle;
+    then(u);
+}
+
+void CoreSession::with_local_status(const Status& s, std::function<void(const std::string&)> then) {
+    SocialAccount* acct = accounts_.selected();
+    const Status& d = s.display_status();
+    if (!acct || !d.instance_url) {
+        then(d.id);
+        return;
+    }
+    worker_.post([this, acct, status = d, then = std::move(then)]() mutable {
+        std::optional<std::string> local = acct->local_status_id(status);
+        loop_.post([this, local = std::move(local), then = std::move(then)]() mutable {
+            if (!local || local->empty()) {
+                sound_.play(sound::Earcon::Error);
+                emit_announce("Couldn't find this post on your server.");
+                return;
+            }
+            then(*local);
+        });
+    });
 }
 
 void CoreSession::emit_user_profile(const User& u) {
@@ -2270,6 +2320,7 @@ void CoreSession::cmd_report(const json& cmd) {
     draft.forward = cmd.value("forward", false);
     // Reporting a specific post: resolve its author and include the post itself
     // (with its cid, which Bluesky strong refs require).
+    std::optional<Status> remote_post; // a remote instance's post: ids to resolve first
     if (const std::string row = cmd.value("id", std::string{}); !row.empty()) {
         if (TimelineController* tc = current())
             if (const TimelineItem* item = find_item(tc, row))
@@ -2278,6 +2329,8 @@ void CoreSession::cmd_report(const json& cmd) {
                         draft.account_id = s->account.id;
                     draft.status_ids.push_back(s->id);
                     draft.status_cids.push_back(s->cid.value_or(std::string{}));
+                    if (s->instance_url)
+                        remote_post = *s;
                 }
     }
     if (auto it = cmd.find("status_ids"); it != cmd.end() && it->is_array())
@@ -2289,7 +2342,17 @@ void CoreSession::cmd_report(const json& cmd) {
         emit_announce("Couldn't identify who to report.");
         return;
     }
-    worker_.post([this, acct, draft] {
+    worker_.post([this, acct, draft, remote_post]() mutable {
+        // A post from a remote instance's timeline carries that server's ids; report
+        // our server's copies, or the report names a post and person it never had
+        // (issue 45).
+        if (remote_post) {
+            if (auto sid = acct->local_status_id(*remote_post); sid && !sid->empty())
+                draft.status_ids.front() = *sid;
+            if (auto u = acct->lookup_user(remote_post->account.acct); u && !u->id.empty())
+                if (draft.account_id == remote_post->account.id)
+                    draft.account_id = u->id;
+        }
         const bool ok = acct->report(draft);
         loop_.post([this, ok] {
             sound_.play(ok ? sound::Earcon::PostSent : sound::Earcon::Error);
@@ -2373,10 +2436,14 @@ void CoreSession::open_user_list(const json& cmd, bool following) {
     }
     if (id.empty())
         return;
-    if (following)
-        spawn_source(TimelineSource::following(id, "Following: @" + handle));
-    else
-        spawn_source(TimelineSource::followers(id, "Followers: @" + handle));
+    // A remote instance's user is looked up on our server first (issue 45).
+    with_local_user(id, handle, [this, following](const User& u) {
+        const std::string h = u.acct.empty() ? u.username : u.acct;
+        if (following)
+            spawn_source(TimelineSource::following(u.id, "Following: @" + h));
+        else
+            spawn_source(TimelineSource::followers(u.id, "Followers: @" + h));
+    });
 }
 
 void CoreSession::cmd_open_followers(const json& cmd) { open_user_list(cmd, false); }
@@ -2555,11 +2622,30 @@ void CoreSession::emit_user_picker(const std::string& purpose, const std::string
 void CoreSession::cmd_open_user_timeline(const json& cmd) {
     if (!accounts_.selected())
         return;
+    // Open a user's posts. Someone met on a remote instance's timeline is opened
+    // from their home server, as that instance's own feed was: their id there
+    // means nothing on ours, and their home server has all their posts, not just
+    // the ones that reached us (issue 45).
+    auto open = [this](const std::string& id, const std::string& handle) {
+        if (const auto foreign = foreign_user_handle(id)) {
+            if (foreign->find('@') != std::string::npos) {
+                spawn_source(TimelineSource::remote_user(*foreign));
+                return;
+            }
+            // No domain to fetch from: find them on our server instead.
+            with_local_user(id, handle, [this](const User& u) {
+                spawn_source(TimelineSource::user_posts(
+                    u.id, "@" + (u.acct.empty() ? u.username : u.acct)));
+            });
+            return;
+        }
+        spawn_source(TimelineSource::user_posts(id, "@" + handle));
+    };
     // A specific user was chosen (from the picker menu or the profile dialog).
     if (cmd.contains("account_id")) {
         const std::string aid = cmd.value("account_id", std::string{});
         if (!aid.empty())
-            spawn_source(TimelineSource::user_posts(aid, "@" + cmd.value("acct", std::string{})));
+            open(aid, cmd.value("acct", std::string{}));
         return;
     }
     // A handle was typed manually ("Type a handle…"): resolve it, then open.
@@ -2582,8 +2668,7 @@ void CoreSession::cmd_open_user_timeline(const json& cmd) {
     // otherwise a lone user opens straight away.
     if (users.size() == 1 && !cmd.value("pick", false)) {
         const User& u = users.front();
-        spawn_source(
-            TimelineSource::user_posts(u.id, "@" + (u.acct.empty() ? u.username : u.acct)));
+        open(u.id, u.acct.empty() ? u.username : u.acct);
         return;
     }
     emit_user_picker("timeline", row_id, users); // let the UI pick which user
@@ -2603,12 +2688,9 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
     // needs the id (it fetches the full profile), so don't require the post.
     if (cmd.contains("account_id")) {
         const std::string aid = cmd.value("account_id", std::string{});
-        if (!aid.empty()) {
-            User u;
-            u.id = aid;
-            u.acct = cmd.value("acct", std::string{});
-            emit_user_profile(u);
-        }
+        if (!aid.empty())
+            with_local_user(aid, cmd.value("acct", std::string{}),
+                            [this](const User& u) { emit_user_profile(u); });
         return;
     }
     TimelineController* tc = current();
@@ -2621,7 +2703,13 @@ void CoreSession::cmd_open_user_profile(const json& cmd) {
         return;
     // With "pick" the UI always wants the menu; otherwise a lone user opens straight.
     if (users.size() == 1 && !cmd.value("pick", false)) {
-        emit_user_profile(users.front());
+        const User& u = users.front();
+        // A remote instance's user is looked up on our server first: profiling
+        // their foreign id fetched nothing and showed a bare "@" (issue 45).
+        if (foreign_user_handle(u.id))
+            with_local_user(u.id, u.acct, [this](const User& local) { emit_user_profile(local); });
+        else
+            emit_user_profile(u);
         return;
     }
     emit_user_picker("profile", row_id, users);
@@ -3329,22 +3417,88 @@ void CoreSession::cmd_post(const json& cmd) {
     TimelineController* tc = current();
     if (!tc)
         return;
-    PostDraft draft =
-        draft_from_json(cmd.value("draft", json::object()), settings_.reply_mentions_at_end);
+    const json sent = cmd.value("draft", json::object());
+    PostDraft draft = draft_from_json(sent, settings_.reply_mentions_at_end);
     const std::string edit_id = cmd.value("edit_id", std::string{});
     // A reply gets its own chime (send_reply); new posts/quotes use send_post.
     const bool is_reply = draft.reply_to_id.has_value() && !draft.reply_to_id->empty();
-    auto done = [this, is_reply](bool ok) {
+    // The composer this post came from: it was the last one opened, and the dialogs
+    // are one at a time, so nothing can have replaced it yet. Kept so a failure can
+    // bring it back with everything still in it (issue 42).
+    const json composer = last_compose_ctx_;
+    SocialAccount* account = tc->account();
+    if (account)
+        account->note_request_error(-1, {}); // no stale reason from an earlier failure
+    auto done = [this, is_reply, composer, sent, account, editing = !edit_id.empty()](bool ok) {
         if (!ok)
             sound_.play(sound::Earcon::Error);
         else
             sound_.play(is_reply ? sound::Earcon::ReplySent : sound::Earcon::PostSent);
         emit({{"event", "post_result"}, {"ok", ok}});
+        if (!ok)
+            reopen_failed_compose(composer, sent, account, editing);
     };
     if (!edit_id.empty())
         tc->edit_post(edit_id, draft, done);
     else
         tc->post(draft, done);
+}
+
+void CoreSession::emit_compose(const json& ctx) {
+    last_compose_ctx_ = ctx;
+    emit(ctx);
+}
+
+// A post (or edit) the server refused, or never received: open the composer it
+// came from again with everything the user put in it and the reason, instead of
+// letting it vanish with only an error sound (issue 42).
+void CoreSession::reopen_failed_compose(const json& composer, const json& sent,
+                                        SocialAccount* account, bool editing) {
+    // The account may have been removed while the post was on its way.
+    const std::vector<SocialAccount*> live = accounts_.accounts();
+    if (!composer.is_object() || std::find(live.begin(), live.end(), account) == live.end())
+        return;
+    json ctx = composer;
+    for (const char* key : {"prefill_text", "prefill_cw", "prefill_language", "prefill_poll",
+                            "prefill_scheduled_at", "prefill_attachments", "error"})
+        ctx.erase(key);
+    ctx["prefill_text"] = sent.value("text", std::string{});
+    if (const std::string cw = sent.value("spoiler_text", std::string{}); !cw.empty())
+        ctx["prefill_cw"] = cw;
+    if (sent.contains("visibility"))
+        ctx["default_visibility"] = sent["visibility"];
+    if (sent.contains("language"))
+        ctx["prefill_language"] = sent["language"];
+    if (sent.contains("poll"))
+        ctx["prefill_poll"] = sent["poll"];
+    if (sent.contains("scheduled_at"))
+        ctx["prefill_scheduled_at"] = sent["scheduled_at"];
+    if (sent.contains("attachments"))
+        ctx["prefill_attachments"] = sent["attachments"]; // filename, mime, data, alt
+    // Recipients: checked exactly as they were sent.
+    if (auto parts = ctx.find("reply_participants"); parts != ctx.end() && parts->is_array()) {
+        std::set<std::string> chosen;
+        if (auto m = sent.find("mentions"); m != sent.end() && m->is_array())
+            for (const auto& a : *m)
+                if (a.is_string())
+                    chosen.insert(a.get<std::string>());
+        for (auto& p : *parts)
+            p["checked"] = chosen.count(p.value("acct", std::string{})) > 0;
+    }
+    const SocialAccount::RequestError err = account->last_request_error();
+    const std::string reason = present::post_failed(account->server(), err.status, err.message, editing);
+    // Sending again posts from the current timeline's account; if you've moved to
+    // another account since, a reopened composer would send it from the wrong one.
+    const TimelineController* tc = current();
+    if (!tc || tc->account() != account) {
+        emit_announce(reason);
+        return;
+    }
+    ctx["error"] = reason;
+    ctx["error_title"] = editing ? "Changes not saved" : "Post not sent";
+    // It holds unsent work, so closing it should always ask first.
+    ctx["unsent"] = true;
+    emit_compose(ctx);
 }
 
 void CoreSession::cmd_compose_context(const json& cmd) {
@@ -3460,7 +3614,7 @@ void CoreSession::cmd_compose_context(const json& cmd) {
                     ctx["prefill_text"] = src->text;
                 if (src && !src->spoiler_text.empty())
                     ctx["prefill_cw"] = src->spoiler_text;
-                emit(ctx);
+                emit_compose(ctx);
             });
         });
         return; // emitted asynchronously once the source arrives
@@ -3485,7 +3639,7 @@ void CoreSession::cmd_compose_context(const json& cmd) {
         if (auto vis = account->default_visibility())
             ctx["default_visibility"] = static_cast<int>(*vis);
     }
-    emit(ctx);
+    emit_compose(ctx);
 }
 
 void CoreSession::cmd_open_status(const json& cmd) {

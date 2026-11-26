@@ -341,6 +341,41 @@ struct ReplyParticipant: Decodable {
 }
 struct ComposeLanguage: Decodable { let code: String; let name: String }
 
+/// A failed post's poll, as the composer had sent it (issue 42). Lenient, so an odd
+/// value can't drop the whole compose_context.
+struct ComposePollPrefill: Decodable {
+    var options: [String] = []
+    var multiple = false
+    var expiresInSeconds: Int?
+    enum CodingKeys: String, CodingKey {
+        case options, multiple
+        case expiresInSeconds = "expires_in_seconds"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        options = (try? c.decodeIfPresent([String].self, forKey: .options)) ?? []
+        multiple = (try? c.decodeIfPresent(Bool.self, forKey: .multiple)) ?? false
+        expiresInSeconds = try? c.decodeIfPresent(Int.self, forKey: .expiresInSeconds)
+    }
+}
+
+/// A failed post's media, in the same shape the composer sends in its draft:
+/// `data` is the file's bytes as base64 (issue 42).
+struct ComposeAttachmentPrefill: Decodable {
+    var filename = ""
+    var mime = ""
+    var data = ""
+    var alt = ""
+    enum CodingKeys: String, CodingKey { case filename, mime, data, alt }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        filename = (try? c.decodeIfPresent(String.self, forKey: .filename)) ?? ""
+        mime = (try? c.decodeIfPresent(String.self, forKey: .mime)) ?? ""
+        data = (try? c.decodeIfPresent(String.self, forKey: .data)) ?? ""
+        alt = (try? c.decodeIfPresent(String.self, forKey: .alt)) ?? ""
+    }
+}
+
 /// Prefill + capabilities for a compose sheet (mode: new/reply/quote/edit).
 struct ComposeContext: Decodable {
     let mode: String
@@ -368,9 +403,24 @@ struct ComposeContext: Decodable {
     var discardTitle: String?
     var discardText: String?
     var discardOk: String?
+    /// Reopened because its post failed (issue 42): the core's reason (shown as the
+    /// composer opens, titled `errorTitle`), `unsent` (closing must always ask), and
+    /// the rest of what had been entered. All absent on an ordinary compose.
+    var error: String?
+    var errorTitle: String?
+    var unsent: Bool?
+    var prefillLanguage: String?            // a `languages` code
+    var prefillPoll: ComposePollPrefill?
+    var prefillScheduledAt: Int?            // Unix seconds
+    var prefillAttachments: [ComposeAttachmentPrefill]?
 
     enum CodingKeys: String, CodingKey {
-        case mode, title, platform, features, languages
+        case mode, title, platform, features, languages, error, unsent
+        case errorTitle = "error_title"
+        case prefillLanguage = "prefill_language"
+        case prefillPoll = "prefill_poll"
+        case prefillScheduledAt = "prefill_scheduled_at"
+        case prefillAttachments = "prefill_attachments"
         case maxChars = "max_chars"
         case enterToSend = "enter_to_send"
         case replyParticipants = "reply_participants"

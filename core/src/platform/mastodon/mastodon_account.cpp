@@ -184,10 +184,18 @@ bool MastodonAccount::request(const std::string& method, const std::string& url,
     out_body = res.body;
     // Log failures (status + server's error text) so a failed action isn't just
     // an error earcon with nothing to go on. Query string dropped: it can be long.
-    if (!res.ok() && method != "GET")
+    if (!res.ok() && method != "GET") {
         log::write(method + " " + url.substr(0, url.find('?')) + " failed: status=" +
                    std::to_string(res.status) + (res.error.empty() ? "" : " " + res.error) +
                    " body=" + res.body.substr(0, 300));
+        // Keep the server's reason ({"error": "Validation failed: ..."}) so a failed
+        // post can say why when the composer reopens.
+        std::string message;
+        const json j = json::parse(res.body, nullptr, false);
+        if (j.is_object())
+            message = j.value("error", std::string{});
+        note_request_error(res.status, std::move(message));
+    }
     return res.ok();
 }
 
@@ -735,6 +743,7 @@ std::optional<std::string> MastodonAccount::upload_media(const MediaUpload& a) {
         }
         if (!ready) {
             log::write("upload_media: media " + id + " still processing after wait; giving up");
+            note_request_error(status, "An attachment was still being processed after two minutes.");
             return std::nullopt;
         }
     }
@@ -794,11 +803,13 @@ std::optional<Status> MastodonAccount::post(const PostDraft& draft) {
                  status))
         return std::nullopt;
     try {
-        // A scheduled post returns a ScheduledStatus (no "content"); nothing to
-        // insert into the timeline.
+        // A scheduled post returns a ScheduledStatus (no "content"): it succeeded,
+        // but there's nothing to insert into the timeline, so hand back a Status
+        // with no id (the controller only inserts real ones). Returning nullopt here
+        // used to report every scheduled post as a failure.
         json j = json::parse(body);
         if (draft.scheduled_at)
-            return std::nullopt;
+            return Status{};
         return mastodon::map_status(j);
     } catch (...) {
         return std::nullopt;
@@ -932,6 +943,13 @@ std::optional<std::string> MastodonAccount::resolve_url(const std::string& post_
     } catch (...) {
     }
     return std::nullopt;
+}
+
+std::optional<std::string> MastodonAccount::local_status_id(const Status& s) {
+    const Status& d = s.display_status();
+    if (d.instance_url)
+        return resolve_url(d.url); // nullopt if this instance can't find it
+    return d.id;
 }
 
 std::string MastodonAccount::action_status_id(const Status& status) {

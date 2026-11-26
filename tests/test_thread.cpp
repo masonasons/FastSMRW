@@ -335,3 +335,121 @@ void test_mastodon_tracks_server_replies() {
     CHECK(proxied.last_failure() > 0);
     CHECK_EQ(proxied.last_answer(), std::int64_t{0});
 }
+
+namespace {
+// Serves a remote instance's local timeline (one post by a local author that
+// mentions another local user), and answers our own instance's search with
+// its copy of that post.
+struct FakeRemoteHttp : net::IHttpClient {
+    std::string last_search;
+    net::HttpResponse send(const net::HttpRequest& req) override {
+        net::HttpResponse res;
+        res.status = 200;
+        if (req.url.find("https://remote.example/api/v1/timelines/public") == 0) {
+            res.body =
+                R"([{"id":"999","content":"<p>hi @carol</p>","url":"https://remote.example/@bob/999",)"
+                R"("account":{"id":"77","acct":"bob","username":"bob"},)"
+                R"("mentions":[{"id":"78","acct":"carol","username":"carol","url":"https://remote.example/@carol"}],)"
+                R"("created_at":"2024-01-01T00:00:00.000Z"}])";
+        } else if (req.url.find("/api/v2/search") != std::string::npos) {
+            last_search = req.url;
+            res.body = R"({"statuses":[{"id":"123"}]})";
+        } else {
+            res.status = 404;
+        }
+        return res;
+    }
+};
+} // namespace
+
+// Issue 45: a remote instance's rows carry that server's ids. Their handles are
+// qualified so they can be looked up, and a post resolves to our copy of it.
+void test_mastodon_remote_rows_resolve_locally() {
+    FakeRemoteHttp http;
+    MastodonCredentials cred;
+    cred.instance_url = "https://example.social";
+    cred.access_token = "tok";
+    User me;
+    me.id = "me";
+    MastodonAccount account(cred, me, &http);
+
+    const TimelinePage page = account.items(TimelineSource::remote_local("remote.example"), 40, {});
+    CHECK_EQ(page.items.size(), static_cast<size_t>(1));
+    if (page.items.empty())
+        return;
+    const Status* s = page.items.front().status();
+    CHECK(s != nullptr);
+    if (!s)
+        return;
+    CHECK(s->instance_url.has_value());
+    CHECK_EQ(s->account.acct, std::string("bob@remote.example"));
+    CHECK_EQ(s->mentions.size(), static_cast<size_t>(1));
+    if (!s->mentions.empty())
+        CHECK_EQ(s->mentions.front().acct, std::string("carol@remote.example"));
+
+    // The remote post resolves to our instance's copy, found by its URL.
+    const auto local = account.local_status_id(*s);
+    CHECK(local.has_value());
+    CHECK_EQ(local.value_or(""), std::string("123"));
+    CHECK(http.last_search.find("example.social/api/v2/search") != std::string::npos);
+
+    // An ordinary post is its own id, with no lookup.
+    Status plain;
+    plain.id = "55";
+    http.last_search.clear();
+    CHECK_EQ(account.local_status_id(plain).value_or(""), std::string("55"));
+    CHECK(http.last_search.empty());
+}
+
+namespace {
+// Answers POST /statuses with whatever status/body is set (a 422 refusal, a
+// scheduled-status reply...).
+struct FakePostHttp : net::IHttpClient {
+    long status = 200;
+    std::string body;
+    net::HttpResponse send(const net::HttpRequest&) override {
+        net::HttpResponse res;
+        res.status = status;
+        res.body = body;
+        return res;
+    }
+};
+} // namespace
+
+// Issue 42: a refused post keeps the server's reason for the reopened composer,
+// and a scheduled post counts as sent.
+void test_mastodon_post_failure_reason() {
+    FakePostHttp http;
+    MastodonCredentials cred;
+    cred.instance_url = "https://example.social";
+    cred.access_token = "tok";
+    User me;
+    me.id = "me";
+    MastodonAccount account(cred, me, &http);
+
+    PostDraft draft;
+    draft.text = "far too long";
+    http.status = 422;
+    http.body = R"({"error":"Validation failed: Text character limit of 500 exceeded"})";
+    CHECK(!account.post(draft).has_value());
+    auto err = account.last_request_error();
+    CHECK_EQ(err.status, 422L);
+    CHECK_EQ(err.message, std::string("Validation failed: Text character limit of 500 exceeded"));
+
+    // No reply at all.
+    http.status = 0;
+    http.body.clear();
+    CHECK(!account.post(draft).has_value());
+    err = account.last_request_error();
+    CHECK_EQ(err.status, 0L);
+    CHECK(err.message.empty());
+
+    // Scheduled: the server answers with a ScheduledStatus; that's a success with
+    // nothing to show in a timeline (used to be reported as a failure).
+    http.status = 200;
+    http.body = R"({"id":"5","scheduled_at":"2999-01-01T00:00:00.000Z","params":{"text":"later"}})";
+    draft.scheduled_at = 32503680000;
+    const auto scheduled = account.post(draft);
+    CHECK(scheduled.has_value());
+    CHECK(scheduled && scheduled->id.empty());
+}

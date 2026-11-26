@@ -3284,6 +3284,27 @@ void MainWindow::ev_compose_context(const json& e) {
     req.discard_ok = e.value("discard_ok", std::string("Discard"));
     if (e.contains("default_visibility"))
         req.default_visibility = static_cast<Visibility>(e["default_visibility"].get<int>());
+    // Reopened after a failed post: the reason, and the rest of what was entered.
+    req.error = e.value("error", std::string{});
+    req.error_title = e.value("error_title", std::string{});
+    req.unsent = e.value("unsent", false);
+    req.prefill_language = e.value("prefill_language", std::string{});
+    if (auto p = e.find("prefill_poll"); p != e.end() && p->is_object()) {
+        PollDraft poll;
+        for (const auto& o : p->value("options", json::array()))
+            if (o.is_string())
+                poll.options.push_back(o.get<std::string>());
+        poll.multiple = p->value("multiple", false);
+        poll.expires_in_seconds = p->value("expires_in_seconds", 86400);
+        req.prefill_poll = std::move(poll);
+    }
+    if (auto t = e.find("prefill_scheduled_at"); t != e.end() && t->is_number_integer())
+        req.prefill_scheduled_at = t->get<std::int64_t>();
+    for (const auto& a : e.value("prefill_attachments", json::array()))
+        req.prefill_attachments.push_back({to_wide(a.value("filename", std::string{})),
+                                           a.value("mime", std::string{}),
+                                           a.value("data", std::string{}),
+                                           to_wide(a.value("alt", std::string{}))});
     if (auto f = e.find("features"); f != e.end() && f->is_object()) {
         req.features.visibility = f->value("visibility", false);
         req.features.content_warning = f->value("content_warning", false);

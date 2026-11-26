@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -147,11 +148,16 @@ private fun App(vm: CoreViewModel) {
     val med = media
     when {
         med != null -> MediaScreen(item = med, onClose = { vm.closeMedia() })
-        ctx != null -> ComposeScreen(
-            viewModel = vm,
-            ctx = ctx,
-            onDone = { vm.cancelCompose() },
-        )
+        // Keyed on the context so a composer the core reopens after a failed post
+        // (issue 42) starts afresh from what it carries -- its reason and everything
+        // that was sent -- rather than keeping the screen that was sending.
+        ctx != null -> key(ctx.serial) {
+            ComposeScreen(
+                viewModel = vm,
+                ctx = ctx,
+                onDone = { vm.cancelCompose() },
+            )
+        }
         prof != null -> ProfileScreen(
             viewModel = vm,
             profile = prof,

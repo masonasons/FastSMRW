@@ -23,6 +23,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     private var addAccountController: AddAccountWindowController?
     private var composeController: ComposeWindowController?
+    /// A composer the core opened while another was up; it opens when that closes.
+    private var pendingCompose: ComposeContext?
     private var newTimelineController: NewTimelineWindowController?
     private var userAnalysisController: UserAnalysisWindowController?
     private var detailController: NSWindowController?
@@ -482,11 +484,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     private func presentCompose(_ context: ComposeContext) {
         guard let window else { return }
+        if let open = composeController {
+            // A post failed while its sheet is still up: the reason shows there, with
+            // everything still in it, rather than in a second composer (issue 42).
+            if open.takeFailure(context) { return }
+            // Otherwise one composer at a time: this one opens when that one closes.
+            pendingCompose = context
+            return
+        }
         let controller = ComposeWindowController(state: state, context: context)
         composeController = controller
         controller.beginSheet(for: window) { [weak self] in
-            self?.composeController = nil
-            self?.postsViewController.focusTable()
+            guard let self else { return }
+            self.composeController = nil
+            if let next = self.pendingCompose {
+                self.pendingCompose = nil
+                DispatchQueue.main.async { [weak self] in self?.presentCompose(next) }
+            } else {
+                self.postsViewController.focusTable()
+            }
         }
     }
 

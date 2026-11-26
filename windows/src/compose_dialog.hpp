@@ -46,6 +46,15 @@ struct ComposeRequest {
     std::string discard_title;
     std::string discard_text;
     std::string discard_ok;
+    // A composer reopened because its post failed (issue 42): the core's reason,
+    // shown as the dialog opens, and the rest of what had been entered.
+    std::string error;
+    std::string error_title;
+    bool unsent = false; // holds unsent work: closing always asks
+    std::string prefill_language;                 // language code
+    std::optional<fastsm::PollDraft> prefill_poll;
+    std::optional<std::int64_t> prefill_scheduled_at; // Unix seconds
+    std::vector<ComposeAttachment> prefill_attachments;
 };
 
 struct ComposeResult {

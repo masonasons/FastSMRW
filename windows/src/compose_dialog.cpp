@@ -343,13 +343,19 @@ void fill_sched_days(HWND dlg) {
 }
 
 // Fill the five dropdowns, starting an hour from now (the server wants a time
-// at least a few minutes ahead).
-void init_schedule_fields(HWND dlg) {
+// at least a few minutes ahead), or at `preset` (a local time) when given.
+void init_schedule_fields(HWND dlg, const SYSTEMTIME* preset = nullptr) {
     SYSTEMTIME now{};
     GetLocalTime(&now);
     SYSTEMTIME when = now;
     FILETIME ft{};
-    if (SystemTimeToFileTime(&now, &ft)) {
+    if (preset) {
+        when = *preset;
+        if (when.wYear < now.wYear)
+            when.wYear = now.wYear; // the list starts at this year
+        if (when.wYear >= now.wYear + kScheduleYears)
+            when.wYear = static_cast<WORD>(now.wYear + kScheduleYears - 1);
+    } else if (SystemTimeToFileTime(&now, &ft)) {
         ULARGE_INTEGER u{};
         u.LowPart = ft.dwLowDateTime;
         u.HighPart = ft.dwHighDateTime;
@@ -383,6 +389,18 @@ SYSTEMTIME sched_time(HWND dlg) {
     st.wHour = static_cast<WORD>(combo_sel(dlg, IDC_COMPOSE_SCHED_HOUR));
     st.wMinute = static_cast<WORD>(combo_sel(dlg, IDC_COMPOSE_SCHED_MINUTE));
     return st;
+}
+
+// A Unix time as local wall-clock time, for prefilling the schedule fields.
+std::optional<SYSTEMTIME> unix_to_local(std::int64_t t) {
+    ULARGE_INTEGER u{};
+    u.QuadPart = static_cast<ULONGLONG>(t + 11644473600LL) * 10000000ULL;
+    FILETIME ft{u.LowPart, u.HighPart};
+    SYSTEMTIME utc{}, local{};
+    if (!FileTimeToSystemTime(&ft, &utc) ||
+        !SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local))
+        return std::nullopt;
+    return local;
 }
 
 void toggle_schedule(HWND dlg) {
@@ -463,6 +481,10 @@ void run_mention_autocomplete(HWND edit, Ctx* ctx) {
 bool compose_is_dirty(HWND dlg, const Ctx* ctx) {
     if (!ctx || !ctx->req)
         return false;
+    // Reopened after its post failed: everything in it is unsent work, even if
+    // nothing has been changed since (issue 42).
+    if (ctx->req->unsent)
+        return true;
     if (!ctx->attachments.empty())
         return true;
     auto field = [&](int id) {
@@ -535,6 +557,8 @@ LRESULT CALLBACK EditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWOR
     }
     return DefSubclassProc(h, msg, wp, lp);
 }
+
+constexpr UINT kMsgShowError = WM_APP + 41; // show a failed post's reason
 
 INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
@@ -616,9 +640,15 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         // Language (always).
         {
             HWND combo = GetDlgItem(dlg, IDC_COMPOSE_LANGUAGE);
-            for (const auto& [code, name] : util::languages())
+            int lang_sel = 0;
+            int i = 0;
+            for (const auto& [code, name] : util::languages()) {
                 SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(to_wide(name).c_str()));
-            SendMessageW(combo, CB_SETCURSEL, 0, 0);
+                if (!req.prefill_language.empty() && code == req.prefill_language)
+                    lang_sel = i;
+                ++i;
+            }
+            SendMessageW(combo, CB_SETCURSEL, lang_sel, 0);
         }
 
         // Poll.
@@ -632,7 +662,21 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             HWND combo = GetDlgItem(dlg, IDC_COMPOSE_DURATION);
             for (const auto& d : kDurations)
                 SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(d.label));
-            SendMessageW(combo, CB_SETCURSEL, 4, 0); // 1 day
+            int dur = 4; // 1 day
+            if (req.prefill_poll) { // reopened after a failed post: as it was
+                for (int d = 0; d < static_cast<int>(std::size(kDurations)); ++d)
+                    if (kDurations[d].seconds == req.prefill_poll->expires_in_seconds)
+                        dur = d;
+                const int opt_ids[] = {IDC_COMPOSE_POLL_OPT1, IDC_COMPOSE_POLL_OPT2,
+                                       IDC_COMPOSE_POLL_OPT3, IDC_COMPOSE_POLL_OPT4};
+                for (size_t o = 0; o < req.prefill_poll->options.size() && o < 4; ++o)
+                    SetDlgItemTextW(dlg, opt_ids[o], to_wide(req.prefill_poll->options[o]).c_str());
+                SendDlgItemMessageW(dlg, IDC_COMPOSE_POLL_MULTI, BM_SETCHECK,
+                                    req.prefill_poll->multiple ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendDlgItemMessageW(dlg, IDC_COMPOSE_POLL, BM_SETCHECK, BST_CHECKED, 0);
+                toggle_poll(dlg, ctx);
+            }
+            SendMessageW(combo, CB_SETCURSEL, dur, 0);
         }
 
         // Schedule.
@@ -640,8 +684,16 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         show(dlg, IDC_COMPOSE_SCHEDULE, sched);
         for (int id : kSchedControls)
             show(dlg, id, false);
-        if (sched)
-            init_schedule_fields(dlg);
+        if (sched) {
+            std::optional<SYSTEMTIME> preset;
+            if (req.prefill_scheduled_at)
+                preset = unix_to_local(*req.prefill_scheduled_at);
+            init_schedule_fields(dlg, preset ? &*preset : nullptr);
+            if (preset) { // reopened after a failed post: still scheduled
+                SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHEDULE, BM_SETCHECK, BST_CHECKED, 0);
+                toggle_schedule(dlg);
+            }
+        }
 
         // Media attachments (not while editing an existing post).
         const bool media = req.features.media && !editing;
@@ -659,6 +711,11 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         // Not Alt+P: that's the Post field, and sharing it meant Alt+P could
         // publish a draft when you only meant to go back to it.
         SetDlgItemTextW(dlg, IDOK, editing ? L"&Save" : L"Pos&t");
+        // A prefilled schedule keeps its "Schedule post" label. (Checked by the box,
+        // not by visibility: nothing counts as visible until the dialog is shown.)
+        if (sched &&
+            SendDlgItemMessageW(dlg, IDC_COMPOSE_SCHEDULE, BM_GETCHECK, 0, 0) == BST_CHECKED)
+            toggle_schedule(dlg);
 
         SetWindowSubclass(GetDlgItem(dlg, IDC_COMPOSE_EDIT), EditProc, 1,
                           reinterpret_cast<DWORD_PTR>(ctx));
@@ -667,7 +724,21 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         SetFocus(edit);
         SendMessageW(edit, EM_SETSEL, GetWindowTextLengthW(edit), GetWindowTextLengthW(edit));
         update_counter(dlg, ctx);
+        // Reopened because the post failed: say why once the dialog is showing,
+        // then land back in the text (issue 42).
+        if (!req.error.empty())
+            PostMessageW(dlg, kMsgShowError, 0, 0);
         return FALSE; // focus set explicitly
+    }
+
+    case kMsgShowError: {
+        auto* ctx = reinterpret_cast<Ctx*>(GetWindowLongPtrW(dlg, DWLP_USER));
+        if (ctx && ctx->req && !ctx->req->error.empty()) {
+            MessageBoxW(dlg, to_wide(ctx->req->error).c_str(),
+                        to_wide(ctx->req->error_title).c_str(), MB_OK | MB_ICONERROR);
+            SetFocus(GetDlgItem(dlg, IDC_COMPOSE_EDIT));
+        }
+        return TRUE;
     }
 
     case WM_COMMAND: {
@@ -797,6 +868,7 @@ std::optional<ComposeResult> show_compose_dialog(HWND parent, HINSTANCE inst,
     Ctx ctx;
     ctx.req = &req;
     ctx.pick_mention = std::move(pick_mention);
+    ctx.attachments = req.prefill_attachments; // a failed post's media, kept
     const INT_PTR r = DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_COMPOSE), parent, Proc,
                                       reinterpret_cast<LPARAM>(&ctx));
     if (r == IDOK && ctx.ok)

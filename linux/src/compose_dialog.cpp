@@ -233,10 +233,13 @@ void fill_sched_days() {
 }
 
 // Build the five dropdowns, starting an hour from now (the server wants a time
-// at least a few minutes ahead).
-GtkWidget* build_sched_fields() {
+// at least a few minutes ahead), or at `preset` (Unix seconds) when given -- a
+// failed scheduled post reopening as it was.
+GtkWidget* build_sched_fields(gint64 preset = 0) {
     GDateTime* now = g_date_time_new_now_local();
-    GDateTime* when = g_date_time_add_hours(now, 1);
+    GDateTime* when = preset > 0 ? g_date_time_new_from_unix_local(preset) : nullptr;
+    if (!when)
+        when = g_date_time_add_hours(now, 1);
     sched_fields = SchedFields{};
     sched_fields.first_year = g_date_time_get_year(now);
 
@@ -273,7 +276,8 @@ GtkWidget* build_sched_fields() {
         gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sched_fields.minute),
                                        std::to_string(m).c_str());
     gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.year),
-                             g_date_time_get_year(when) - sched_fields.first_year);
+                             std::clamp(g_date_time_get_year(when) - sched_fields.first_year, 0,
+                                        kScheduleYears - 1));
     gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.month), g_date_time_get_month(when) - 1);
     fill_sched_days();
     gtk_combo_box_set_active(GTK_COMBO_BOX(sched_fields.day),
@@ -464,7 +468,12 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
         gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(lang_combo),
                                        l.value("name", std::string{}).c_str());
     }
-    gtk_combo_box_set_active(GTK_COMBO_BOX(lang_combo), 0);
+    int lang_sel = 0; // a failed post reopens with the language it was sent in
+    if (const std::string want = ctx.value("prefill_language", std::string{}); !want.empty())
+        for (size_t i = 0; i < lang_codes.size(); ++i)
+            if (lang_codes[i] == want)
+                lang_sel = static_cast<int>(i);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(lang_combo), lang_sel);
     {
         GtkWidget* lang_label = gtk_label_new_with_mnemonic("_Language:");
         gtk_label_set_xalign(GTK_LABEL(lang_label), 0.0f);
@@ -508,6 +517,21 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
                                                     gtk_toggle_button_get_active(b));
                          }),
                          poll_box);
+        // A failed post reopens with its poll as it was.
+        if (const json poll = ctx.value("prefill_poll", json()); poll.is_object()) {
+            const json opts = poll.value("options", json::array());
+            for (size_t i = 0; i < opts.size() && i < poll_options.size(); ++i)
+                if (opts[i].is_string())
+                    gtk_entry_set_text(GTK_ENTRY(poll_options[i]),
+                                       opts[i].get<std::string>().c_str());
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(poll_multi),
+                                         poll.value("multiple", false));
+            const int secs = poll.value("expires_in_seconds", 86400);
+            for (size_t d = 0; d < G_N_ELEMENTS(kDurations); ++d)
+                if (kDurations[d].seconds == secs)
+                    gtk_combo_box_set_active(GTK_COMBO_BOX(poll_duration), static_cast<int>(d));
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(poll_check), TRUE);
+        }
     }
 
     // Schedule: Year/Month/Day/Hour/Minute dropdowns, shown when checked.
@@ -515,7 +539,7 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
     GtkWidget* sched_grid = nullptr;
     if (has_schedule) {
         sched_check = gtk_check_button_new_with_mnemonic("_Schedule");
-        sched_grid = build_sched_fields();
+        sched_grid = build_sched_fields(ctx.value("prefill_scheduled_at", gint64{0}));
         gtk_box_pack_start(GTK_BOX(box), sched_check, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(box), sched_grid, FALSE, FALSE, 0);
         g_signal_connect(sched_check, "toggled", G_CALLBACK(+[](GtkToggleButton* b, gpointer d) {
@@ -528,6 +552,8 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
                                                       on ? "Schedule pos_t" : "Pos_t");
                          }),
                          dialog);
+        if (ctx.value("prefill_scheduled_at", gint64{0}) > 0) // a failed scheduled post
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sched_check), TRUE);
     }
 
     // Autocomplete @mention (Alt+A via the mnemonic) — hidden without a picker.
@@ -594,11 +620,17 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
     // Media… opens the Attachments sub-dialog; the label tracks the count.
     static std::vector<Attachment> attachments;
     attachments.clear();
+    // A failed post reopens with the media it had, ready to upload again.
+    for (const auto& a : ctx.value("prefill_attachments", json::array()))
+        attachments.push_back({a.value("filename", std::string{}), a.value("mime", std::string{}),
+                               a.value("data", std::string{}), a.value("alt", std::string{})});
     GtkWidget* media_status = nullptr;
     if (has_media) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         GtkWidget* media_btn = gtk_button_new_with_mnemonic("_Media…");
-        media_status = gtk_label_new("No attachments");
+        media_status = gtk_label_new(
+            attachments.empty() ? "No attachments"
+                                : (std::to_string(attachments.size()) + " attachment(s)").c_str());
         gtk_label_set_xalign(GTK_LABEL(media_status), 0.0f);
         struct MediaBtnCtx {
             GtkWidget* dialog;
@@ -632,16 +664,31 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
 
     gtk_widget_show_all(dialog);
     if (poll_box)
-        gtk_widget_set_visible(poll_box, FALSE);
+        gtk_widget_set_visible(poll_box,
+                               gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(poll_check)));
     if (sched_grid)
-        gtk_widget_set_visible(sched_grid, FALSE);
+        gtk_widget_set_visible(sched_grid,
+                               gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(sched_check)));
     update_counter();
     gtk_widget_grab_focus(text_view);
+
+    // Reopened because the post failed: say why, then back to the text (issue 42).
+    if (const std::string error = ctx.value("error", std::string{}); !error.empty()) {
+        GtkWidget* msg = gtk_message_dialog_new(
+            GTK_WINDOW(dialog), GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK, "%s",
+            ctx.value("error_title", std::string{}).c_str());
+        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(msg), "%s", error.c_str());
+        gtk_dialog_run(GTK_DIALOG(msg));
+        gtk_widget_destroy(msg);
+        gtk_widget_grab_focus(text_view);
+    }
 
     // What the dialog opened with, to tell "typed something" from "changed nothing".
     const std::string initial_body = ctx.value("prefill_text", std::string{});
     const std::string initial_cw = ctx.value("prefill_cw", std::string{});
     const bool confirm_discard = ctx.value("confirm_discard", true);
+    // Reopened after its post failed: it's all unsent work, so always ask.
+    const bool unsent = ctx.value("unsent", false);
 
     std::optional<json> result;
     int response;
@@ -657,7 +704,7 @@ std::optional<json> show_compose_dialog(GtkWindow* parent, const json& ctx,
             const std::string body_now = body_raw ? body_raw : "";
             g_free(body_raw);
             const std::string cw_now = cw_entry ? gtk_entry_get_text(GTK_ENTRY(cw_entry)) : "";
-            const bool dirty = !attachments.empty() || body_now != initial_body ||
+            const bool dirty = unsent || !attachments.empty() || body_now != initial_body ||
                                cw_now != initial_cw;
             if (confirm_discard && dirty) {
                 GtkWidget* ask = gtk_message_dialog_new(

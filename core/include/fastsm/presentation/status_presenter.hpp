@@ -82,6 +82,12 @@ std::string post_info_details(const Status& s, std::int64_t now);
 std::string refresh_status(const std::string& server, std::int64_t last_answer,
                            std::int64_t last_failure, std::int64_t now);
 
+// Why a post (or an edit) wasn't sent, for the composer that reopens with it
+// (issue 42). `status` is the HTTP status (0 = the server never answered, < 0 =
+// unknown) and `message` the server's own reason, if it gave one.
+std::string post_failed(const std::string& server, long status, const std::string& message,
+                        bool editing);
+
 // Multi-line profile for the Open User Profile dialog: name, @handle, flags
 // (bot / locked), bio, then follower/following/post counts. Mirrors the Mac.
 std::string user_profile(const User& u);

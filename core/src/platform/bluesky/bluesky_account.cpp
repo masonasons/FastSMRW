@@ -111,6 +111,18 @@ net::HttpResponse BlueskyAccount::send_authed(const std::string& method, const s
         res = http_->send(build(refreshed));
     }
     note_server_reply(res.status); // for "Speak refresh status"
+    // A failed change keeps the server's reason ({"error": ..., "message": ...}) so
+    // a failed post can say why when the composer reopens.
+    if (!res.ok() && method != "GET") {
+        std::string message;
+        const json j = json::parse(res.body, nullptr, false);
+        if (j.is_object()) {
+            message = j.value("message", std::string{});
+            if (message.empty())
+                message = j.value("error", std::string{});
+        }
+        note_request_error(res.status, std::move(message));
+    }
     return res;
 }
 

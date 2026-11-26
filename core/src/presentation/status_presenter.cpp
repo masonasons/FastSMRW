@@ -727,6 +727,23 @@ std::string refresh_status(const std::string& server, std::int64_t last_answer,
     return "Last heard from " + name + " " + util::relative_spoken(last_answer, now) + ".";
 }
 
+std::string post_failed(const std::string& server, long status, const std::string& message,
+                        bool editing) {
+    const std::string name = server.empty() ? std::string("the server") : server;
+    std::string out = editing ? "Your changes weren't saved" : "Your post wasn't sent";
+    if (status == 0)
+        return out + ": couldn't reach " + name + ".";
+    if (!message.empty()) {
+        out += ". " + name + " said: " + message;
+        if (out.back() != '.' && out.back() != '!' && out.back() != '?')
+            out += ".";
+        return out;
+    }
+    if (status > 0)
+        return out + ". " + name + " answered with error " + std::to_string(status) + ".";
+    return out + ".";
+}
+
 std::string user_profile(const User& u) {
     std::string out;
     out += display_name_for(u) + "\n@" + u.acct + "\n";

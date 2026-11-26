@@ -78,7 +78,17 @@ import me.masonasons.fastsm.ui.CoreViewModel
 import me.masonasons.fastsm.ui.MentionSuggestion
 import me.masonasons.fastsm.ui.OutgoingMedia
 
-private data class PickedMedia(val uri: Uri, val name: String, val mime: String, val alt: String)
+/**
+ * An attachment: picked from the device ([uri], read when sending), or carried
+ * back already encoded ([dataBase64]) in a composer reopened after a failed post.
+ */
+private data class PickedMedia(
+    val uri: Uri?,
+    val name: String,
+    val mime: String,
+    val alt: String,
+    val dataBase64: String? = null,
+)
 
 /** Resolve a content Uri's display name + MIME type for the upload. */
 private fun queryMeta(context: Context, uri: Uri): Pair<String, String> {
@@ -136,19 +146,30 @@ fun ComposeScreen(
     }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Reopened because the post failed: say why as it opens (issue 42).
+    var failureOpen by remember { mutableStateOf(ctx.error != null) }
 
     // Open on the post text, ready to type (cursor at the end of any prefill, such as
-    // a reply's @mentions), rather than on the Cancel button.
+    // a reply's @mentions), rather than on the Cancel button -- and land back there
+    // once a failed post's reason has been dismissed.
     val textFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(Unit) {
+    LaunchedEffect(failureOpen) {
+        if (failureOpen) return@LaunchedEffect
         runCatching { textFocus.requestFocus() }
         keyboard?.show()
     }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val attachments = remember { mutableStateListOf<PickedMedia>() }
+    val attachments = remember {
+        mutableStateListOf<PickedMedia>().apply {
+            // A failed post's media, kept so sending again uploads it.
+            ctx.prefillAttachments.forEach {
+                add(PickedMedia(null, it.filename, it.mime, it.alt, it.dataBase64))
+            }
+        }
+    }
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
@@ -171,7 +192,8 @@ fun ComposeScreen(
     // would train people to dismiss the prompt without reading it.
     var confirmDiscard by remember { mutableStateOf(false) }
     fun closeOrAsk() {
-        val dirty = field.text != ctx.prefillText || cw != ctx.prefillCw ||
+        // A composer reopened after a failed post holds unsent work, so it always asks.
+        val dirty = ctx.unsent || field.text != ctx.prefillText || cw != ctx.prefillCw ||
             attachments.isNotEmpty()
         if (ctx.confirmDiscard && dirty) confirmDiscard = true else onDone()
     }
@@ -197,6 +219,17 @@ fun ComposeScreen(
         )
     }
 
+    if (failureOpen) {
+        AlertDialog(
+            onDismissRequest = { failureOpen = false },
+            title = { Text(ctx.errorTitle) },
+            text = { Text(ctx.error.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { failureOpen = false }) { Text("OK") }
+            },
+        )
+    }
+
     val remaining = ctx.maxChars - field.text.length
     val canSend = (field.text.isNotBlank() || attachments.isNotEmpty()) && remaining >= 0 && !sending
 
@@ -210,8 +243,10 @@ fun ComposeScreen(
             // Read + base64-encode off the main thread; the binary bridge uploads.
             val media = withContext(Dispatchers.IO) {
                 picked.mapNotNull { m ->
+                    m.dataBase64?.let { return@mapNotNull OutgoingMedia(m.name, m.mime, m.alt, it) }
+                    val uri = m.uri ?: return@mapNotNull null
                     val bytes = runCatching {
-                        context.contentResolver.openInputStream(m.uri)?.use { it.readBytes() }
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     }.getOrNull() ?: return@mapNotNull null
                     OutgoingMedia(m.name, m.mime, m.alt, Base64.encodeToString(bytes, Base64.NO_WRAP))
                 }

@@ -1143,7 +1143,10 @@ void TimelineController::post(const PostDraft& draft, std::function<void(bool)> 
             // into Mentions/Notifications, a hashtag, a search, a thread, etc. when
             // you happened to compose from there. Elsewhere it still arrives via
             // streaming / the next refresh.
-            if (ok && !is_reply && source_.kind == TimelineSource::Kind::Home) {
+            // A scheduled post succeeds with no id: it isn't a post yet, so it isn't
+            // shown anywhere.
+            if (ok && !created->id.empty() && !is_reply &&
+                source_.kind == TimelineSource::Kind::Home) {
                 // Only add the optimistic copy if streaming hasn't already delivered
                 // this exact post (dedupe by id) - otherwise your own post appears
                 // twice, which is very visible with reverse timelines.

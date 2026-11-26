@@ -4,6 +4,9 @@ FastSMRW changelog
 0.6.1
 -----
 
+- Fixed: a post that couldn't be sent, because it was too long or your server didn't answer, no longer disappears; the post window comes back with everything you wrote and attached, and tells you why.
+- Fixed: scheduling a post no longer plays the error sound as if it had failed.
+- Fixed: from a remote instance's timeline, opening a post's thread, the author's timeline or profile, their followers, or who favourited or boosted a post now works, instead of showing an empty timeline or a profile with only "@".
 - The invisible interface can now use global shortcuts in X11 sessions without direct keyboard access.
 - Fixed: on Linux, moving between timelines is now instant instead of sluggish, and a new post arriving no longer makes Orca re-read the post you're on.
 - Fixed: on Linux, windows opened from the invisible interface (Options, Post Info and so on) now take focus right away instead of opening behind the app you were in.

@@ -66,6 +66,10 @@ private:
     void cmd_select_account(const nlohmann::json& cmd);
     void cmd_refresh();
     void cmd_refresh_status();
+    // Emit a composer and remember it, so a post that fails can reopen it.
+    void emit_compose(const nlohmann::json& ctx);
+    void reopen_failed_compose(const nlohmann::json& composer, const nlohmann::json& sent,
+                               SocialAccount* account, bool editing);
     void cmd_refresh_all();
     void cmd_resume(); // app returned from background: reopen audio, restream, refresh
     void cmd_pause();  // backgrounded: publish positions now, then go idle
@@ -239,6 +243,19 @@ private:
     // Resolve a typed handle to a User off-thread, then run `then` on the loop
     // thread; announces an error if the handle can't be found.
     void resolve_handle(const std::string& handle, std::function<void(const User&)> then);
+    // Rows from a remote instance's timeline carry THAT server's post and account
+    // ids, which mean nothing on ours (issue 45). users_in_post records the users it
+    // finds on such rows (foreign id -> handle) so the commands below, including
+    // ones that come back from a picker with only an id, know to look them up.
+    // The handle in the map is the remote user's qualified handle (mark_remote).
+    std::optional<std::string> foreign_user_handle(const std::string& id) const;
+    // Run `then` with this account's copy of a user: straight away for an ordinary
+    // id, or after looking the handle up when the id came from a remote row.
+    void with_local_user(const std::string& id, const std::string& handle,
+                         std::function<void(const User&)> then);
+    // Run `then` with this account's id for a post: straight away, or after
+    // resolving a remote row's post to its local copy (announces if that fails).
+    void with_local_status(const Status& s, std::function<void(const std::string&)> then);
     void cmd_reorder_timeline(const nlohmann::json& cmd); // move current timeline up/down
     void cmd_toggle_pin(); // pin/unpin the current tab (locks/unlocks dismissal)
     void cmd_toggle_mute(); // mute/unmute the current tab's new-item earcon
@@ -473,6 +490,13 @@ private:
     // A marker that a bounded history walk could not find. Do not repeat the
     // same expensive walk every auto-refresh; a changed server marker may retry.
     std::unordered_map<std::string, std::string> marker_recovery_attempted_;
+    // Users seen on remote-instance rows: their (foreign) id -> qualified handle.
+    // Filled by users_in_post (hence mutable); read via foreign_user_handle.
+    // Core-loop only. Grows by the users you act on from those feeds, so it stays tiny.
+    mutable std::unordered_map<std::string, std::string> foreign_users_;
+    // The last composer opened (its compose_context event), kept so a failed post
+    // can bring it back as it was (issue 42). Core-loop only.
+    nlohmann::json last_compose_ctx_;
     // Include each post's links ({title,url}) in its row JSON, so a mobile app
     // can offer one action per link. On only when the "expand_links" post
     // action is enabled (link extraction per row isn't free). Set in apply_settings.

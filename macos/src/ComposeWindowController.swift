@@ -50,10 +50,17 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
     private let altField = NSTextField()
     private var showMedia = false
 
+    /// Holds unsent work from a post that failed (issue 42), so closing always asks.
+    private var unsent: Bool
+    /// A post from this sheet failed; the core reopens the composer for it next.
+    private var awaitingReopen = false
+    private var posting = false // a post from this sheet is on its way
+
     init(state: AppState, context: ComposeContext) {
         self.state = state
         self.context = context
         self.languages = context.languages ?? []
+        self.unsent = context.unsent ?? false
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 620),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered,
                               defer: false)
@@ -67,13 +74,60 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
 
     func beginSheet(for parent: NSWindow, completion: @escaping () -> Void) {
         state.onPostResult = { [weak self] ok in
-            if ok { self?.dismiss() } else { self?.sendButton.isEnabled = true } // allow retry
+            guard let self else { return }
+            // The result reaches whichever sheet is up; only one that sent counts.
+            let sent = self.posting
+            self.posting = false
+            if ok {
+                self.dismiss()
+            } else { // allow retry
+                self.sendButton.isEnabled = true
+                if sent { self.awaitingReopen = true }
+            }
         }
         parent.beginSheet(window!) { _ in
             self.state.onPostResult = nil
             completion()
         }
         window?.makeFirstResponder(textView)
+        // Reopened because the post failed: say why once the sheet is up, then land
+        // back in the text (issue 42).
+        if let error = context.error, !error.isEmpty {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.showFailure(title: self.context.errorTitle, message: error)
+            }
+        }
+    }
+
+    /// The core reopened the composer for a post that failed while this sheet was
+    /// still up (it stays open until the post goes through). Everything is still in
+    /// it, so give the reason here rather than open a second composer. False when
+    /// this sheet isn't the one whose post failed.
+    func takeFailure(_ reopened: ComposeContext) -> Bool {
+        guard awaitingReopen, let error = reopened.error, !error.isEmpty else { return false }
+        awaitingReopen = false
+        unsent = true
+        showFailure(title: reopened.errorTitle, message: error)
+        return true
+    }
+
+    /// The core's reason a post failed, then back to the post text.
+    private func showFailure(title: String?, message: String) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        if let title, !title.isEmpty {
+            alert.messageText = title
+            alert.informativeText = message
+        } else {
+            alert.messageText = message
+        }
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window) { [weak self] _ in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.textView)
+        }
     }
 
     func dismiss() {
@@ -275,6 +329,38 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
             buttons.leadingAnchor.constraint(equalTo: form.leadingAnchor),
             buttons.trailingAnchor.constraint(equalTo: form.trailingAnchor),
         ])
+
+        restoreFailedDraft()
+    }
+
+    /// Reopened after a failed post (issue 42): put back the rest of what had been
+    /// entered -- each only where this composer offers that control. Runs after the
+    /// Post button is built, so a restored schedule relabels it.
+    private func restoreFailedDraft() {
+        if let code = context.prefillLanguage, !isEditing,
+           let i = languages.firstIndex(where: { $0.code == code }) {
+            languagePopup.selectItem(at: i)
+        }
+        if let poll = context.prefillPoll, feature("polls"), !isEditing {
+            for (field, option) in zip(pollOptionFields, poll.options) { field.stringValue = option }
+            pollMultiple.state = poll.multiple ? .on : .off
+            if let i = pollDurations.firstIndex(where: { $0.1 == poll.expiresInSeconds }) {
+                pollDuration.selectItem(at: i)
+            }
+            pollCheck.state = .on
+            setPollVisible(true)
+        }
+        if let at = context.prefillScheduledAt, feature("scheduling"), !isEditing {
+            schedulePicker.dateValue = Date(timeIntervalSince1970: TimeInterval(at))
+            scheduleCheck.state = .on
+            toggleSchedule()
+        }
+        if showMedia, let media = context.prefillAttachments, !media.isEmpty {
+            attachments = media.map {
+                Attachment(filename: $0.filename, mime: $0.mime, alt: $0.alt, data: $0.data)
+            }
+            attachmentTable.reloadData()
+        }
     }
 
     private func labeledRow(_ title: String, _ control: NSView) -> NSView {
@@ -365,11 +451,12 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
     /// Closing throws away whatever has been written, so ask first -- but only when
     /// something has actually been typed. Visibility and language changes are not
     /// counted: changing a popup and closing is not lost work, and prompting for it
-    /// would train people to dismiss the prompt without reading it.
+    /// would train people to dismiss the prompt without reading it. A composer holding
+    /// a failed post's unsent work always counts (issue 42).
     private func cancelIfAllowed() {
         let bodyChanged = textView.string != (context.prefillText ?? "")
         let cwChanged = cwField.stringValue != (context.prefillCw ?? "")
-        let dirty = bodyChanged || cwChanged || !attachments.isEmpty
+        let dirty = unsent || bodyChanged || cwChanged || !attachments.isEmpty
         guard dirty, context.confirmDiscard ?? true, let window else {
             dismiss()
             return
@@ -483,6 +570,7 @@ final class ComposeWindowController: NSWindowController, NSTextViewDelegate, NST
         default:
             break
         }
+        posting = true
         state.post(draft: draft, editId: isEditing ? context.editId : nil)
         sendButton.isEnabled = false
     }

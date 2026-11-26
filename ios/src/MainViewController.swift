@@ -64,6 +64,8 @@ final class MainViewController: UIViewController {
     private var heightCacheWidth: CGFloat = 0
     private var heightCacheCategory: UIContentSizeCategory = .unspecified
     private weak var composeVC: ComposeViewController?
+    /// A composer the core opened while another was up; it opens when that closes.
+    private var pendingCompose: ComposeContext?
     // Open managers, so refresh events update them in place instead of
     // pushing duplicates.
     private weak var followedHashtagsVC: HashtagsViewController?
@@ -1207,8 +1209,23 @@ final class MainViewController: UIViewController {
     // MARK: Compose
 
     private func presentCompose(_ context: ComposeContext) {
+        if let open = composeVC {
+            // A post failed while its composer is still open: the reason shows there,
+            // with everything still in it, rather than in a second composer (issue 42).
+            if open.takeFailure(context) { return }
+            // Otherwise one composer at a time: this one opens when that one closes.
+            pendingCompose = context
+            return
+        }
         let compose = ComposeViewController(state: state, context: context)
         composeVC = compose
+        compose.onClosed = { [weak self] in
+            guard let self else { return }
+            self.composeVC = nil
+            guard let next = self.pendingCompose else { return }
+            self.pendingCompose = nil
+            DispatchQueue.main.async { [weak self] in self?.presentCompose(next) }
+        }
         let nav = UINavigationController(rootViewController: compose)
         nav.modalPresentationStyle = .formSheet
         present(nav, animated: true)

@@ -234,6 +234,11 @@ void mark_remote(Status& s, const std::string& base, const std::string& domain) 
     // bare (no domain); qualify them so they read as "user@domain".
     if (!s.account.acct.empty() && s.account.acct.find('@') == std::string::npos && !domain.empty())
         s.account.acct += "@" + domain;
+    // Mentions too: their ids belong to that server, so acting on a mentioned
+    // user means looking them up by handle, which a bare one can't do.
+    for (auto& m : s.mentions)
+        if (!m.acct.empty() && m.acct.find('@') == std::string::npos && !domain.empty())
+            m.acct += "@" + domain;
     // Some servers omit `url`; synthesize the canonical one so interactions can
     // resolve the post on the user's own instance.
     if (s.url.empty() && !s.account.username.empty() && !s.id.empty())

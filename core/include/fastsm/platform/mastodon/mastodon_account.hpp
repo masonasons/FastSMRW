@@ -56,6 +56,8 @@ public:
 
     std::optional<User> fetch_profile(const std::string& id) override;
     std::optional<User> lookup_user(const std::string& handle) override;
+    // A post from a remote-instance timeline -> its copy on this instance.
+    std::optional<std::string> local_status_id(const Status& s) override;
     std::optional<Visibility> default_visibility() const override { return default_visibility_; }
     std::optional<Status> fetch_status(const std::string& id) override;
     bool owns_access_token(const std::string& token) const override {

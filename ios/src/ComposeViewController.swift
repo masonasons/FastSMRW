@@ -53,6 +53,16 @@ final class ComposeViewController: StaticFormViewController {
     private var attachments: [Attachment] = []
     private var showMedia = false
 
+    /// Holds unsent work from a post that failed (issue 42), so closing always asks.
+    private var unsent: Bool
+    /// A post from this composer failed; the core reopens the composer for it next.
+    private var awaitingReopen = false
+    private var posting = false // a post from this composer is on its way
+    /// The core's reason a post failed, shown once the composer is on screen.
+    private var pendingFailure: (title: String?, message: String)?
+    /// Called once the composer has been dismissed.
+    var onClosed: (() -> Void)?
+
     private func feature(_ key: String) -> Bool { context.features?[key] ?? false }
     private var isEditing_: Bool { context.mode == "edit" }
 
@@ -74,6 +84,10 @@ final class ComposeViewController: StaticFormViewController {
         self.context = context
         self.visibilityIndex = context.defaultVisibility ?? 0
         self.languages = context.languages ?? []
+        self.unsent = context.unsent ?? false
+        if let error = context.error, !error.isEmpty {
+            pendingFailure = (context.errorTitle, error)
+        }
         super.init()
         title = context.title ?? "New Post"
         isModalInPresentation = true
@@ -89,6 +103,42 @@ final class ComposeViewController: StaticFormViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         textView.becomeFirstResponder()
+        // Reopened because the post failed: say why, then back to the text (issue 42).
+        showPendingFailure()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if navigationController?.isBeingDismissed ?? isBeingDismissed { onClosed?() }
+    }
+
+    /// The core reopened the composer for a post that failed while this one was
+    /// still open (it stays up until the post goes through). Everything is still in
+    /// it, so give the reason here rather than open a second composer. False when
+    /// this isn't the composer whose post failed.
+    func takeFailure(_ reopened: ComposeContext) -> Bool {
+        guard awaitingReopen, let error = reopened.error, !error.isEmpty else { return false }
+        awaitingReopen = false
+        unsent = true
+        pendingFailure = (reopened.errorTitle, error)
+        showPendingFailure()
+        return true
+    }
+
+    private func showPendingFailure() {
+        guard let failure = pendingFailure else { return }
+        pendingFailure = nil
+        let alert = UIAlertController(title: failure.title, message: failure.message,
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.textView.becomeFirstResponder()
+        })
+        // On top of anything already showing over the composer.
+        var presenter: UIViewController = navigationController ?? self
+        while let next = presenter.presentedViewController, !next.isBeingDismissed {
+            presenter = next
+        }
+        presenter.present(alert, animated: true)
     }
 
     // MARK: Cells
@@ -193,17 +243,34 @@ final class ComposeViewController: StaticFormViewController {
             }
         }
         if !languages.isEmpty, !isEditing_ {
+            // A failed post's language, when reopened (issue 42).
+            if let code = context.prefillLanguage,
+               let i = languages.firstIndex(where: { $0.code == code }) {
+                languageIndex = i
+            }
             languageCell = pickerCell("Language", options: languages.map { $0.name },
-                                      selected: 0) { [weak self] index in
+                                      selected: languageIndex) { [weak self] index in
                 self?.languageIndex = index
             }
         }
 
         if feature("polls"), !isEditing_ {
+            // A failed post's poll, when reopened (issue 42): on, as it was.
+            let prefill = context.prefillPoll
+            if let prefill {
+                pollEnabled = true
+                pollToggle.isOn = true
+                pollMultiple.isOn = prefill.multiple
+                if let i = pollDurations.firstIndex(where: { $0.1 == prefill.expiresInSeconds }) {
+                    pollDurationIndex = i
+                }
+            }
             pollToggle.addTarget(self, action: #selector(pollToggled), for: .valueChanged)
             pollToggleCell = ToggleHostCell(title: "Add a poll", toggle: pollToggle)
             for i in 0..<4 {
-                let (cell, field) = fieldCell("Poll choice \(i + 1)", text: "",
+                let options = prefill?.options ?? []
+                let (cell, field) = fieldCell("Poll choice \(i + 1)",
+                                              text: options.indices.contains(i) ? options[i] : "",
                                               placeholder: "Choice \(i + 1)")
                 field.autocapitalizationType = .sentences
                 pollOptionFields.append(field)
@@ -227,6 +294,12 @@ final class ComposeViewController: StaticFormViewController {
             schedulePicker.datePickerMode = .dateAndTime
             schedulePicker.minimumDate = Date()
             schedulePicker.date = Date(timeIntervalSinceNow: 3600)
+            // A failed post's scheduled time, when reopened (issue 42).
+            if let at = context.prefillScheduledAt {
+                schedulePicker.date = Date(timeIntervalSince1970: TimeInterval(at))
+                scheduleToggle.isOn = true
+                scheduleEnabled = true
+            }
             schedulePicker.accessibilityLabel = "Scheduled time"
             schedulePicker.translatesAutoresizingMaskIntoConstraints = false
             cell.contentView.addSubview(schedulePicker)
@@ -243,6 +316,13 @@ final class ComposeViewController: StaticFormViewController {
         }
 
         showMedia = feature("media") && !isEditing_
+        // A failed post's media and alt text, when reopened (issue 42), held just as
+        // picked media is so posting again uploads them.
+        if showMedia, let media = context.prefillAttachments {
+            attachments = media.map {
+                Attachment(filename: $0.filename, mime: $0.mime, alt: $0.alt, data: $0.data)
+            }
+        }
     }
 
     /// Compose the visible sections from the current toggle state. Cells are
@@ -471,11 +551,12 @@ final class ComposeViewController: StaticFormViewController {
     /// Closing throws away whatever has been written, so ask first -- but only when
     /// something has actually been typed. Visibility and language changes are not
     /// counted: changing a picker and closing is not lost work, and prompting for it
-    /// would train people to dismiss the prompt without reading it.
+    /// would train people to dismiss the prompt without reading it. A composer holding
+    /// a failed post's unsent work always counts (issue 42).
     private func cancelIfAllowed() {
         let bodyChanged = textView.text != (context.prefillText ?? "")
         let cwChanged = (cwField?.text ?? "") != (context.prefillCw ?? "")
-        let dirty = bodyChanged || cwChanged || !attachments.isEmpty
+        let dirty = unsent || bodyChanged || cwChanged || !attachments.isEmpty
         guard dirty, context.confirmDiscard ?? true else {
             dismiss(animated: true)
             return
@@ -540,16 +621,21 @@ final class ComposeViewController: StaticFormViewController {
             break
         }
         postButton.isEnabled = false
+        posting = true
         state.post(draft: draft, editId: isEditing_ ? context.editId : nil)
     }
 
-    /// post_result arrived: close on success, re-enable on failure (the core
-    /// announces the error).
+    /// post_result arrived: close on success, re-enable on failure (the core then
+    /// reopens the composer with the reason, which lands in `takeFailure`).
     func postFinished(ok: Bool) {
+        // The result reaches whichever composer is open; only one that sent counts.
+        let sent = posting
+        posting = false
         if ok {
             dismiss(animated: true)
         } else {
             postButton.isEnabled = true
+            if sent { awaitingReopen = true }
         }
     }
 }

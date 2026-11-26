@@ -210,6 +210,16 @@ data class ComposeContext(
     val participants: List<ComposeParticipant>,
     /** The "Return key sends the post" setting, resolved by the core. */
     val enterToSend: Boolean,
+    // Reopened because its post failed (issue 42): the core's reason, shown as the
+    // composer opens, and the media that was attached, kept so sending again
+    // uploads it. [unsent] means closing always asks, even with nothing changed.
+    val error: String? = null,
+    val errorTitle: String = "",
+    val unsent: Boolean = false,
+    val prefillAttachments: List<OutgoingMedia> = emptyList(),
+    // Distinct per compose_context event, so a second identical failure still
+    // reopens the composer (and says why) rather than being deduplicated.
+    val serial: Long = 0,
 )
 
 /**
@@ -294,6 +304,8 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     val openUrls: SharedFlow<String> = _openUrls.asSharedFlow()
+
+    private var composeSerial = 0L // see ComposeContext.serial
 
     /** Non-null while the composer is open (from a compose_context event). */
     private val _composeContext = MutableStateFlow<ComposeContext?>(null)
@@ -1572,6 +1584,20 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
+        val attArr = e.optJSONArray("prefill_attachments")
+        val prefillAttachments = buildList {
+            if (attArr != null) for (i in 0 until attArr.length()) {
+                val a = attArr.optJSONObject(i) ?: continue
+                add(
+                    OutgoingMedia(
+                        filename = a.optString("filename"),
+                        mime = a.optString("mime"),
+                        alt = a.optString("alt"),
+                        dataBase64 = a.optString("data"),
+                    )
+                )
+            }
+        }
         fun nullable(key: String) = e.optString(key).ifBlank { null }
         return ComposeContext(
             mode = e.optString("mode", "new"),
@@ -1598,6 +1624,11 @@ class CoreViewModel(app: Application) : AndroidViewModel(app) {
             editId = nullable("edit_id"),
             participants = participants,
             enterToSend = e.optBoolean("enter_to_send"),
+            error = nullable("error"),
+            errorTitle = e.optString("error_title"),
+            unsent = e.optBoolean("unsent"),
+            prefillAttachments = prefillAttachments,
+            serial = ++composeSerial,
         )
     }
 
