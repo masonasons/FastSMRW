@@ -30,7 +30,13 @@ if not exist "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" (
     echo Error: Cannot find vcvars64.bat under "%VSINSTALL%"
     exit /b 1
 )
-call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+REM Prefer the 14.44 (Visual Studio 2022) toolset when it is installed: 14.51+
+REM can't build for Windows 7 (see the import-floor check below). Visual Studio
+REM 2026 can carry it side by side as the component
+REM Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64.
+set "VCVARS_VER="
+for /d %%d in ("%VSINSTALL%\VC\Tools\MSVC\14.44.*") do set "VCVARS_VER=-vcvars_ver=14.44"
+call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" %VCVARS_VER% >nul 2>&1
 
 REM ---- ensure dependencies are present (not committed; fetched into deps\) ----
 if not exist deps\fastplay_engine\include\fastplay_engine\fastplay_engine.h goto fetch_deps
